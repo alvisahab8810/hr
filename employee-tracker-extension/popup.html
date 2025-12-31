@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Activity Tracker</title>
+    <style>
+      body {
+        width: 200px;
+        font-family: sans-serif;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>Employee Tracker</h3>
+    <input type="text" id="empId" placeholder="Employee ID" />
+    <button id="save">Save</button>
+
+    <script>
+      document.getElementById("save").onclick = () => {
+        const empId = document.getElementById("empId").value;
+        chrome.storage.local.set({ employeeId: empId }, () => {
+          alert("Saved!");
+        });
+      };
+    </script>
+  </body>
+</html>
