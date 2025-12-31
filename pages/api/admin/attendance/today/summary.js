@@ -4,7 +4,6 @@ import Employee from "@/models/hr/Employee";
 import { getAdminFromReq } from "@/utils/admin/getAdminFromReq";
 import { INDIA_HOLIDAYS } from "@/utils/holidays/indiaHolidays";
 
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ success: false });
@@ -33,13 +32,12 @@ export default async function handler(req, res) {
 
     const absent = employees.length - present;
 
-
     // 🇮🇳 INDIAN OFFICIAL HOLIDAYS – CURRENT MONTH
     const now = new Date();
     const currentMonth = String(now.getMonth() + 1).padStart(2, "0"); // MM
 
-    const monthHolidays = INDIA_HOLIDAYS.filter(
-      (h) => h.date.startsWith(currentMonth)
+    const monthHolidays = INDIA_HOLIDAYS.filter((h) =>
+      h.date.startsWith(currentMonth)
     );
 
     const holidayCount = monthHolidays.length;
@@ -53,7 +51,6 @@ export default async function handler(req, res) {
             })
             .join(", ")
         : "--";
-
 
     return res.json({
       success: true,

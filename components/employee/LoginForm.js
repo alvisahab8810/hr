@@ -180,7 +180,7 @@ export default function EmployeeLoginForm() {
 
         // ✅ Redirect based on profile completion
         if (data.profileCompleted) {
-          router.push("/employee/profile");
+          router.push("/employee/dashboard");
         } else {
           router.push("/employee/complete-profile");
         }

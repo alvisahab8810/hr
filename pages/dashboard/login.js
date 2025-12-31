@@ -41,23 +41,6 @@ export default function LoginPage() {
 
 
 
-
-// const handleSubmit = async (e) => {
-//   e.preventDefault();
-
-//   const res = await signIn("credentials", {
-//     email: username,   // ✅ map username → email
-//     password: password,
-//     redirect: false,
-//   });
-
-//   if (res?.error) {
-//     alert("Invalid email or password");
-//   } else {
-//     router.push("/dashboard/admin/attendance-summary");
-//   }
-// };
-
   return (
     <div className="login-admin">
       <Head>

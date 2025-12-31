@@ -18,42 +18,33 @@ export default async function handler(req, res) {
 
     const today = new Date().toISOString().split("T")[0];
 
-
-
     // 🔹 STEP 5: Read filters from query
-const {
-  department,
-  designation,
-  employeeType,
-  status,
-} = req.query;
+    const { department, designation, employeeType, status } = req.query;
 
-// 🔹 Build dynamic employee query
-const employeeQuery = { isActive: true };
+    // 🔹 Build dynamic employee query
+    const employeeQuery = { isActive: true };
 
-if (department) {
-  employeeQuery["professional.department"] = department;
-}
+    if (department) {
+      employeeQuery["professional.department"] = department;
+    }
 
-if (designation) {
-  employeeQuery["professional.designation"] = designation;
-}
+    if (designation) {
+      employeeQuery["professional.designation"] = designation;
+    }
 
-if (employeeType) {
-  employeeQuery["professional.employeeType"] = employeeType;
-}
+    if (employeeType) {
+      employeeQuery["professional.employeeType"] = employeeType;
+    }
 
-if (status) {
-  employeeQuery["professional.status"] = status;
-}
-
+    if (status) {
+      employeeQuery["professional.status"] = status;
+    }
 
     // ✅ ONLY ACTIVE HR EMPLOYEES
     // const employees = await Employee.find({ isActive: true }).lean();
 
     // const employees = await Employee.find({ isActive: true }).lean();
     const employees = await Employee.find(employeeQuery).lean();
-
 
     const attendance = await Attendance.find({
       date: today,
@@ -64,9 +55,6 @@ if (status) {
     attendance.forEach((a) => {
       attendanceMap[a.employee.toString()] = a;
     });
-
-
-    
 
     const rows = employees.map((emp) => {
       const rec = attendanceMap[emp._id.toString()];
