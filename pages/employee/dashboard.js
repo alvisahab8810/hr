@@ -10,7 +10,6 @@ import LeftbarMobile from "@/components/employee/LeftbarMobile";
 import TimeTracker from "@/components/employee/TimeTracker";
 
 export default function Admin() {
-  const [announcements, setAnnouncements] = useState([]);
 
   const [employeeStatus, setEmployeeStatus] = useState({});
   const [holidays, setHolidays] = useState([]);
@@ -22,6 +21,10 @@ export default function Admin() {
   const [today, setToday] = useState("");
   const [showReminder, setShowReminder] = useState(false);
   const [triggeredToday, setTriggeredToday] = useState(false);
+
+
+  const [announcements, setAnnouncements] = useState([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
 
   const [summary, setSummary] = useState({
     total: 0,
@@ -149,21 +152,26 @@ export default function Admin() {
   }, []);
 
   // ---------------------for the announcements --------------/
-  useEffect(() => {
-    const fetchAnnouncements = async () => {
-      try {
-        const res = await fetch("/api/announcements/active");
-        const data = await res.json();
-        if (data.success) {
-          setAnnouncements(data.announcements);
-        }
-      } catch (error) {
-        console.error("Failed to fetch announcements:", error);
-      }
-    };
 
-    fetchAnnouncements();
-  }, []);
+  useEffect(() => {
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch("/api/announcements/active");
+      const data = await res.json();
+
+      if (data.success) {
+        setAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error("Failed to load announcements", err);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  };
+
+  fetchAnnouncements();
+}, []);
+
 
   useEffect(() => {
     // format today’s date
@@ -355,12 +363,12 @@ export default function Admin() {
                       {/* Footer Link */}
                       {holidays.length > 5 && (
                         <div className="text-center mt-3">
-                          <a
+                          {/* <a
                             href="/dashboard/admin/holidays"
                             className="text-primary fw-semibold text-decoration-none"
                           >
                             View All Holidays →
-                          </a>
+                          </a> */}
                         </div>
                       )}
                     </div>
@@ -369,102 +377,40 @@ export default function Admin() {
             
                 </div>
                 <div className="col-md-5 pl-0">
-                  
+                  <div className="items-home card border-0 rounded-4 p-4">
+  <h5 className="mb-3">📢 Announcements</h5>
 
-                  <div className="col-md-12  margin-t-mob">
-                    <div className="card p-4 mb-4 items-home ">
-                      <div className="d-flex justify-content-between align-items-center mb-4">
-                        <h5 className="fw-bold text-dark d-flex align-items-center gap-2 mb-0">
-                          Notice{" "}
-                        </h5>
-                      </div>
+  {loadingAnnouncements && <p>Loading announcements...</p>}
 
-                      {announcements.length > 0 ? (
-                        announcements.map((a) => (
-                          <div key={a._id} className="intter">
-                            <div className="mb-2">
-                              <div>
-                                <h6 className="fw-bold mb-1 text-dark">
-                                  {a.title}
-                                </h6>
-                                <div className="d-flex justify-content-between align-items-center mt-3">
-                                  <small className="text-muted">
-                                    Posted on{" "}
-                                    {new Date(a.createdAt).toLocaleDateString()}
-                                  </small>
+  {!loadingAnnouncements && announcements.length === 0 && (
+    <p className="text-muted">No announcements available.</p>
+  )}
 
-                                  <div className="d-flex gap-2 ">
-                                    <span
-                                      style={{
-                                        backgroundColor:
-                                          a.priority === "high"
-                                            ? "#ff4d4d3d"
-                                            : "#6c757d2d",
-                                        color:
-                                          a.priority === "high"
-                                            ? "#ff4d4d"
-                                            : "#6c757d",
-                                        fontWeight: "700",
-                                        padding: "4px 8px",
-                                        borderRadius: "8px",
-                                        fontSize: "10px",
-                                      }}
-                                    >
-                                      {a.priority === "high"
-                                        ? "High Priority"
-                                        : "Normal"}
-                                    </span>
+  {announcements.map((a) => (
+    <div
+      key={a._id}
+      className={`announcement-item ${
+        a.priority === "high" ? "high-priority" : ""
+      }`}
+    >
+      <div className="d-flex justify-content-between align-items-center">
+        <h6 className="fw-bold mb-1">{a.title}</h6>
+        {a.priority === "high" && (
+          <span className="badge bg-danger">High</span>
+        )}
+      </div>
 
-                                    <span
-                                      style={{
-                                        backgroundColor:
-                                          a.endDate &&
-                                          new Date(a.endDate) < new Date()
-                                            ? "#6c757d2d"
-                                            : new Date(a.startDate) > new Date()
-                                            ? "#0dcaf02d"
-                                            : "#DCFCE7",
-                                        color:
-                                          a.endDate &&
-                                          new Date(a.endDate) < new Date()
-                                            ? "#6c757d"
-                                            : new Date(a.startDate) > new Date()
-                                            ? "#0dcaf0"
-                                            : "#15803D",
-                                        fontWeight: "700",
-                                        padding: "4px 8px",
-                                        borderRadius: "8px",
-                                        fontSize: "10px",
-                                      }}
-                                    >
-                                      {a.endDate &&
-                                      new Date(a.endDate) < new Date()
-                                        ? "Expired"
-                                        : new Date(a.startDate) > new Date()
-                                        ? "Scheduled"
-                                        : "Active"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+      <p className="mb-1">{a.message}</p>
 
-                            {/* <p className="mb-0 text-dark">{a.message} style={{ whiteSpace: "pre-line" }}</p> */}
-                            <p className="mb-0 text-dark">{a.message}</p>
+      <small className="text-muted">
+        Posted on {new Date(a.createdAt).toLocaleDateString()}
+      </small>
 
-                            {a.endDate && (
-                              <small className="text-muted d-block mt-2">
-                                📅 Valid until{" "}
-                                {new Date(a.endDate).toLocaleDateString()}
-                              </small>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-muted">No announcements</p>
-                      )}
-                    </div>
-                  </div>
+      <hr />
+    </div>
+  ))}
+</div>
+
                 </div>
               </div>
             </div>

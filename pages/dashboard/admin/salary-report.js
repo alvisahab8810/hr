@@ -130,7 +130,7 @@ export default function SalaryReport() {
             <div className="block-header add-emp-area">
               <h5 className="admin-main-heading">Salary Report</h5>
 
-              <div className="salary-filter-bar">
+              <div className="salary-filter-bar ">
                 <select
                   value={month}
                   onChange={(e) => setMonth(Number(e.target.value))}

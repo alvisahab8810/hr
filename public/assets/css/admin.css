@@ -3374,3 +3374,125 @@ span.re-alert {
 .reim-view-remark-btn:hover {
   background: #fee2e2;
 }
+
+
+
+/* ==================  this is for sallary button csss= ==================== */
+
+/* ================= SALARY FILTER BAR ================= */
+.salary-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e6e8ec;
+  flex-wrap: wrap;
+}
+
+/* ================= SELECT DROPDOWNS ================= */
+.salary-filter-bar select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  padding: 10px 36px 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236b7280' viewBox='0 0 16 16'%3E%3Cpath d='M1.5 5.5l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.salary-filter-bar select:hover {
+  border-color: #2563eb;
+  background-color: #ffffff;
+}
+
+.salary-filter-bar select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ================= BUTTON BASE ================= */
+.salary-filter-bar .btn {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* ================= PRIMARY BUTTON ================= */
+.salary-filter-bar .btn-primary {
+     background: #367FFF;
+  color: #ffffff;
+  /* box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); */
+}
+
+.salary-filter-bar .btn-primary:hover {
+    background: #367FFF;
+  transform: translateY(-1px);
+}
+
+/* ================= SECONDARY BUTTON ================= */
+.salary-filter-bar .btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.salary-filter-bar .btn-secondary:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color:#000;
+}
+
+/* ================= MOBILE RESPONSIVE ================= */
+@media (max-width: 768px) {
+  .salary-filter-bar {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .salary-filter-bar select,
+  .salary-filter-bar .btn {
+    width: 100%;
+  }
+}
+
+
+
+.employee-announcements {
+  background: #ffffff;
+  border-radius: 10px;
+}
+
+.announcement-item {
+  padding: 10px 0;
+}
+
+.announcement-item.high-priority {
+  background: #fff5f5;
+  border-left: 4px solid #dc3545;
+  padding-left: 12px;
+}

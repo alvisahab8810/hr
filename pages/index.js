@@ -196,7 +196,109 @@ export default function Admin() {
             {/* ✅ Upcoming Holidays */}
             <div className="holidays-row">
               <div className="row">
-                <div className="col-md-7 pr-0">
+
+                 <div className="col-md-7  margin-t-mob">
+                    <div className="card p-4 mb-4 items-home ">
+                      <div className="d-flex justify-content-between align-items-center mb-4">
+                        <h5 className="fw-bold text-dark d-flex align-items-center gap-2 mb-0">
+                          Notice{" "}
+                        </h5>
+
+                        <Link
+                          href="/dashboard/hr/announcement"
+                          className="notice-btn"
+                        >
+                          Create Notice
+                        </Link>
+                      </div>
+
+                      {announcements.length > 0 ? (
+                        announcements.map((a) => (
+                          <div key={a._id} className="intter">
+                            <div className="mb-2">
+                              <div>
+                                <h6 className="fw-bold mb-1 text-dark">
+                                  {a.title}
+                                </h6>
+                                <div className="d-flex justify-content-between align-items-center mt-3">
+                                  <small className="text-muted">
+                                    Posted on{" "}
+                                    {new Date(a.createdAt).toLocaleDateString()}
+                                  </small>
+
+                                  <div className="d-flex gap-2 ">
+                                    <span
+                                      style={{
+                                        backgroundColor:
+                                          a.priority === "high"
+                                            ? "#ff4d4d3d"
+                                            : "#6c757d2d",
+                                        color:
+                                          a.priority === "high"
+                                            ? "#ff4d4d"
+                                            : "#6c757d",
+                                        fontWeight: "700",
+                                        padding: "4px 8px",
+                                        borderRadius: "8px",
+                                        fontSize: "10px",
+                                      }}
+                                    >
+                                      {a.priority === "high"
+                                        ? "High Priority"
+                                        : "Normal"}
+                                    </span>
+
+                                    <span
+                                      style={{
+                                        backgroundColor:
+                                          a.endDate &&
+                                          new Date(a.endDate) < new Date()
+                                            ? "#6c757d2d"
+                                            : new Date(a.startDate) > new Date()
+                                            ? "#0dcaf02d"
+                                            : "#DCFCE7",
+                                        color:
+                                          a.endDate &&
+                                          new Date(a.endDate) < new Date()
+                                            ? "#6c757d"
+                                            : new Date(a.startDate) > new Date()
+                                            ? "#0dcaf0"
+                                            : "#15803D",
+                                        fontWeight: "700",
+                                        padding: "4px 8px",
+                                        borderRadius: "8px",
+                                        fontSize: "10px",
+                                      }}
+                                    >
+                                      {a.endDate &&
+                                      new Date(a.endDate) < new Date()
+                                        ? "Expired"
+                                        : new Date(a.startDate) > new Date()
+                                        ? "Scheduled"
+                                        : "Active"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* <p className="mb-0 text-dark">{a.message} style={{ whiteSpace: "pre-line" }}</p> */}
+                            <p className="mb-0 text-dark">{a.message}</p>
+
+                            {a.endDate && (
+                              <small className="text-muted d-block mt-2">
+                                📅 Valid until{" "}
+                                {new Date(a.endDate).toLocaleDateString()}
+                              </small>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-muted">No announcements</p>
+                      )}
+                    </div>
+                  </div>
+                {/* <div className="col-md-7 pr-0">
                   <div className="col-md-12 pl-0">
                     <div className="card items-home p-4 mb-4">
                       <div className="d-flex justify-content-between align-items-center">
@@ -332,7 +434,7 @@ export default function Admin() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </div> */}
                 <div className="col-md-5 pl-0">
                   <div className="col-md-12 ">
                     <div className="items-home card border-0 rounded-4 p-4">
@@ -419,118 +521,18 @@ export default function Admin() {
                       {/* Footer Link */}
                       {holidays.length > 5 && (
                         <div className="text-center mt-3">
-                          <a
+                          {/* <a
                             href="/dashboard/admin/holidays"
                             className="text-primary fw-semibold text-decoration-none"
                           >
                             View All Holidays →
-                          </a>
+                          </a> */}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="col-md-12  margin-t-mob">
-                    <div className="card p-4 mb-4 items-home ">
-                      <div className="d-flex justify-content-between align-items-center mb-4">
-                        <h5 className="fw-bold text-dark d-flex align-items-center gap-2 mb-0">
-                          Notice{" "}
-                        </h5>
-
-                        <Link
-                          href="/dashboard/hr/announcement"
-                          className="notice-btn"
-                        >
-                          Create Notice
-                        </Link>
-                      </div>
-
-                      {announcements.length > 0 ? (
-                        announcements.map((a) => (
-                          <div key={a._id} className="intter">
-                            <div className="mb-2">
-                              <div>
-                                <h6 className="fw-bold mb-1 text-dark">
-                                  {a.title}
-                                </h6>
-                                <div className="d-flex justify-content-between align-items-center mt-3">
-                                  <small className="text-muted">
-                                    Posted on{" "}
-                                    {new Date(a.createdAt).toLocaleDateString()}
-                                  </small>
-
-                                  <div className="d-flex gap-2 ">
-                                    <span
-                                      style={{
-                                        backgroundColor:
-                                          a.priority === "high"
-                                            ? "#ff4d4d3d"
-                                            : "#6c757d2d",
-                                        color:
-                                          a.priority === "high"
-                                            ? "#ff4d4d"
-                                            : "#6c757d",
-                                        fontWeight: "700",
-                                        padding: "4px 8px",
-                                        borderRadius: "8px",
-                                        fontSize: "10px",
-                                      }}
-                                    >
-                                      {a.priority === "high"
-                                        ? "High Priority"
-                                        : "Normal"}
-                                    </span>
-
-                                    <span
-                                      style={{
-                                        backgroundColor:
-                                          a.endDate &&
-                                          new Date(a.endDate) < new Date()
-                                            ? "#6c757d2d"
-                                            : new Date(a.startDate) > new Date()
-                                            ? "#0dcaf02d"
-                                            : "#DCFCE7",
-                                        color:
-                                          a.endDate &&
-                                          new Date(a.endDate) < new Date()
-                                            ? "#6c757d"
-                                            : new Date(a.startDate) > new Date()
-                                            ? "#0dcaf0"
-                                            : "#15803D",
-                                        fontWeight: "700",
-                                        padding: "4px 8px",
-                                        borderRadius: "8px",
-                                        fontSize: "10px",
-                                      }}
-                                    >
-                                      {a.endDate &&
-                                      new Date(a.endDate) < new Date()
-                                        ? "Expired"
-                                        : new Date(a.startDate) > new Date()
-                                        ? "Scheduled"
-                                        : "Active"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* <p className="mb-0 text-dark">{a.message} style={{ whiteSpace: "pre-line" }}</p> */}
-                            <p className="mb-0 text-dark">{a.message}</p>
-
-                            {a.endDate && (
-                              <small className="text-muted d-block mt-2">
-                                📅 Valid until{" "}
-                                {new Date(a.endDate).toLocaleDateString()}
-                              </small>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-muted">No announcements</p>
-                      )}
-                    </div>
-                  </div>
+                 
                 </div>
               </div>
             </div>

@@ -351,7 +351,7 @@ if (!docs.experienceLetter) {
       if (data.success) {
         toast.success("Profile completed successfully 🎉");
         setTimeout(() => {
-          router.push(data.redirectUrl || "/employee/profile");
+          router.push(data.redirectUrl || "/employee/dashboard");
         }, 1200);
       } else {
         toast.error(data.message || "Submission failed");

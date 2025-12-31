@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   try {
     await dbConnect();
 
-    // ✅ Use production-safe admin auth
+    // ✅ Production-safe admin auth
     const { employee, error } = await getEmployeeFromToken(req);
 
     if (error || !employee || employee.role !== "admin") {
@@ -41,16 +41,15 @@ export default async function handler(req, res) {
     }
 
     const { id } = req.body;
-
     if (!id) {
       return res.status(400).json({ success: false, message: "Missing ID" });
     }
 
+    // ✅ IMPORTANT FIX: approvedBy MUST be ObjectId
     await Reimbursement.findByIdAndUpdate(id, {
       status: "Approved",
       approvedAt: new Date(),
-      // Optional: keep admin info simple & consistent
-      approvedBy: employee.id || "admin",
+      approvedBy: employee._id, // 🔥 THIS FIXES EVERYTHING
     });
 
     return res.json({ success: true });

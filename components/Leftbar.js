@@ -439,7 +439,7 @@ export default function Leftbar({ role = "admin" }) {
     {
       type: "link",
       href: "#",
-      label: "Upcoming",
+      label: "Coming Soon",
       icon: "all-task",
     },
     // {

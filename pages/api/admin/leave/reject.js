@@ -46,7 +46,6 @@
 
 
 
-
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import { getEmployeeFromToken } from "@/utils/auth";
@@ -84,7 +83,7 @@ export default async function handler(req, res) {
     leave.status = "Rejected";
     leave.adminRemark = remark;
     leave.rejectedAt = new Date();
-    leave.rejectedBy = employee.id || "admin";
+    leave.rejectedBy = employee._id; // 🔥 FIX HERE
 
     await leave.save();
 

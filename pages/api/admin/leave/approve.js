@@ -102,6 +102,7 @@
 // }
 
 
+
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import LeaveBalance from "@/models/employees/LeaveBalance";
@@ -175,7 +176,6 @@ export default async function handler(req, res) {
     }
 
     if (leave.leaveType === "Casual Leave") {
-      // casual = earned policy
       if (balance.earned.used + leave.totalDays > balance.earned.total) {
         return res.status(400).json({
           message: "Insufficient casual leave balance",
@@ -191,7 +191,7 @@ export default async function handler(req, res) {
     leave.status = "Approved";
     leave.adminRemark = remark;
     leave.approvedAt = new Date();
-    leave.approvedBy = employee.id || "admin";
+    leave.approvedBy = employee._id; // 🔥 FIX (ObjectId only)
 
     await leave.save();
 

@@ -432,7 +432,7 @@ function isThirdSaturday(year, monthIndex, dayNumber) {
                     {/* ================= TODAY ATTENDANCE TABLE ================= */}
                     <div className="today-attendance-table">
                       <h5 className="admin-main-heading">
-                        Attendance Status Legend
+                        Attendance Status 
                       </h5>
 
                       <div className="table-wrapper">
@@ -500,7 +500,7 @@ function isThirdSaturday(year, monthIndex, dayNumber) {
                     {/* ================= THIS MONTH ATTENDANCE CALENDAR ================= */}
                     <div className="month-attendance-table">
                       <h5 className="admin-main-heading">
-                        Attendance Status Legend
+                        Attendance Status
                       </h5>
 
                       <div className="calendar-wrapper">
@@ -632,7 +632,7 @@ function isThirdSaturday(year, monthIndex, dayNumber) {
                       </div>
 
                       {/* FOOTER */}
-                      <div className="calendar-footer">
+                      {/* <div className="calendar-footer">
                         <span>Showing 1 to 10 out of 60 records</span>
 
                         <div className="pagination">
@@ -642,7 +642,7 @@ function isThirdSaturday(year, monthIndex, dayNumber) {
                           <button>3</button>
                           <button>&rsaquo;</button>
                         </div>
-                      </div>
+                      </div> */}
                     </div>
 
                     {/* ================= MONTH ATTENDANCE LEGEND ================= */}

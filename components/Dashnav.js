@@ -56,7 +56,7 @@ export default function Dashnav() {
           <div className="col-12">
             <div className="navbar-header">
               <Link href="#" className="bars"></Link>
-              <Link className="navbar-brand" href="/">
+              <Link className="navbar-brand" href="#">
                 <img src="/assets/images/logo.png" width="100" alt="Viralon" />
                 {/* <span className="m-l-10">Compass</span> */}
               </Link>
