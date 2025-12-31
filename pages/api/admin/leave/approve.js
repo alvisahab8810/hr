@@ -1,3 +1,5 @@
+
+
 // import dbConnect from "@/utils/dbConnect";
 // import LeaveApplication from "@/models/employees/LeaveApplication";
 // import LeaveBalance from "@/models/employees/LeaveBalance";
@@ -9,6 +11,7 @@
 //   try {
 //     await dbConnect();
 
+//     /* ================= AUTH ================= */
 //     const admin = await getAdminFromReq(req, res);
 //     if (!admin) {
 //       return res.status(401).json({ success: false });
@@ -31,20 +34,25 @@
 //       });
 //     }
 
+//     /* ================= BALANCE ================= */
+
 //     const year = new Date(leave.startDate).getFullYear();
 
-//     const balance = await LeaveBalance.findOne({
+//     let balance = await LeaveBalance.findOne({
 //       employee: leave.employee,
 //       year,
 //     });
 
+//     // ✅ FIX: auto-create balance if missing
 //     if (!balance) {
-//       return res.status(400).json({
-//         message: "Leave balance not found",
+//       balance = await LeaveBalance.create({
+//         employee: leave.employee,
+//         year,
 //       });
 //     }
 
-//     // 🔹 DEDUCT BALANCE
+//     /* ================= DEDUCT BALANCE ================= */
+
 //     if (leave.leaveType === "Sick Leave") {
 //       if (balance.sick.used + leave.totalDays > balance.sick.total) {
 //         return res.status(400).json({
@@ -63,9 +71,22 @@
 //       balance.earned.used += leave.totalDays;
 //     }
 
+
+//     if (leave.leaveType === "Casual Leave") {
+//   // you said casual = earned policy
+//   if (balance.earned.used + leave.totalDays > balance.earned.total) {
+//     return res.status(400).json({
+//       message: "Insufficient casual leave balance",
+//     });
+//   }
+//   balance.earned.used += leave.totalDays;
+// }
+
+
 //     await balance.save();
 
-//     // 🔹 UPDATE LEAVE
+//     /* ================= UPDATE LEAVE ================= */
+
 //     leave.status = "Approved";
 //     leave.adminRemark = remark;
 //     leave.approvedAt = new Date();
@@ -81,11 +102,10 @@
 // }
 
 
-
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import LeaveBalance from "@/models/employees/LeaveBalance";
-import { getAdminFromReq } from "@/utils/admin/getAdminFromReq";
+import { getEmployeeFromToken } from "@/utils/auth";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -94,9 +114,10 @@ export default async function handler(req, res) {
     await dbConnect();
 
     /* ================= AUTH ================= */
-    const admin = await getAdminFromReq(req, res);
-    if (!admin) {
-      return res.status(401).json({ success: false });
+    const { employee, error } = await getEmployeeFromToken(req);
+
+    if (error || !employee || employee.role !== "admin") {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const { leaveId, remark = "" } = req.body;
@@ -125,7 +146,7 @@ export default async function handler(req, res) {
       year,
     });
 
-    // ✅ FIX: auto-create balance if missing
+    // ✅ auto-create balance if missing
     if (!balance) {
       balance = await LeaveBalance.create({
         employee: leave.employee,
@@ -153,17 +174,15 @@ export default async function handler(req, res) {
       balance.earned.used += leave.totalDays;
     }
 
-
     if (leave.leaveType === "Casual Leave") {
-  // you said casual = earned policy
-  if (balance.earned.used + leave.totalDays > balance.earned.total) {
-    return res.status(400).json({
-      message: "Insufficient casual leave balance",
-    });
-  }
-  balance.earned.used += leave.totalDays;
-}
-
+      // casual = earned policy
+      if (balance.earned.used + leave.totalDays > balance.earned.total) {
+        return res.status(400).json({
+          message: "Insufficient casual leave balance",
+        });
+      }
+      balance.earned.used += leave.totalDays;
+    }
 
     await balance.save();
 
@@ -172,7 +191,7 @@ export default async function handler(req, res) {
     leave.status = "Approved";
     leave.adminRemark = remark;
     leave.approvedAt = new Date();
-    leave.approvedBy = admin._id;
+    leave.approvedBy = employee.id || "admin";
 
     await leave.save();
 
