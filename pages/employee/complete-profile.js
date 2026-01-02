@@ -151,8 +151,19 @@ export default function CompleteProfilePage() {
   const emailOk = (v) => /^\S+@\S+\.\S+$/.test(v);
   const ifscOk = (v) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v); // basic IFSC check
   const panOk = (v) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v); // basic PAN check
-  const isPdfOrJpeg = (f) =>
-    f && ["application/pdf", "image/jpeg", "image/jpg"].includes(f.type);
+  // const isPdfOrJpeg = (f) =>
+  //   f && ["application/pdf", "image/jpeg", "image/jpg"].includes(f.type);
+
+
+  const isValidFile = (f) =>
+  f &&
+  [
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+  ].includes(f.type);
+
 
   const validateStep = () => {
     if (step === 1) {
@@ -201,6 +212,7 @@ export default function CompleteProfilePage() {
           b.branch,
           b.accountNumber,
           b.ifscCode,
+           b.panNumber, // ✅ NOW MANDATORY
         ].every(required)
       )
         return "Please complete all Salary/Bank fields.";
@@ -212,17 +224,31 @@ export default function CompleteProfilePage() {
       if (!ifscOk(b.ifscCode)) return "Invalid IFSC code.";
       if (b.panNumber && !panOk(b.panNumber)) return "Invalid PAN number.";
     }
+    // if (step === 4) {
+    //   // All docs optional per your UI; validate types if provided
+    //   const all = [
+    //     docs.appointmentLetter,
+    //     docs.relievingLetter,
+    //     docs.experienceLetter,
+    //     ...(docs.salarySlips || []),
+    //   ].filter(Boolean);
+    //   if (all.some((f) => !isPdfOrJpeg(f)))
+    //     return "Uploads must be JPEG or PDF.";
+    // }
+
+
     if (step === 4) {
-      // All docs optional per your UI; validate types if provided
-      const all = [
-        docs.appointmentLetter,
-        docs.relievingLetter,
-        docs.experienceLetter,
-        ...(docs.salarySlips || []),
-      ].filter(Boolean);
-      if (all.some((f) => !isPdfOrJpeg(f)))
-        return "Uploads must be JPEG or PDF.";
-    }
+  const allFiles = [
+    docs.appointmentLetter,
+    docs.relievingLetter,
+    docs.experienceLetter,
+    ...(docs.salarySlips || []),
+  ].filter(Boolean);
+
+  if (allFiles.some((f) => !isValidFile(f))) {
+    return "Files must be JPG, PNG, or PDF only.";
+  }
+}
     return null;
   };
 
@@ -291,26 +317,26 @@ export default function CompleteProfilePage() {
   const handleSubmit = async () => {
 
 
-    // 🔐 Documents validation
-if (!docs.appointmentLetter) {
-  toast.error("Appointment Letter is required");
-  return;
-}
+//     // 🔐 Documents validation
+// if (!docs.appointmentLetter) {
+//   toast.error("Appointment Letter is required");
+//   return;
+// }
 
-if (!docs.salarySlips || docs.salarySlips.length === 0) {
-  toast.error("At least one Salary Slip is required");
-  return;
-}
+// if (!docs.salarySlips || docs.salarySlips.length === 0) {
+//   toast.error("At least one Salary Slip is required");
+//   return;
+// }
 
-if (!docs.relievingLetter) {
-  toast.error("Relieving Letter is required");
-  return;
-}
+// if (!docs.relievingLetter) {
+//   toast.error("Relieving Letter is required");
+//   return;
+// }
 
-if (!docs.experienceLetter) {
-  toast.error("Experience Letter is required");
-  return;
-}
+// if (!docs.experienceLetter) {
+//   toast.error("Experience Letter is required");
+//   return;
+// }
 
 
     const err = validateStep();
@@ -808,7 +834,8 @@ if (!docs.experienceLetter) {
                   />
                 </div>
                 <div className="col-md-6">
-                  <label className="form-label">PAN Number</label>
+                  {/* <label className="form-label">PAN Number</label> */}
+                  <label className="form-label">PAN Number*</label>
                   <input
                     className="form-control text-uppercase"
                     value={salary.panNumber}
@@ -853,7 +880,7 @@ if (!docs.experienceLetter) {
                   </label>
                   <input
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="form-control"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -870,7 +897,7 @@ if (!docs.experienceLetter) {
                   <input
                     multiple
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="form-control"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -888,7 +915,7 @@ if (!docs.experienceLetter) {
                   <label className="form-label">Upload Relieving Letter</label>
                   <input
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="form-control"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -903,7 +930,7 @@ if (!docs.experienceLetter) {
                   <label className="form-label">Upload Experience Letter</label>
                   <input
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="form-control"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -941,7 +968,7 @@ if (!docs.experienceLetter) {
                   <input
                     id="appointmentLetterInput"
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="d-none"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -985,7 +1012,7 @@ if (!docs.experienceLetter) {
                     id="salarySlipsInput"
                     multiple
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="d-none"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -1029,7 +1056,7 @@ if (!docs.experienceLetter) {
                   <input
                     id="relievingLetterInput"
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="d-none"
                     onChange={(e) =>
                       setDocs((d) => ({
@@ -1071,7 +1098,7 @@ if (!docs.experienceLetter) {
                   <input
                     id="experienceLetterInput"
                     type="file"
-                    accept="application/pdf,image/jpeg"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="d-none"
                     onChange={(e) =>
                       setDocs((d) => ({

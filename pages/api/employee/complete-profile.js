@@ -133,7 +133,7 @@ export default async function handler(req, res) {
     emp.hasCompletedProfile = true;
     await emp.save();
 
-    return res.status(200).json({ success: true, redirectUrl: "/employee/profile" });
+    return res.status(200).json({ success: true, redirectUrl: "/employee/dashboard" });
   } catch (err) {
     console.error("Profile error:", err);
     return res.status(500).json({ success: false, message: err.message || "Server error" });

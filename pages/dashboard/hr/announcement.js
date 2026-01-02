@@ -11,6 +11,13 @@ export default function CreateAnnouncement() {
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+  if (startDate && !endDate) {
+    setEndDate(startDate);
+  }
+}, [startDate]);
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -115,12 +122,22 @@ export default function CreateAnnouncement() {
                   </div>
                   <div className="col">
                     <label className="form-label">End Date</label>
-                    <input
+                    {/* <input
                       type="date"
                       className="form-control"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                    />
+                    /> */}
+
+
+                    <input
+                        type="date"
+                        className="form-control"
+                        value={endDate}
+                        min={startDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                      />
+
                   </div>
                 </div>
 
