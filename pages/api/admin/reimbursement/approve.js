@@ -22,6 +22,9 @@
 
 
 
+import {
+  sendReimbursementApprovedEmail,
+} from "@/utils/email/sendReimbursementEmail";
 
 import dbConnect from "@/utils/dbConnect";
 import Reimbursement from "@/models/employees/Reimbursement";
@@ -45,12 +48,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: "Missing ID" });
     }
 
-    // ✅ IMPORTANT FIX: approvedBy MUST be ObjectId
-    await Reimbursement.findByIdAndUpdate(id, {
-      status: "Approved",
-      approvedAt: new Date(),
-      approvedBy: employee._id, // 🔥 THIS FIXES EVERYTHING
-    });
+   const reimbursement = await Reimbursement
+  .findById(id)
+  .populate("employee");
+
+if (!reimbursement) {
+  return res.status(404).json({ success: false });
+}
+
+reimbursement.status = "Approved";
+reimbursement.approvedAt = new Date();
+reimbursement.approvedBy = employee._id;
+
+await reimbursement.save();
+
+
+sendReimbursementApprovedEmail({
+  employeeEmail: reimbursement.employee.email,
+  employeeName: `${reimbursement.employee.personal.firstName} ${reimbursement.employee.personal.lastName}`,
+  category: reimbursement.category,
+  amount: reimbursement.amount,
+});
+
+
 
     return res.json({ success: true });
   } catch (err) {

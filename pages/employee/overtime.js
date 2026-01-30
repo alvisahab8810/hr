@@ -7,10 +7,6 @@ import Link from "next/link";
 import EmployeeLeftbar from "@/components/employee/Leftbar";
 
 export default function Overtime() {
-
-
-
-
   const [showOTModal, setShowOTModal] = useState(false);
   // Form states
   const [project, setProject] = useState("");
@@ -23,42 +19,31 @@ export default function Overtime() {
   const [overtimeList, setOvertimeList] = useState([]);
   const [tasks, setTasks] = useState("");
   const [remarkModal, setRemarkModal] = useState(null);
-  
-
- 
 
   const formatDate = (dateStr) => {
-  return new Date(dateStr).toLocaleDateString("en-GB");
-};
+    return new Date(dateStr).toLocaleDateString("en-GB");
+  };
 
-const formatTime = (time) => {
-  const [h, m] = time.split(":");
-  const hour = Number(h);
-  const suffix = hour >= 12 ? "PM" : "AM";
-  const formattedHour = hour % 12 || 12;
-  return `${formattedHour}:${m} ${suffix}`;
-};
+  const formatTime = (time) => {
+    const [h, m] = time.split(":");
+    const hour = Number(h);
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const formattedHour = hour % 12 || 12;
+    return `${formattedHour}:${m} ${suffix}`;
+  };
 
-const calculateHours = (start, end) => {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  const calculateHours = (start, end) => {
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
 
-  const startMinutes = sh * 60 + sm;
-  const endMinutes = eh * 60 + em;
+    const startMinutes = sh * 60 + sm;
+    const endMinutes = eh * 60 + em;
 
-  const diff = endMinutes - startMinutes;
-  const hours = diff / 60;
+    const diff = endMinutes - startMinutes;
+    const hours = diff / 60;
 
-  return `${hours}h`;
-};
-
-
-
-
-
-
-
-
+    return `${hours}h`;
+  };
 
   useEffect(() => {
     async function fetchOT() {
@@ -191,69 +176,67 @@ const calculateHours = (start, end) => {
                   </thead>
 
                   <tbody>
-  {overtimeList.length === 0 ? (
-    <tr>
-      <td colSpan="6" style={{ textAlign: "center" }}>
-        No overtime requests found
-      </td>
-    </tr>
-  ) : (
-    overtimeList.map((ot) => (
-      <tr key={ot._id}>
-        {/* Date */}
-        <td>{formatDate(ot.date)}</td>
+                    {overtimeList.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" style={{ textAlign: "center" }}>
+                          No overtime requests found
+                        </td>
+                      </tr>
+                    ) : (
+                      overtimeList.map((ot) => (
+                        <tr key={ot._id}>
+                          {/* Date */}
+                          <td>{formatDate(ot.date)}</td>
 
-        {/* Project */}
-        <td>{ot.project}</td>
+                          {/* Project */}
+                          <td>{ot.project}</td>
 
-        {/* OT Type */}
-        <td>
-          <span className="tag blue">{ot.otType}</span>
-        </td>
+                          {/* OT Type */}
+                          <td>
+                            <span className="tag blue">{ot.otType}</span>
+                          </td>
 
-        {/* Time */}
-        <td>
-          {formatTime(ot.startTime)} – {formatTime(ot.endTime)}
-          <br />
-          <small className="text-muted">
-            {calculateHours(ot.startTime, ot.endTime)}
-          </small>
-        </td>
+                          {/* Time */}
+                          <td>
+                            {formatTime(ot.startTime)} –{" "}
+                            {formatTime(ot.endTime)}
+                            <br />
+                            <small className="text-muted">
+                              {calculateHours(ot.startTime, ot.endTime)}
+                            </small>
+                          </td>
 
-        {/* Status */}
-        
+                          {/* Status */}
 
-      
-      <td>
-  {ot.status === "Rejected" ? (
-    <button
-      className="reim-view-remark-btn"
-      onClick={() => setRemarkModal(ot)}
-    >
-      View Remark
-    </button>
-  ) : (
-    <span
-      className={`tag ${
-        ot.status === "Approved"
-          ? "green"
-          : ot.status === "Pending"
-          ? "blue"
-          : "red"
-      }`}
-    >
-      {ot.status}
-    </span>
-  )}
-</td>
+                          <td>
+                            {ot.status === "Rejected" ? (
+                              <button
+                                className="reim-view-remark-btn"
+                                onClick={() => setRemarkModal(ot)}
+                              >
+                                View Remark
+                              </button>
+                            ) : (
+                              <span
+                                className={`tag ${
+                                  ot.status === "Approved"
+                                    ? "green"
+                                    : ot.status === "Pending"
+                                      ? "blue"
+                                      : "red"
+                                }`}
+                              >
+                                {ot.status}
+                              </span>
+                            )}
+                          </td>
 
-        {/* Approved By */}
-        <td>{ot.approvedBy?.name || "Admin"}</td>
-      </tr>
-    ))
-  )}
-</tbody>
-
+                          {/* Approved By */}
+                          <td>{ot.approvedBy?.name || "Admin"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -422,35 +405,29 @@ const calculateHours = (start, end) => {
         )}
       </div>
       {remarkModal && (
-  <div className="leave-modal-root">
-    <div
-      className="leave-modal-backdrop"
-      onClick={() => setRemarkModal(null)}
-    />
+        <div className="leave-modal-root">
+          <div
+            className="leave-modal-backdrop"
+            onClick={() => setRemarkModal(null)}
+          />
 
-    <div className="leave-modal-card">
-      <div className="leave-modal-header">
-        <span>Rejection Remark</span>
-        <button
-          className="leave-modal-close"
-          onClick={() => setRemarkModal(null)}
-        >
-          ✕
-        </button>
-      </div>
+          <div className="leave-modal-card">
+            <div className="leave-modal-header">
+              <span>Rejection Remark</span>
+              <button
+                className="leave-modal-close"
+                onClick={() => setRemarkModal(null)}
+              >
+                ✕
+              </button>
+            </div>
 
-      <div className="leave-modal-body">
-        <p>
-          {remarkModal.adminRemark || "No remark provided"}
-        </p>
-      </div>
-    </div>
-  </div>
-)}
-
+            <div className="leave-modal-body">
+              <p>{remarkModal.adminRemark || "No remark provided"}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
-
-
-
   );
 }

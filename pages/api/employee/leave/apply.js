@@ -176,7 +176,7 @@
 
 
 
-
+import { sendLeaveAppliedEmail } from "@/utils/email/sendLeaveEmail";
 import { createRouter } from "next-connect";
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
@@ -376,6 +376,27 @@ router.post(async (req, res) => {
         extraDeductedDays,
       },
     });
+
+    /* ================= SEND EMAIL (NON-BLOCKING) ================= */
+try {
+  sendLeaveAppliedEmail({
+  employeeEmail: employee.email,
+  employeeName: `${employee.firstName} ${employee.lastName}`,
+  leaveType,
+  startDate,
+  endDate,
+  totalDays,
+  reason,
+}).catch((emailErr) => {
+  console.error("Leave email failed:", emailErr);
+});
+
+} catch (emailErr) {
+  console.error("Leave email failed:", emailErr);
+  // ❗ Do NOT throw error — leave must still work
+}
+
+
 
     return res.json({ success: true, leave });
   } catch (err) {

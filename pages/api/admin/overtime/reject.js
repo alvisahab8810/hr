@@ -1,3 +1,9 @@
+
+import {
+  sendOvertimeRejectedEmail,
+  sendOvertimeAppliedAdminEmail,
+} from "@/utils/email/sendOvertimeEmail";
+
 import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
 import { getEmployeeFromToken } from "@/utils/auth";
@@ -26,7 +32,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const overtime = await Overtime.findById(id);
+    // const overtime = await Overtime.findById(id);
+    const overtime = await Overtime.findById(id).populate({
+  path: "employee",
+  select: "email personal.firstName personal.lastName",
+});
+
     if (!overtime) {
       return res
         .status(404)
@@ -40,6 +51,41 @@ export default async function handler(req, res) {
     overtime.approvedAt = new Date();
 
     await overtime.save();
+
+  
+    // ================= SEND EMAILS (NON-BLOCKING) =================
+sendOvertimeRejectedEmail({
+  to: overtime.employee.email,
+  name:
+    overtime.employee.personal?.firstName +
+    " " +
+    (overtime.employee.personal?.lastName || ""),
+  project: overtime.project,
+  date: overtime.date,
+  otType: overtime.otType,
+  remark,
+}).catch((err) =>
+  console.error("OT rejected employee email failed:", err)
+);
+
+sendOvertimeAppliedAdminEmail({
+  employeeName:
+    overtime.employee.personal?.firstName +
+    " " +
+    (overtime.employee.personal?.lastName || ""),
+  employeeEmail: overtime.employee.email,
+  project: overtime.project,
+  date: overtime.date,
+  otType: overtime.otType,
+  startTime: overtime.startTime,
+  endTime: overtime.endTime,
+  reason: overtime.reason,
+  tasks: overtime.tasks,
+}).catch((err) =>
+  console.error("OT rejected admin email failed:", err)
+);
+
+
 
     return res.json({
       success: true,

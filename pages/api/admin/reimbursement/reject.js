@@ -25,6 +25,9 @@
 
 
 
+import {
+  sendReimbursementRejectedEmail,
+} from "@/utils/email/sendReimbursementEmail";
 
 import dbConnect from "@/utils/dbConnect";
 import Reimbursement from "@/models/employees/Reimbursement";
@@ -49,10 +52,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: "Missing ID" });
     }
 
-    await Reimbursement.findByIdAndUpdate(id, {
-      status: "Rejected",
-      adminRemark: remark || "",
-    });
+ const reimbursement = await Reimbursement
+  .findById(id)
+  .populate("employee");
+
+if (!reimbursement) {
+  return res.status(404).json({ success: false });
+}
+
+reimbursement.status = "Rejected";
+reimbursement.adminRemark = remark || "";
+await reimbursement.save();
+
+
+
+sendReimbursementRejectedEmail({
+  employeeEmail: reimbursement.employee.email,
+  employeeName: `${reimbursement.employee.personal.firstName} ${reimbursement.employee.personal.lastName}`,
+  category: reimbursement.category,
+  amount: reimbursement.amount,
+  remark,
+});
+
+
 
     return res.json({ success: true });
   } catch (err) {

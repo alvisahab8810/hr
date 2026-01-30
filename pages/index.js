@@ -161,7 +161,7 @@ export default function Admin() {
     fetchAnnouncements();
   }, []);
   return (
-    <>
+    <section className="main-dashboard-area">
       <Head>
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
@@ -214,7 +214,7 @@ export default function Admin() {
 
                       {announcements.length > 0 ? (
                         announcements.map((a) => (
-                          <div key={a._id} className="intter">
+                          <div key={a._id} className="announcement-item">
                             <div className="mb-2">
                               <div>
                                 <h6 className="fw-bold mb-1 text-dark">
@@ -543,7 +543,7 @@ export default function Admin() {
 
         {/* <Setting /> */}
       </div>
-    </>
+    </section>
   );
 }
 

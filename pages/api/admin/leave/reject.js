@@ -45,7 +45,7 @@
 // }
 
 
-
+import { sendLeaveRejectedEmail } from "@/utils/email/sendLeaveStatusEmail";
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import { getEmployeeFromToken } from "@/utils/auth";
@@ -69,7 +69,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Leave ID required" });
     }
 
-    const leave = await LeaveApplication.findById(leaveId);
+    // const leave = await LeaveApplication.findById(leaveId);
+
+    const leave = await LeaveApplication
+  .findById(leaveId)
+  .populate("employee");
+
     if (!leave) {
       return res.status(404).json({ message: "Leave not found" });
     }
@@ -86,6 +91,21 @@ export default async function handler(req, res) {
     leave.rejectedBy = employee._id; // 🔥 FIX HERE
 
     await leave.save();
+
+    // 🔔 Send email (NON-BLOCKING)
+sendLeaveRejectedEmail({
+  to: leave.employee.email,
+  name: leave.employee.firstName
+    ? `${leave.employee.firstName} ${leave.employee.lastName || ""}`
+    : "Employee",
+  leaveType: leave.leaveType,
+  startDate: leave.startDate,
+  endDate: leave.endDate,
+  remark,
+}).catch((err) => {
+  console.error("Leave rejection email failed:", err);
+});
+
 
     return res.json({ success: true });
   } catch (err) {

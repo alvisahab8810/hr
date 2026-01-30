@@ -625,7 +625,7 @@ export default function LeaveManagement() {
                         </div>
                       </div>
 
-                      <div className="vl-balance-card purple">
+                      {/* <div className="vl-balance-card purple">
                         <div className="vl-balance-top">
                           <div className="vl-balance-left">
                             <span className="vl-icon purple">
@@ -674,7 +674,7 @@ export default function LeaveManagement() {
                             }}
                           ></span>
                         </div>
-                      </div>
+                      </div> */}
                     </div>
 
                     {/* Year To Date */}
@@ -759,7 +759,7 @@ export default function LeaveManagement() {
                   <option value="">Select leave type</option>
                   <option>Casual Leave</option>
                   <option>Sick Leave</option>
-                  <option>Earned Leave</option>
+                  {/* <option>Earned Leave</option> */}
                 </select>
               </div>
 

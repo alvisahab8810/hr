@@ -1,3 +1,8 @@
+import {
+  sendOvertimeAppliedEmployeeEmail,
+  sendOvertimeAppliedAdminEmail,
+} from "@/utils/email/sendOvertimeEmail";
+
 import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
@@ -56,6 +61,41 @@ export default async function handler(req, res) {
       tasks,
       status: "Pending",
     });
+
+    // ================= SEND EMAILS (NON-BLOCKING) =================
+const employeeName = employee.firstName
+  ? `${employee.firstName} ${employee.lastName || ""}`
+  : "Employee";
+
+// Employee confirmation
+sendOvertimeAppliedEmployeeEmail({
+  to: employee.email,
+  name: employeeName,
+  project,
+  date,
+  otType,
+  startTime,
+  endTime,
+  reason,
+}).catch((err) =>
+  console.error("Employee OT email failed:", err)
+);
+
+// Admin / Management alert
+sendOvertimeAppliedAdminEmail({
+  employeeName,
+  employeeEmail: employee.email,
+  project,
+  date,
+  otType,
+  startTime,
+  endTime,
+  reason,
+  tasks,
+}).catch((err) =>
+  console.error("Admin OT email failed:", err)
+);
+
 
     return res.status(201).json({
       success: true,

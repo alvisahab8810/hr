@@ -1,3 +1,5 @@
+
+import { sendReimbursementSubmittedEmail } from "@/utils/email/sendReimbursementEmail";
 import dbConnect from "@/utils/dbConnect";
 import Reimbursement from "@/models/employees/Reimbursement";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
@@ -54,6 +56,21 @@ export default async function handler(req, res) {
       description,
       attachments: files,
     });
+
+    
+    /* ================= SEND EMAIL (BACKGROUND) ================= */
+sendReimbursementSubmittedEmail({
+  employeeEmail: employee.email,
+  employeeName: `${employee.personal?.firstName || ""} ${employee.personal?.lastName || ""}`,
+  category,
+  amount,
+  paymentDate,
+  description,
+}).catch((err) => {
+  console.error("Reimbursement submit email failed:", err);
+});
+
+
 
     return res.json({
       success: true,

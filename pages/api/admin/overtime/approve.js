@@ -1,4 +1,3 @@
-
 // import dbConnect from "@/utils/dbConnect";
 // import Overtime from "@/models/employees/Overtime";
 // import { getEmployeeFromToken } from "@/utils/auth";
@@ -50,8 +49,10 @@
 //   }
 // }
 
-
-
+import {
+  sendOvertimeApprovedEmail,
+  sendOvertimeAppliedAdminEmail,
+} from "@/utils/email/sendOvertimeEmail";
 
 import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
@@ -68,9 +69,7 @@ export default async function handler(req, res) {
     const { employee: admin, error } = await getEmployeeFromToken(req);
 
     if (error || !admin || admin.role !== "admin") {
-      return res
-        .status(401)
-        .json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     const { id } = req.body;
@@ -81,7 +80,13 @@ export default async function handler(req, res) {
     }
 
     // ✅ Fetch OT
-    const overtime = await Overtime.findById(id);
+    // const overtime = await Overtime.findById(id);
+
+    const overtime = await Overtime.findById(id).populate({
+  path: "employee",
+  select: "email personal.firstName personal.lastName",
+});
+
     if (!overtime) {
       return res
         .status(404)
@@ -94,6 +99,35 @@ export default async function handler(req, res) {
     overtime.approvedAt = new Date();
     await overtime.save();
 
+    // ================= SEND EMAILS (NON-BLOCKING) =================
+    sendOvertimeApprovedEmail({
+      to: overtime.employee.email,
+      name:
+        overtime.employee.personal?.firstName +
+        " " +
+        (overtime.employee.personal?.lastName || ""),
+      project: overtime.project,
+      date: overtime.date,
+      otType: overtime.otType,
+      startTime: overtime.startTime,
+      endTime: overtime.endTime,
+    }).catch((err) => console.error("OT approved employee email failed:", err));
+
+    sendOvertimeAppliedAdminEmail({
+      employeeName:
+        overtime.employee.personal?.firstName +
+        " " +
+        (overtime.employee.personal?.lastName || ""),
+      employeeEmail: overtime.employee.email,
+      project: overtime.project,
+      date: overtime.date,
+      otType: overtime.otType,
+      startTime: overtime.startTime,
+      endTime: overtime.endTime,
+      reason: overtime.reason,
+      tasks: overtime.tasks,
+    }).catch((err) => console.error("OT approved admin email failed:", err));
+
     // ✅ OPTIONAL: mark salary as outdated (safe)
     await SalaryReport.updateMany(
       {
@@ -101,7 +135,7 @@ export default async function handler(req, res) {
         month: overtime.date.getMonth(),
         year: overtime.date.getFullYear(),
       },
-      { $set: { status: "Pending" } } // reuse existing field
+      { $set: { status: "Pending" } }, // reuse existing field
     );
 
     return res.json({
