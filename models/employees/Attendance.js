@@ -36,6 +36,12 @@ const AttendanceSchema = new mongoose.Schema(
     /* ---------- DEDUCTIONS ---------- */
     deductions: { type: Number, default: 0 },        // lunch / others
 
+    /* ---------- LUNCH REMINDER ---------- */
+
+
+    lunchStartReminderSent: { type: Boolean, default: false },
+lunchOvertimeEmailSent: { type: Boolean, default: false },
+
     /* ---------- STATUS ---------- */
     status: {
       type: String,
@@ -61,14 +67,23 @@ AttendanceSchema.methods.totalBreakMs = function () {
   return total;
 };
 
+// AttendanceSchema.methods.totalWorkedMs = function () {
+//   if (!this.startTime) return 0;
+
+//   const end = this.endTime ? new Date(this.endTime) : new Date();
+//   const raw = end - new Date(this.startTime);
+
+//   return raw - this.totalBreakMs();
+// };
+
+
 AttendanceSchema.methods.totalWorkedMs = function () {
   if (!this.startTime) return 0;
 
   const end = this.endTime ? new Date(this.endTime) : new Date();
-  const raw = end - new Date(this.startTime);
-
-  return raw - this.totalBreakMs();
+  return end - new Date(this.startTime); // ✅ Lunch NOT deducted
 };
+
 
 // ---------------- FORCE RECOMPILE ----------------
 if (mongoose.models.Attendance) {

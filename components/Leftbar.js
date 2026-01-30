@@ -430,6 +430,15 @@ export default function Leftbar({ role = "admin" }) {
       icon: "reimbursement",
     },
 
+
+
+       {
+      type: "link",
+      href: "/dashboard/admin/overtime",
+      label: "Overtime",
+      icon: "overtime",
+    },
+
     // { type: "link", href: "/dashboard/hr/announcement", label: "Announcement", icon: "announcement" },
 
     // ✅ Section heading
@@ -487,27 +496,7 @@ export default function Leftbar({ role = "admin" }) {
       <aside id="leftsidebar" className="sidebar mobile-none">
       <div className="menu">
         <ul className="list">
-          {/* Salesperson Profile */}
-          {/* <li>
-            <div className="user-info">
-              {role === "salesperson" && (
-                <Link href="/dashboard/salesperson/profile">
-                  <div className="image">
-                    <img
-                      src={profile.avatarUrl || "/asets/images/avatar.png"}
-                      alt="User"
-                      className="rounded-circle"
-                      width={48}
-                      height={48}
-                    />
-                  </div>
-                  <div className="detail">
-                    <h4>{profile.name}</h4>
-                  </div>
-                </Link>
-              )}
-            </div>
-          </li> */}
+          
 
           {/* Salesperson Home (optional, still uses zmdi if you want) */}
           {role === "salesperson" && (
@@ -538,10 +527,17 @@ export default function Leftbar({ role = "admin" }) {
                   </li>
                 );
               }
-              // const active = pathname === item.href;
-              const active = item.match
-  ? item.match.some((path) => pathname.startsWith(path))
+  //             const active = item.match
+  // ? item.match.some((path) => pathname.startsWith(path))
+  // : pathname === item.href;
+
+
+  const active = item.match
+  ? item.match.some(
+      (path) => pathname && pathname.startsWith(path)
+    )
   : pathname === item.href;
+
 
               
               return (

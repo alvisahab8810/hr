@@ -4,7 +4,7 @@
 // import LeaveApplication from "@/models/employees/LeaveApplication";
 // import Reimbursement from "@/models/employees/Reimbursement";
 // import SalaryReport from "@/models/hr/SalaryReport";
-// import { getAdminFromReq } from "@/utils/admin/getAdminFromReq";
+// import { getEmployeeFromToken } from "@/utils/auth";
 
 // /* ================= LATE PENALTY SLAB ================= */
 // function calculateLatePenalty(lateCount) {
@@ -18,136 +18,145 @@
 // export default async function handler(req, res) {
 //   if (req.method !== "POST") return res.status(405).end();
 
-//   await dbConnect();
-//   const admin = await getAdminFromReq(req, res);
-//   if (!admin) return res.status(401).json({ success: false });
+//   try {
+//     await dbConnect();
 
-//   const { month, year } = req.body;
+//     /* ================= AUTH ================= */
+//     const { employee, error } = await getEmployeeFromToken(req);
 
-//   const employees = await Employee.find({ isActive: true });
-//   const results = [];
+//     if (error || !employee || employee.role !== "admin") {
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
+//     }
 
-//   for (const emp of employees) {
-//     if (!emp.salary?.monthlySalary) continue;
+//     const { month, year } = req.body;
 
-//     const basicSalary = emp.salary.monthlySalary;
+//     const employees = await Employee.find({ isActive: true });
+//     const results = [];
 
-//     const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
-//     const perDaySalary = basicSalary / totalDaysInMonth;
+//     for (const emp of employees) {
+//       if (!emp.salary?.monthlySalary) continue;
 
-//     /* ================= ATTENDANCE ================= */
-//     const attendance = await Attendance.find({
-//       employee: emp._id,
+//       const basicSalary = emp.salary.monthlySalary;
 
-//     date: {
-//   $gte: `${year}-${String(month + 1).padStart(2, "0")}-01`,
-//   $lte: `${year}-${String(month + 1).padStart(2, "0")}-31`,
-// },
+//       const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+//       const perDaySalary = basicSalary / totalDaysInMonth;
 
-//     });
-
-//     // ✅ Present days (unique)
-//     const presentDays = new Set(
-//       attendance.filter(a => a.startTime).map(a => a.date)
-//     ).size;
-
-//     const absentDays = totalDaysInMonth - presentDays;
-//     const absentDeduction = absentDays * perDaySalary;
-
-//     // ✅ LATE COUNT (policy based)
-//     const lateCount = attendance.filter(
-//       a => a.isLate
-
-//     ).length;
-
-//     const lateDeduction = calculateLatePenalty(lateCount);
-
-//     // Other deductions (lunch / misc)
-//     const otherDeduction = attendance.reduce(
-//       (sum, a) => sum + (a.deductions || 0),
-//       0
-//     );
-
-//     /* ================= UNPAID LEAVE ================= */
-//     const unpaidLeaves = await LeaveApplication.find({
-//       employee: emp._id,
-//       status: "Approved",
-//       leaveType: "Casual Leave",
-//       "policyFlags.sandwichLeave": true,
-//       startDate: {
-//         $gte: new Date(year, month, 1),
-//         $lt: new Date(year, month + 1, 1),
-//       },
-//     });
-
-//     const unpaidLeaveDays = unpaidLeaves.reduce(
-//       (sum, l) => sum + l.totalDays,
-//       0
-//     );
-
-//     const unpaidLeaveDeduction = unpaidLeaveDays * perDaySalary;
-
-//     /* ================= REIMBURSEMENT (PENDING ONLY) ================= */
-//     const pendingReimbursements = await Reimbursement.find({
-//       employee: emp._id,
-//       status: "Pending",
-//       createdAt: {
-//         $gte: new Date(year, month, 1),
-//         $lt: new Date(year, month + 1, 1),
-//       },
-//     });
-
-//     const pendingReimAmount = pendingReimbursements.reduce(
-//       (sum, r) => sum + r.amount,
-//       0
-//     );
-
-//     /* ================= TOTAL ================= */
-//     const totalDeduction =
-//       absentDeduction +
-//       lateDeduction +
-//       unpaidLeaveDeduction +
-//       otherDeduction;
-
-//     const netPay =
-//       basicSalary -
-//       totalDeduction +
-//       pendingReimAmount;
-
-//     /* ================= SAVE SALARY ================= */
-//     const payrollId = `VN${Math.floor(1000 + Math.random() * 9000)}`;
-
-//     const salary = await SalaryReport.findOneAndUpdate(
-//       { employee: emp._id, month, year },
-//       {
+//       /* ================= ATTENDANCE ================= */
+//       const attendance = await Attendance.find({
 //         employee: emp._id,
-//         month,
-//         year,
-//         payrollId,
-//         basicSalary,
-
-//         deductions: {
-//           absent: absentDeduction,
-//           late: lateDeduction,
-//           unpaidLeave: unpaidLeaveDeduction,
-//           other: otherDeduction,
-//           total: totalDeduction,
+//         date: {
+//           $gte: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+//           $lte: `${year}-${String(month + 1).padStart(2, "0")}-31`,
 //         },
+//       });
 
-//         reimbursement: {
-//           pending: pendingReimAmount,
+//       // ✅ Present days (unique)
+//       const presentDays = new Set(
+//         attendance.filter(a => a.startTime).map(a => a.date)
+//       ).size;
+
+//       const absentDays = totalDaysInMonth - presentDays;
+//       const absentDeduction = absentDays * perDaySalary;
+
+//       // ✅ LATE COUNT (policy based)
+//       const lateCount = attendance.filter(a => a.isLate).length;
+//       const lateDeduction = calculateLatePenalty(lateCount);
+
+//       // Other deductions (lunch / misc)
+//       const otherDeduction = attendance.reduce(
+//         (sum, a) => sum + (a.deductions || 0),
+//         0
+//       );
+
+//       /* ================= UNPAID LEAVE ================= */
+//       const unpaidLeaves = await LeaveApplication.find({
+//         employee: emp._id,
+//         status: "Approved",
+//         leaveType: "Casual Leave",
+//         "policyFlags.sandwichLeave": true,
+//         startDate: {
+//           $gte: new Date(year, month, 1),
+//           $lt: new Date(year, month + 1, 1),
 //         },
+//       });
 
-//         netPay,
-//       },
-//       { upsert: true, new: true }
-//     );
+//       const unpaidLeaveDays = unpaidLeaves.reduce(
+//         (sum, l) => sum + l.totalDays,
+//         0
+//       );
 
-//     results.push(salary);
+//       const unpaidLeaveDeduction = unpaidLeaveDays * perDaySalary;
+
+//       /* ================= REIMBURSEMENT (PENDING ONLY) ================= */
+//       const pendingReimbursements = await Reimbursement.find({
+//         employee: emp._id,
+//         status: "Pending",
+//         createdAt: {
+//           $gte: new Date(year, month, 1),
+//           $lt: new Date(year, month + 1, 1),
+//         },
+//       });
+
+//       const pendingReimAmount = pendingReimbursements.reduce(
+//         (sum, r) => sum + r.amount,
+//         0
+//       );
+
+//       /* ================= TOTAL ================= */
+//       const totalDeduction =
+//         absentDeduction +
+//         lateDeduction +
+//         unpaidLeaveDeduction +
+//         otherDeduction;
+
+//       const netPay =
+//         basicSalary -
+//         totalDeduction +
+//         pendingReimAmount;
+
+//       /* ================= SAVE SALARY ================= */
+//       const payrollId = `VN${Math.floor(1000 + Math.random() * 9000)}`;
+
+//       const salary = await SalaryReport.findOneAndUpdate(
+//         { employee: emp._id, month, year },
+//         {
+//           employee: emp._id,
+//           month,
+//           year,
+//           payrollId,
+//           basicSalary,
+//           deductions: {
+//             absent: absentDeduction,
+//             late: lateDeduction,
+//             unpaidLeave: unpaidLeaveDeduction,
+//             other: otherDeduction,
+//             total: totalDeduction,
+//           },
+//           reimbursement: {
+//             pending: pendingReimAmount,
+//           },
+//           netPay,
+//         },
+//         { upsert: true, new: true }
+//       );
+
+//       results.push(salary);
+//     }
+
+//     return res.json({ success: true, data: results });
+//   } catch (err) {
+//     console.error("Salary generation error:", err);
+//     return res.status(500).json({ success: false });
 //   }
-
-//   return res.json({ success: true, data: results });
 // }
+
+
+
+
+
+
+
+
 
 import dbConnect from "@/utils/dbConnect";
 import Employee from "@/models/hr/Employee";
@@ -156,6 +165,8 @@ import LeaveApplication from "@/models/employees/LeaveApplication";
 import Reimbursement from "@/models/employees/Reimbursement";
 import SalaryReport from "@/models/hr/SalaryReport";
 import { getEmployeeFromToken } from "@/utils/auth";
+import Overtime from "@/models/employees/Overtime";
+
 
 /* ================= LATE PENALTY SLAB ================= */
 function calculateLatePenalty(lateCount) {
@@ -165,6 +176,12 @@ function calculateLatePenalty(lateCount) {
   if (lateCount <= 9) return 3500;
   return 5000;
 }
+
+
+const WORKING_DAYS = 26;
+const WORKING_HOURS_PER_DAY = 8;
+const OT_MULTIPLIER = 1.5;
+
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -253,6 +270,47 @@ export default async function handler(req, res) {
         0
       );
 
+
+
+      /* ================= OVERTIME (APPROVED ONLY) ================= */
+        const approvedOT = await Overtime.find({
+          employee: emp._id,
+          status: "Approved",
+          date: {
+            $gte: new Date(year, month, 1),
+            $lt: new Date(year, month + 1, 1),
+          },
+        });
+
+        // ⏱ Calculate total OT hours
+        let totalOTMinutes = 0;
+
+        approvedOT.forEach((ot) => {
+          const [sh, sm] = ot.startTime.split(":").map(Number);
+          const [eh, em] = ot.endTime.split(":").map(Number);
+
+          const startMinutes = sh * 60 + sm;
+          const endMinutes = eh * 60 + em;
+
+          if (endMinutes > startMinutes) {
+            totalOTMinutes += endMinutes - startMinutes;
+          }
+        });
+
+        const otHours = Number((totalOTMinutes / 60).toFixed(2));
+
+
+
+        // 💰 OT Amount calculation
+const hourlyRate =
+  basicSalary / (WORKING_DAYS * WORKING_HOURS_PER_DAY);
+
+const otAmount = Number(
+  (otHours * hourlyRate * OT_MULTIPLIER).toFixed(2)
+);
+
+
+
       /* ================= TOTAL ================= */
       const totalDeduction =
         absentDeduction +
@@ -263,7 +321,9 @@ export default async function handler(req, res) {
       const netPay =
         basicSalary -
         totalDeduction +
-        pendingReimAmount;
+        pendingReimAmount +
+        otAmount;
+
 
       /* ================= SAVE SALARY ================= */
       const payrollId = `VN${Math.floor(1000 + Math.random() * 9000)}`;
@@ -286,6 +346,11 @@ export default async function handler(req, res) {
           reimbursement: {
             pending: pendingReimAmount,
           },
+
+          overtime: {
+          hours: otHours,
+          amount: otAmount,
+        },
           netPay,
         },
         { upsert: true, new: true }

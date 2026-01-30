@@ -1,7 +1,9 @@
+
+
 // import dbConnect from "@/utils/dbConnect";
 // import Attendance from "@/models/employees/Attendance";
 // import Employee from "@/models/hr/Employee";
-// import { getAdminFromReq } from "@/utils/admin/getAdminFromReq";
+// import { getEmployeeFromToken } from "@/utils/auth";
 // import { INDIA_HOLIDAYS } from "@/utils/holidays/indiaHolidays";
 
 // export default async function handler(req, res) {
@@ -12,15 +14,17 @@
 //   try {
 //     await dbConnect();
 
-//     const admin = await getAdminFromReq(req, res);
-//     if (!admin) {
-//       return res.status(401).json({ success: false });
+//     // ✅ PRODUCTION-SAFE ADMIN AUTH
+//     const { employee, error } = await getEmployeeFromToken(req);
+
+//     if (error || !employee || employee.role !== "admin") {
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
 //     }
 
 //     const today = new Date().toISOString().split("T")[0];
 
-//     const employees = await Employee.find({ isActive: true });
-//     const attendance = await Attendance.find({ date: today });
+//     const employees = await Employee.find({ isActive: true }).lean();
+//     const attendance = await Attendance.find({ date: today }).lean();
 
 //     const present = attendance.length;
 
@@ -34,7 +38,7 @@
 
 //     // 🇮🇳 INDIAN OFFICIAL HOLIDAYS – CURRENT MONTH
 //     const now = new Date();
-//     const currentMonth = String(now.getMonth() + 1).padStart(2, "0"); // MM
+//     const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
 
 //     const monthHolidays = INDIA_HOLIDAYS.filter((h) =>
 //       h.date.startsWith(currentMonth)
@@ -43,7 +47,7 @@
 //     const holidayCount = monthHolidays.length;
 
 //     const holidayLabel =
-//       monthHolidays.length > 0
+//       holidayCount > 0
 //         ? monthHolidays
 //             .map((h) => {
 //               const day = h.date.split("-")[1];
@@ -57,9 +61,6 @@
 //       present,
 //       absent,
 //       late,
-//       // holidays: 0,
-//       // holidayLabel: "--",
-
 //       holidays: holidayCount,
 //       holidayLabel,
 //       presentPercentage: employees.length
@@ -70,10 +71,12 @@
 //         : 0,
 //     });
 //   } catch (err) {
-//     console.error(err);
+//     console.error("Admin attendance summary error:", err);
 //     return res.status(500).json({ success: false });
 //   }
 // }
+
+
 
 
 
@@ -99,10 +102,22 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    // const today = new Date().toISOString().split("T")[0];
 
-    const employees = await Employee.find({ isActive: true }).lean();
-    const attendance = await Attendance.find({ date: today }).lean();
+   // ⬆️ keep your imports and auth code as-is
+
+const { date } = req.query;
+
+if (!date) {
+  return res.status(400).json({
+    success: false,
+    message: "Date is required",
+  });
+}
+
+const employees = await Employee.find({ isActive: true }).lean();
+const attendance = await Attendance.find({ date }).lean();
+
 
     const present = attendance.length;
 

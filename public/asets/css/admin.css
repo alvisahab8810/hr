@@ -1740,3 +1740,47 @@ a.navbar-brand{
 
 
 
+
+
+.over-time-area span.status-pill.approved
+ {
+    background: #dcfce7;
+    color: #166534;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+
+
+.over-time-area .reim-view-remark-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+}
+
+.over-time-area .reim-table td:last-child {
+    text-align: left;
+    font-size: 14px;
+}
+
+.over-time-area span.status-pill.rejected {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 50px !important;
+}
+
+ .lunch-btn{
+      border-radius: 8px!important;
+    padding: 8px 20px!important;
+    font-size: 12px!important;
+    background: #2563EB!important;
+}

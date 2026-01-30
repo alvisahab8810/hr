@@ -1,3 +1,78 @@
+// import dbConnect from "@/utils/dbConnect";
+// import Attendance from "@/models/employees/Attendance";
+// import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
+// import { istDateString, istDateAt, istNow } from "@/utils/employees/ist";
+
+// export default async function handler(req, res) {
+//   if (req.method !== "POST") return res.status(405).end();
+//   await dbConnect();
+
+//   const employee = await getEmployeeFromReq(req, res);
+//   if (!employee) return; // response handled inside helper
+
+//   const { action } = req.body; // 'clock-in' | 'clock-out'
+//   const todayStr = istDateString();
+//   const now = istNow();
+
+//   if (action === "clock-in") {
+//     // prevent double clock-in
+//     const existing = await Attendance.findOne({
+//       employee: employee._id,
+//       date: todayStr,
+//       endTime: null,
+//     });
+//     if (existing && existing.startTime) {
+//       return res.status(400).json({ success: false, message: "Already clocked in" });
+//     }
+
+//     // const officeStart = istDateAt(parseInt(process.env.OFFICE_START_HOUR || "10"), 0);
+//     // const isLate = now > officeStart;
+
+//     const lateThreshold = istDateAt(10, 10);
+//     const isLate = now > lateThreshold;
+
+//     const att = await Attendance.create({
+//       employee: employee._id,
+//       date: todayStr,
+//       startTime: now,
+//       isLate,
+//       status: "clocked_in", // ✅ updated enum
+//     });
+
+//     return res.json({ success: true, attendance: att, message: "Clocked in", isLate });
+//   }
+
+//   if (action === "clock-out") {
+//     const att = await Attendance.findOne({
+//       employee: employee._id,
+//       date: todayStr,
+//       endTime: null,
+//     });
+//     if (!att) return res.status(400).json({ success: false, message: "Not clocked in" });
+
+//     att.endTime = now;
+//     att.status = "clocked_out"; // ✅ updated enum
+
+//     // compute deduction based on breaks exceeding lunch allowance
+//     const totalBreakMs = att.totalBreakMs();
+//     const lunchAllowMs = (parseInt(process.env.LUNCH_DURATION_MINUTES || "45") || 45) * 60000;
+//     let deduction = 0;
+//     if (totalBreakMs > lunchAllowMs) {
+//       const extraMin = Math.ceil((totalBreakMs - lunchAllowMs) / 60000);
+//       deduction = extraMin * (parseInt(process.env.LUNCH_DEDUCTION_PER_MIN || "5") || 5);
+//     }
+//     att.deductions = deduction;
+
+//     await att.save();
+
+//     return res.json({ success: true, attendance: att, message: "Clocked out", deduction });
+//   }
+
+//   return res.status(400).json({ success: false, message: "Invalid action" });
+// }
+
+
+
 import dbConnect from "@/utils/dbConnect";
 import Attendance from "@/models/employees/Attendance";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
@@ -7,27 +82,42 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
   await dbConnect();
 
+  // 1️⃣ AUTH FIRST
   const employee = await getEmployeeFromReq(req, res);
-  if (!employee) return; // response handled inside helper
+  if (!employee) return;
 
-  const { action } = req.body; // 'clock-in' | 'clock-out'
+  // 2️⃣ COMMON VALUES
+  const { action } = req.body;
   const todayStr = istDateString();
   const now = istNow();
 
+  // ================= CLOCK IN =================
   if (action === "clock-in") {
-    // prevent double clock-in
     const existing = await Attendance.findOne({
       employee: employee._id,
       date: todayStr,
-      endTime: { $exists: false },
     });
-    if (existing && existing.startTime) {
-      return res.status(400).json({ success: false, message: "Already clocked in" });
+
+    // ❌ already clocked in
+    if (existing && !existing.endTime) {
+      return res.status(400).json({
+        success: false,
+        message: "You are already clocked in",
+        code: "ALREADY_CLOCKED_IN",
+      });
     }
 
-    // const officeStart = istDateAt(parseInt(process.env.OFFICE_START_HOUR || "10"), 0);
-    // const isLate = now > officeStart;
+    // ❌ attendance closed for today
+    if (existing && existing.endTime) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Attendance already completed for today. Please continue tomorrow.",
+        code: "ATTENDANCE_CLOSED",
+      });
+    }
 
+    // ✅ fresh clock-in
     const lateThreshold = istDateAt(10, 10);
     const isLate = now > lateThreshold;
 
@@ -36,36 +126,53 @@ export default async function handler(req, res) {
       date: todayStr,
       startTime: now,
       isLate,
-      status: "clocked_in", // ✅ updated enum
+      status: "clocked_in",
     });
 
-    return res.json({ success: true, attendance: att, message: "Clocked in", isLate });
+    return res.json({
+      success: true,
+      attendance: att,
+      message: "Clocked in",
+      isLate,
+    });
   }
 
+  // ================= CLOCK OUT =================
   if (action === "clock-out") {
     const att = await Attendance.findOne({
       employee: employee._id,
       date: todayStr,
-      endTime: { $exists: false },
+      endTime: null,
     });
-    if (!att) return res.status(400).json({ success: false, message: "Not clocked in" });
+
+    if (!att) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Not clocked in" });
+    }
 
     att.endTime = now;
-    att.status = "clocked_out"; // ✅ updated enum
+    att.status = "clocked_out";
 
-    // compute deduction based on breaks exceeding lunch allowance
+    // lunch deduction
     const totalBreakMs = att.totalBreakMs();
-    const lunchAllowMs = (parseInt(process.env.LUNCH_DURATION_MINUTES || "45") || 45) * 60000;
+    const lunchAllowMs = 45 * 60000;
     let deduction = 0;
+
     if (totalBreakMs > lunchAllowMs) {
       const extraMin = Math.ceil((totalBreakMs - lunchAllowMs) / 60000);
-      deduction = extraMin * (parseInt(process.env.LUNCH_DEDUCTION_PER_MIN || "5") || 5);
+      deduction = extraMin * 5;
     }
-    att.deductions = deduction;
 
+    att.deductions = deduction;
     await att.save();
 
-    return res.json({ success: true, attendance: att, message: "Clocked out", deduction });
+    return res.json({
+      success: true,
+      attendance: att,
+      message: "Clocked out",
+      deduction,
+    });
   }
 
   return res.status(400).json({ success: false, message: "Invalid action" });

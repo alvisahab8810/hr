@@ -396,6 +396,9 @@ useEffect(() => {
     { href: "/employee/leaves-management", label: "Leaves Management", icon: "leaves-management" },
     // { href: "/employee/reports", label: "Reports", icon: "reports" },s
     { href: "/employee/reimbursement", label: "Reimbursement", icon: "reimbursement" },
+
+    { href: "/employee/overtime", label: "Overtime", icon: "overtime" },
+
     // { href: "#", label: "Salary Report - Coming Soon", icon: "salary" },
 
 

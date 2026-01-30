@@ -1,5 +1,17 @@
-// components/TimeTracker.jsx
+  // components/TimeTracker.jsx
+import { toast } from "react-toastify";
 import React, { useEffect, useState, useRef } from "react";
+
+
+function getActiveBreakMs(attendance) {
+  if (!attendance?.breaks?.length) return 0;
+
+  const last = attendance.breaks[attendance.breaks.length - 1];
+  if (!last || last.end) return 0;
+
+  return new Date() - new Date(last.start);
+}
+
 
 function msToClock(ms) {
   if (!ms || ms < 0) return "00:00:00";
@@ -16,6 +28,11 @@ export default function TimeTracker() {
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [timerMs, setTimerMs] = useState(0);
   const intervalRef = useRef(null);
+  const [breakMs, setBreakMs] = useState(0);
+  const [breakStart, setBreakStart] = useState(null);
+
+
+
 
   const token = typeof window !== "undefined" ? localStorage.getItem("employeeToken") : null;
 
@@ -25,7 +42,17 @@ export default function TimeTracker() {
       const data = await res.json();
       if (data.success && data.data && data.data.attendance) {
         setAttendance(data.data.attendance);
-        setIsOnBreak(data.data.attendance.status === "on_break");
+        // setIsOnBreak(data.data.attendance.status === "on_break");
+        const onBreak = data.data.attendance.status === "on_break";
+setIsOnBreak(onBreak);
+
+if (onBreak) {
+  const lastBreak = data.data.attendance.breaks?.slice(-1)[0];
+  if (lastBreak && lastBreak.start && !lastBreak.end) {
+    setBreakStart(new Date(lastBreak.start));
+  }
+}
+
         setIsClockedIn(!data.data.attendance.endTime && !!data.data.attendance.startTime);
         setTimerMs(data.data.workedMs || 0);
       } else {
@@ -46,16 +73,31 @@ export default function TimeTracker() {
     return () => clearInterval(intervalRef.current);
   }, []);
 
+  // useEffect(() => {
+  //   clearInterval(intervalRef.current);
+  //   if (isClockedIn) {
+  //     intervalRef.current = setInterval(async () => {
+  //       // update local timer
+  //       setTimerMs((prev) => prev + 1000);
+  //     }, 1000);
+  //   }
+
+
+  //   return () => clearInterval(intervalRef.current);
+  // }, [isClockedIn]);
+
+
   useEffect(() => {
-    clearInterval(intervalRef.current);
-    if (isClockedIn) {
-      intervalRef.current = setInterval(async () => {
-        // update local timer
-        setTimerMs((prev) => prev + 1000);
-      }, 1000);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [isClockedIn]);
+  clearInterval(intervalRef.current);
+
+  if (isClockedIn && !isOnBreak) {
+    intervalRef.current = setInterval(() => {
+      setTimerMs((prev) => prev + 1000);
+    }, 1000);
+  }
+
+  return () => clearInterval(intervalRef.current);
+}, [isClockedIn, isOnBreak]);
 
   // helper to call protected endpoints
   async function apiPost(url, body) {
@@ -67,44 +109,79 @@ export default function TimeTracker() {
     return res.json();
   }
 
-  async function handleClockInOut() {
-    if (!isClockedIn) {
-      const r = await apiPost("/api/employee/time/clock", { action: "clock-in" });
-      if (r.success) {
-        setAttendance(r.attendance);
-        setIsClockedIn(true);
-        setTimerMs(0);
-        // compute initial timer from server
-      } else alert(r.message || "Failed to clock in");
-    } else {
-      const r = await apiPost("/api/employee/time/clock", { action: "clock-out" });
-      if (r.success) {
-        setAttendance(r.attendance);
-        setIsClockedIn(false);
-        setIsOnBreak(false);
-        // stop timer
-      } else alert(r.message || "Failed to clock out");
+async function handleClockInOut() {
+  if (!isClockedIn) {
+    const r = await apiPost("/api/employee/time/clock", { action: "clock-in" });
+
+    if (!r.success) {
+      if (r.code === "ATTENDANCE_CLOSED") {
+        toast.info("Attendance already completed for today. Please continue tomorrow.");
+        return;
+      }
+
+      if (r.code === "ALREADY_CLOCKED_IN") {
+        toast.warning("You are already clocked in.");
+        return;
+      }
+
+      toast.error(r.message || "Unable to clock in");
+      return;
     }
+
+    setAttendance(r.attendance);
+    setIsClockedIn(true);
+    setTimerMs(0);
+
+    toast.success("Clocked in successfully");
+    return;
   }
 
+  // CLOCK OUT
+  const r = await apiPost("/api/employee/time/clock", { action: "clock-out" });
+
+  if (!r.success) {
+    toast.error(r.message || "Failed to clock out");
+    return;
+  }
+
+  setAttendance(r.attendance);
+  setIsClockedIn(false);
+  setIsOnBreak(false);
+
+  if (r.deduction > 0) {
+    toast.warning(`Lunch exceeded. Deduction ₹${r.deduction}`);
+  } else {
+    toast.success("Clocked out successfully");
+  }
+}
+
+
   async function handleBreakToggle() {
-    if (!isOnBreak) {
-      const r = await apiPost("/api/employee/time/break", { action: "start", type: "lunch" });
-      if (r.success) {
-        setAttendance(r.attendance);
-        setIsOnBreak(true);
-      } else alert(r.message || "Failed to start break");
-    } else {
-      const r = await apiPost("/api/employee/time/break", { action: "end" });
-      if (r.success) {
-        setAttendance(r.attendance);
-        setIsOnBreak(false);
-        // check deduction and maybe alert
-        if (r.deduction && r.deduction > 0) {
-          alert(`Lunch exceeded allowance. Deduction ₹${r.deduction}`);
-        }
-      } else alert(r.message || "Failed to end break");
-    }
+  if (!isOnBreak) {
+  const r = await apiPost("/api/employee/time/break", {
+    action: "start",
+    type: "lunch",
+  });
+
+  if (r.success) {
+    setAttendance(r.attendance);
+    setIsOnBreak(true);
+
+    const last = r.attendance.breaks.slice(-1)[0];
+    setBreakStart(new Date(last.start));
+  }
+}
+else {
+  const r = await apiPost("/api/employee/time/break", { action: "end" });
+
+  if (r.success) {
+    setAttendance(r.attendance);
+    setIsOnBreak(false);
+    setBreakStart(null);
+    setBreakMs(0);
+  }
+}
+
   }
 
   // Shoot (focused session)
@@ -161,15 +238,66 @@ export default function TimeTracker() {
     return () => clearInterval(alertInterval);
   }, [attendance, isOnBreak]);
 
+
+//   useEffect(() => {
+//   if (!isOnBreak) {
+//     setBreakMs(0);
+//     return;
+//   }
+
+//   const interval = setInterval(() => {
+//     setBreakMs(getActiveBreakMs(attendance));
+//   }, 1000);
+
+//   return () => clearInterval(interval);
+// }, [isOnBreak, attendance]);
+
+
+useEffect(() => {
+  if (!isOnBreak || !breakStart) {
+    setBreakMs(0);
+    return;
+  }
+
+  const interval = setInterval(() => {
+    setBreakMs(Date.now() - breakStart.getTime());
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [isOnBreak, breakStart]);
+
+
   if (loading) return <div>Loading timer...</div>;
 
   return (
     <div className="time-tracker">
       <div className="d-flex align-items-center gap-3">
-        <div className="d-flex align-items-center gap-3">
+        {/* <div className="d-flex align-items-center gap-3">
           <div className="mb-0 text-dark">Work Timer</div>
           <div className="fw-bold fs-5 text-dark">{msToClock(timerMs)}</div>
-        </div>
+        </div> */}
+
+
+        <div className="d-flex align-items-center gap-4">
+  {/* Work Timer */}
+  <div>
+    <div className="text-dark small">Work Timer</div>
+    <div className="fw-bold fs-5 text-dark">
+      {msToClock(timerMs)}
+    </div>
+  </div>
+
+  {/* Lunch Timer */}
+  {isOnBreak && (
+    <div>
+      <div className="text-danger small lunch-">Lunch Break</div>
+      <div className="fw-bold fs-5 text-danger">
+        {msToClock(breakMs)}
+      </div>
+    </div>
+  )}
+</div>
+
 
         <div>
           <button className="btn btn-primary me-2" onClick={handleClockInOut}>
@@ -179,6 +307,16 @@ export default function TimeTracker() {
           {/* <button className={`btn ${isOnBreak ? "btn-warning" : "btn-outline-warning"} me-2`} onClick={handleBreakToggle} disabled={!isClockedIn}>
             {isOnBreak ? "Break Over" : "Start Break"}
           </button> */}
+
+
+          <button
+  className={`btn ${isOnBreak ? "lunch-btn" : "lunch-btn"  } me-2`}
+  onClick={handleBreakToggle}
+  disabled={!isClockedIn}
+>
+  {isOnBreak ? "⏹ End Lunch" : "🍴 Start Lunch"}
+</button>
+
 
           {/* <button className={`btn ${shooting ? "btn-success" : "btn-outline-success"}`} onClick={toggleShoot} disabled={!isClockedIn}>
             {shooting ? "Stop Shoot" : "Start Shoot"}

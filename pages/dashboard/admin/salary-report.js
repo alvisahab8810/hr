@@ -72,32 +72,67 @@ export default function SalaryReport() {
   };
 
   const exportExcel = () => {
+    // const ws = XLSX.utils.json_to_sheet(
+    //   salaries.map((s) => ({
+    //     PayrollID: s.payrollId,
+    //     Employee: s.employee?.personal?.firstName
+    //       ? `${s.employee.personal.firstName} ${
+    //           s.employee.personal.lastName || ""
+    //         }`
+    //       : `${s.employee?.firstName || ""} ${s.employee?.lastName || ""}`,
+
+    //     Department: s.employee?.professional?.department || "-",
+
+    //     BasicSalary: s.basicSalary,
+
+    //     LateDeduction: s.deductions?.late || 0,
+    //     UnpaidLeaveDeduction: s.deductions?.unpaidLeave || 0,
+    //     OtherDeduction: s.deductions?.other || 0,
+    //     TotalDeduction: s.deductions?.total || 0,
+
+    //     ReimPending: s.reimbursement?.pending || 0,
+    //     ReimApproved: s.reimbursement?.approved || 0,
+    //     ReimPaid: s.reimbursement?.paid || 0,
+
+    //     NetPay: s.netPay,
+    //     Status: s.status,
+
+    //     OTHours: s.overtime?.hours || 0,
+    //    OTAmount: s.overtime?.amount || 0,
+    //   }))
+    // );
+
+
+
     const ws = XLSX.utils.json_to_sheet(
-      salaries.map((s) => ({
-        PayrollID: s.payrollId,
-        Employee: s.employee?.personal?.firstName
-          ? `${s.employee.personal.firstName} ${
-              s.employee.personal.lastName || ""
-            }`
-          : `${s.employee?.firstName || ""} ${s.employee?.lastName || ""}`,
+  salaries.map((s) => ({
+    PayrollID: s.payrollId,
 
-        Department: s.employee?.professional?.department || "-",
+    Employee: s.employee?.personal?.firstName
+      ? `${s.employee.personal.firstName} ${
+          s.employee.personal.lastName || ""
+        }`
+      : `${s.employee?.firstName || ""} ${s.employee?.lastName || ""}`,
 
-        BasicSalary: s.basicSalary,
+    Department: s.employee?.professional?.department || "-",
 
-        LateDeduction: s.deductions?.late || 0,
-        UnpaidLeaveDeduction: s.deductions?.unpaidLeave || 0,
-        OtherDeduction: s.deductions?.other || 0,
-        TotalDeduction: s.deductions?.total || 0,
+    BasicSalary: s.basicSalary,
 
-        ReimPending: s.reimbursement?.pending || 0,
-        ReimApproved: s.reimbursement?.approved || 0,
-        ReimPaid: s.reimbursement?.paid || 0,
+    OTHours: s.overtime?.hours || 0,
+    OTAmount: s.overtime?.amount || 0,
 
-        NetPay: s.netPay,
-        Status: s.status,
-      }))
-    );
+    LateDeduction: s.deductions?.late || 0,
+    UnpaidLeaveDeduction: s.deductions?.unpaidLeave || 0,
+    OtherDeduction: s.deductions?.other || 0,
+    TotalDeduction: s.deductions?.total || 0,
+
+    ReimPending: s.reimbursement?.pending || 0,
+
+    NetPay: s.netPay,
+    Status: s.status,
+  }))
+);
+
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Salary Report");
@@ -173,15 +208,14 @@ export default function SalaryReport() {
                       <th>Emp. ID</th>
                       <th>Employee</th>
                       <th>Department</th>
-
                       <th>Basic Salary</th>
+                      <th>OT Hours</th>
+                      <th>OT Amount</th>
                       <th>Late Deduction</th>
                       <th>Unpaid Leave</th>
                       <th>Other Deduction</th>
                       <th>Total Deduction</th>
-
                       <th>Pending Reimbursement</th>
-
                       <th>Net Pay</th>
                       <th>Status</th>
                       <th>Action</th>
@@ -218,6 +252,15 @@ export default function SalaryReport() {
 
                           <td>₹ {s.basicSalary}</td>
 
+                          <td className="fw-bold text-primary">
+                            {s.overtime?.hours || 0}h
+                          </td>
+
+                          <td className="fw-bold text-success">
+                            ₹ {s.overtime?.amount || 0}
+                          </td>
+
+
                           <td className="text-danger">
                             ₹ {s.deductions?.late || 0}
                           </td>
@@ -232,10 +275,14 @@ export default function SalaryReport() {
                             ₹ {s.deductions?.total || 0}
                           </td>
 
+                         
+
                           {/* ONLY PENDING REIMBURSEMENT */}
                           <td className="text-warning fw-bold">
                             ₹ {s.reimbursement?.pending || 0}
                           </td>
+
+                          
 
                           {/* NET PAY (includes pending reimbursement) */}
                           <td className="fw-bold text-success">₹ {s.netPay}</td>

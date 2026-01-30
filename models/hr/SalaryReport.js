@@ -15,6 +15,12 @@ const SalaryReportSchema = new mongoose.Schema(
 
     basicSalary: { type: Number, required: true },
 
+     // ✅ ADD THIS BLOCK
+    overtime: {
+      hours: { type: Number, default: 0 },
+      amount: { type: Number, default: 0 },
+    },
+
     deductions: {
       late: { type: Number, default: 0 },
       unpaidLeave: { type: Number, default: 0 },

@@ -1,7 +1,36 @@
 // import dbConnect from "@/utils/dbConnect";
 // import Attendance from "@/models/employees/Attendance";
 // import Employee from "@/models/hr/Employee";
-// import { getAdminFromReq } from "@/utils/admin/getAdminFromReq";
+// import { getEmployeeFromToken } from "@/utils/auth";
+
+
+// function getLunchInfo(breaks = []) {
+//   const lunch = breaks.find((b) => b.type === "lunch");
+//   if (!lunch) return { status: "--", duration: "--" };
+
+//   if (lunch.start && !lunch.end) {
+//     const mins = Math.floor(
+//       (Date.now() - new Date(lunch.start)) / 60000
+//     );
+//     return {
+//       status: "On Lunch",
+//       duration: `${mins} min`,
+//     };
+//   }
+
+//   if (lunch.start && lunch.end) {
+//     const mins = Math.floor(
+//       (new Date(lunch.end) - new Date(lunch.start)) / 60000
+//     );
+//     return {
+//       status: "Lunch Taken",
+//       duration: `${mins} min`,
+//     };
+//   }
+
+//   return { status: "--", duration: "--" };
+// }
+
 
 // export default async function handler(req, res) {
 //   if (req.method !== "GET") {
@@ -11,14 +40,16 @@
 //   try {
 //     await dbConnect();
 
-//     const admin = await getAdminFromReq(req, res);
-//     if (!admin) {
-//       return res.status(401).json({ success: false });
+//     // ✅ PRODUCTION-SAFE ADMIN AUTH
+//     const { employee, error } = await getEmployeeFromToken(req);
+
+//     if (error || !employee || employee.role !== "admin") {
+//       return res.status(401).json({ success: false, message: "Unauthorized" });
 //     }
 
 //     const today = new Date().toISOString().split("T")[0];
 
-//     // 🔹 STEP 5: Read filters from query
+//     // 🔹 Read filters from query
 //     const { department, designation, employeeType, status } = req.query;
 
 //     // 🔹 Build dynamic employee query
@@ -40,10 +71,6 @@
 //       employeeQuery["professional.status"] = status;
 //     }
 
-//     // ✅ ONLY ACTIVE HR EMPLOYEES
-//     // const employees = await Employee.find({ isActive: true }).lean();
-
-//     // const employees = await Employee.find({ isActive: true }).lean();
 //     const employees = await Employee.find(employeeQuery).lean();
 
 //     const attendance = await Attendance.find({
@@ -59,32 +86,42 @@
 //     const rows = employees.map((emp) => {
 //       const rec = attendanceMap[emp._id.toString()];
 
-//       let status = "Absent";
+//       const lunchInfo = rec ? getLunchInfo(rec.breaks) : { status: "--", duration: "--" };
+
+
+//       let statusText = "Absent";
 //       if (rec?.startTime) {
 //         const t = new Date(rec.startTime);
 //         const isLate =
 //           t.getHours() > 10 || (t.getHours() === 10 && t.getMinutes() > 10);
-//         status = isLate ? "Late" : "On Time";
+//         statusText = isLate ? "Late" : "On Time";
 //       }
 
-//       return {
-//         name: `${emp.firstName} ${emp.lastName}`.trim(),
-//         designation: emp.professional?.designation || "--",
-//         type: emp.professional?.employeeType || "Office",
-//         checkIn: rec?.startTime
-//           ? new Date(rec.startTime).toLocaleTimeString([], {
-//               hour: "2-digit",
-//               minute: "2-digit",
-//             })
-//           : "--",
-//         checkOut: rec?.endTime
-//           ? new Date(rec.endTime).toLocaleTimeString([], {
-//               hour: "2-digit",
-//               minute: "2-digit",
-//             })
-//           : "--",
-//         status,
-//       };
+//    return {
+//   name: `${emp.firstName} ${emp.lastName}`.trim(),
+//   designation: emp.professional?.designation || "--",
+//   type: emp.professional?.employeeType || "Office",
+
+//   checkIn: rec?.startTime
+//     ? new Date(rec.startTime).toLocaleTimeString([], {
+//         hour: "2-digit",
+//         minute: "2-digit",
+//       })
+//     : "--",
+
+//   checkOut: rec?.endTime
+//     ? new Date(rec.endTime).toLocaleTimeString([], {
+//         hour: "2-digit",
+//         minute: "2-digit",
+//       })
+//     : "--",
+
+//   lunch: lunchInfo.duration,      // ✅ NEW
+//   lunchStatus: lunchInfo.status,  // ✅ NEW
+
+//   status: statusText,
+// };
+
 //     });
 
 //     return res.json({
@@ -92,7 +129,7 @@
 //       employees: rows,
 //     });
 //   } catch (err) {
-//     console.error(err);
+//     console.error("Admin attendance list error:", err);
 //     return res.status(500).json({ success: false });
 //   }
 // }
@@ -104,6 +141,27 @@ import Attendance from "@/models/employees/Attendance";
 import Employee from "@/models/hr/Employee";
 import { getEmployeeFromToken } from "@/utils/auth";
 
+function getLunchInfo(breaks = []) {
+  const lunch = breaks.find((b) => b.type === "lunch");
+  if (!lunch) return { status: "--", duration: "--" };
+
+  if (lunch.start && !lunch.end) {
+    const mins = Math.floor(
+      (Date.now() - new Date(lunch.start)) / 60000
+    );
+    return { status: "On Lunch", duration: `${mins} min` };
+  }
+
+  if (lunch.start && lunch.end) {
+    const mins = Math.floor(
+      (new Date(lunch.end) - new Date(lunch.start)) / 60000
+    );
+    return { status: "Lunch Taken", duration: `${mins} min` };
+  }
+
+  return { status: "--", duration: "--" };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ success: false });
@@ -112,41 +170,42 @@ export default async function handler(req, res) {
   try {
     await dbConnect();
 
-    // ✅ PRODUCTION-SAFE ADMIN AUTH
+    // ✅ ADMIN AUTH
     const { employee, error } = await getEmployeeFromToken(req);
-
     if (error || !employee || employee.role !== "admin") {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    // ✅ DATE FROM FRONTEND
+    const { date, department, designation, employeeType, status } = req.query;
 
-    // 🔹 Read filters from query
-    const { department, designation, employeeType, status } = req.query;
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: "Date is required",
+      });
+    }
 
-    // 🔹 Build dynamic employee query
+    // 🔹 EMPLOYEE FILTERS
     const employeeQuery = { isActive: true };
 
-    if (department) {
+    if (department)
       employeeQuery["professional.department"] = department;
-    }
 
-    if (designation) {
+    if (designation)
       employeeQuery["professional.designation"] = designation;
-    }
 
-    if (employeeType) {
+    if (employeeType)
       employeeQuery["professional.employeeType"] = employeeType;
-    }
 
-    if (status) {
+    if (status)
       employeeQuery["professional.status"] = status;
-    }
 
     const employees = await Employee.find(employeeQuery).lean();
 
+    // ✅ FIXED: USE `date`, NOT `today`
     const attendance = await Attendance.find({
-      date: today,
+      date,
       employee: { $in: employees.map((e) => e._id) },
     }).lean();
 
@@ -157,6 +216,9 @@ export default async function handler(req, res) {
 
     const rows = employees.map((emp) => {
       const rec = attendanceMap[emp._id.toString()];
+      const lunchInfo = rec
+        ? getLunchInfo(rec.breaks)
+        : { status: "--", duration: "--" };
 
       let statusText = "Absent";
       if (rec?.startTime) {
@@ -167,21 +229,27 @@ export default async function handler(req, res) {
       }
 
       return {
+         employeeId: emp._id,   // ✅ REQUIRED
         name: `${emp.firstName} ${emp.lastName}`.trim(),
         designation: emp.professional?.designation || "--",
         type: emp.professional?.employeeType || "Office",
+
         checkIn: rec?.startTime
           ? new Date(rec.startTime).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })
           : "--",
+
         checkOut: rec?.endTime
           ? new Date(rec.endTime).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })
           : "--",
+
+        lunch: lunchInfo.duration,
+        lunchStatus: lunchInfo.status,
         status: statusText,
       };
     });
