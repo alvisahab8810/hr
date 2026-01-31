@@ -25,6 +25,7 @@ export default async function handler(req, res) {
       endTime,
       reason,
       tasks,
+       otApprover, // 👈 ADD THIS
     } = req.body;
 
     // 🔒 Validation
@@ -35,7 +36,8 @@ export default async function handler(req, res) {
       !startTime ||
       !endTime ||
       !reason ||
-      !tasks
+      !tasks ||
+      !otApprover // 👈 ADD THIS
     ) {
       return res.status(400).json({
         success: false,
@@ -59,6 +61,7 @@ export default async function handler(req, res) {
       endTime,
       reason,
       tasks,
+      otApprover, // 👈 ADD THIS
       status: "Pending",
     });
 
@@ -77,6 +80,10 @@ sendOvertimeAppliedEmployeeEmail({
   startTime,
   endTime,
   reason,
+    otApprover, // ✅ ADD
+
+
+
 }).catch((err) =>
   console.error("Employee OT email failed:", err)
 );
@@ -92,6 +99,8 @@ sendOvertimeAppliedAdminEmail({
   endTime,
   reason,
   tasks,
+  otApprover, // 👈 ADD THIS
+
 }).catch((err) =>
   console.error("Admin OT email failed:", err)
 );

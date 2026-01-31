@@ -54,6 +54,12 @@ const overtimeSchema = new mongoose.Schema(
       required: true,
     },
 
+    otApprover: {
+  type: String,
+  required: true,
+},
+
+
     tasks: {
       type: String,
       required: true,

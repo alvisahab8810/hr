@@ -33,7 +33,7 @@ export async function sendLunchOverEmail({ to, name, minutes }) {
     html: `
       <p>Hi <b>${name}</b>,</p>
       <p>Your lunch break has exceeded <b>45 minutes</b>.</p>
-      <p>Current duration: <b>${minutes} minutes</b></p>
+      // <p>Current duration: <b>${minutes} minutes</b></p>
       <p>Payroll deduction may apply.</p>
       <p>– Viralon HRMS</p>
     `,

@@ -27,6 +27,8 @@ export async function sendOvertimeAppliedEmployeeEmail({
   startTime,
   endTime,
   reason,
+  otApprover, // ✅ ADD
+
 }) {
   return transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
@@ -46,6 +48,11 @@ export async function sendOvertimeAppliedEmployeeEmail({
 
       <p><b>Reason:</b> ${reason}</p>
 
+     <p>
+        <b>OT Access Given By:</b> ${otApprover}
+      </p>
+
+
       <p>Status: <b>Pending Approval</b></p>
 
       <p>– Viralon HRMS</p>
@@ -64,6 +71,7 @@ export async function sendOvertimeAppliedAdminEmail({
   endTime,
   reason,
   tasks,
+  otApprover, // 👈 ADD
 }) {
   return transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
@@ -86,6 +94,14 @@ export async function sendOvertimeAppliedAdminEmail({
 
       <p><b>Tasks:</b> ${tasks}</p>
       <p><b>Reason:</b> ${reason}</p>
+
+
+        <p>
+        <b>OT Access Given By:</b> ${otApprover}
+      </p>
+
+      
+    
 
       <p>Status: <b>Pending Approval</b></p>
 

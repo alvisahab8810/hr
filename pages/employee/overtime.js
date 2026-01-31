@@ -15,6 +15,7 @@ export default function Overtime() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [reason, setReason] = useState("");
+  const [otApprover, setOtApprover] = useState("");
 
   const [overtimeList, setOvertimeList] = useState([]);
   const [tasks, setTasks] = useState("");
@@ -65,7 +66,8 @@ export default function Overtime() {
       !startTime ||
       !endTime ||
       !reason ||
-      !tasks
+      !tasks ||
+      !otApprover
     ) {
       toast.error("Please fill all required fields");
       return;
@@ -93,6 +95,7 @@ export default function Overtime() {
           endTime,
           reason,
           tasks,
+           otApprover, // ✅ THIS WAS MISSING
         }),
       });
 
@@ -171,7 +174,10 @@ export default function Overtime() {
                       <th>OT Type</th>
                       <th>Time</th>
                       <th>Status</th>
+                      <th>OT Access Given By</th>
+
                       <th>Approved By</th>
+                      
                     </tr>
                   </thead>
 
@@ -231,6 +237,12 @@ export default function Overtime() {
                             )}
                           </td>
 
+                          <td>
+  <span className="tag blue">
+    {ot.otApprover || "-"}
+  </span>
+</td>
+
                           {/* Approved By */}
                           <td>{ot.approvedBy?.name || "Admin"}</td>
                         </tr>
@@ -285,7 +297,7 @@ export default function Overtime() {
                       placeholder="Enter Brand name"
                       value={project}
                       onChange={(e) => setProject(e.target.value)}
-                      required
+                      required 
                     />
                   </div>
 
@@ -370,6 +382,9 @@ export default function Overtime() {
                     />
                   </div>
 
+                  <div className="reim-form-row date-amount-row">
+                
+                  
                   {/* Tasks */}
                   <div className="reim-form-group">
                     <label>Tasks *</label>
@@ -382,6 +397,27 @@ export default function Overtime() {
                       required
                     />
                   </div>
+
+
+                  {/* OT Approved By */}
+                      <div className="reim-form-group">
+                        <label>OT Access Given By *</label>
+                        <select
+                          className="reim-input"
+                          value={otApprover}
+                          onChange={(e) => setOtApprover(e.target.value)}
+                          required
+                        >
+                          <option value="">Select person</option>
+                          <option value="Ivan Sinha">Ivan Sinha</option>
+                          <option value="Ishan Sinha">Ishan Sinha</option>
+                          <option value="Riya Tiwari">Riya Tiwari</option>
+                        </select>
+                      </div>
+
+                      </div>
+
+
                 </div>
 
                 {/* Footer */}

@@ -1791,3 +1791,14 @@ a.navbar-brand{
     padding: 15px;
     border-radius: 10px;
 }
+
+.table-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Prevent text breaking in table */
+.reim-table th,
+.reim-table td {
+  white-space: nowrap;
+}
