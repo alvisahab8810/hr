@@ -442,13 +442,13 @@ export default function Leftbar({ role = "admin" }) {
     // { type: "link", href: "/dashboard/hr/announcement", label: "Announcement", icon: "announcement" },
 
     // ✅ Section heading
-    { type: "heading", label: "Task Management" },
+    // { type: "heading", label: "Task Management" },
 
     // ✅ Links under Task Management
     {
       type: "link",
-      href: "#",
-      label: "Coming Soon",
+      href: "/dashboard/admin/holidays",
+      label: "Holiday Management",
       icon: "all-task",
     },
     // {
