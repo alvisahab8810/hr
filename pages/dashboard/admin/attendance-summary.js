@@ -100,6 +100,13 @@ export default function AttendanceDashboard() {
     if (view === "month") { fetchMonthlyAttendance(); }
   }, [view, date]);
 
+  // Auto-refresh today view every 60 s to keep lunch durations live
+  useEffect(() => {
+    if (view !== "today") return;
+    const id = setInterval(() => { fetchTodayAttendance(); }, 60000);
+    return () => clearInterval(id);
+  }, [view, date]);
+
   async function fetchTodaySummary() {
     try {
       setLoadingTodaySummary(true);
@@ -271,6 +278,7 @@ export default function AttendanceDashboard() {
           .lunch-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
           .lunch-pill.active { background: #FEF3C7; color: #B45309; }
           .lunch-pill.done   { background: #DCFCE7; color: #15803D; }
+          @keyframes lunchAdminBlink { 0%,100%{opacity:1} 50%{opacity:0.6} }
 
           .type-pill { background: #F3F4F6; color: #374151; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 
@@ -603,16 +611,36 @@ export default function AttendanceDashboard() {
                                 <td style={{ fontWeight: 500 }}>{emp.checkIn || "--"}</td>
                                 <td style={{ fontWeight: 500 }}>{emp.checkOut || "--"}</td>
                                 <td>
-                                  {emp.lunchStatus === "On Lunch" ? (
-                                    <span className="lunch-pill active">{emp.lunch}</span>
-                                  ) : emp.lunch && emp.lunch !== "--" ? (
+                                  {emp.lunchStatus === "On Lunch" ? (() => {
+                                    // Parse "XX min" to check if overdue (>45 min)
+                                    const mins = parseInt(emp.lunch) || 0;
+                                    const overdue = mins > 45;
+                                    const warn    = mins > 35;
+                                    return (
+                                      <span className={`lunch-pill active`} style={
+                                        overdue ? { background:"#FEE2E2", color:"#DC2626", animation:"lunchAdminBlink 1.2s ease-in-out infinite" }
+                                        : warn   ? { background:"#FEF3C7", color:"#B45309" }
+                                        : {}
+                                      }>
+                                        {overdue && "⚠ "}{emp.lunch}
+                                        {overdue && " — Exceeded!"}
+                                      </span>
+                                    );
+                                  })() : emp.lunch && emp.lunch !== "--" ? (
                                     <span className="lunch-pill done">{emp.lunch}</span>
                                   ) : "--"}
                                 </td>
                                 <td>
-                                  <span className={`status-pill ${getStatusClass(emp.status)}`}>
-                                    {emp.status}
-                                  </span>
+                                  {/* Show "On Lunch" status when employee is on break */}
+                                  {emp.lunchStatus === "On Lunch" ? (
+                                    <span className="status-pill" style={{ background:"#FEF3C7", color:"#B45309" }}>
+                                      On Lunch
+                                    </span>
+                                  ) : (
+                                    <span className={`status-pill ${getStatusClass(emp.status)}`}>
+                                      {emp.status}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             ))

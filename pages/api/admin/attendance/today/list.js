@@ -143,23 +143,23 @@ import { getEmployeeFromToken } from "@/utils/auth";
 
 function getLunchInfo(breaks = []) {
   const lunch = breaks.find((b) => b.type === "lunch");
-  if (!lunch) return { status: "--", duration: "--" };
+  if (!lunch) return { status: "--", duration: "--", durationMins: 0 };
 
   if (lunch.start && !lunch.end) {
     const mins = Math.floor(
       (Date.now() - new Date(lunch.start)) / 60000
     );
-    return { status: "On Lunch", duration: `${mins} min` };
+    return { status: "On Lunch", duration: `${mins} min`, durationMins: mins };
   }
 
   if (lunch.start && lunch.end) {
     const mins = Math.floor(
       (new Date(lunch.end) - new Date(lunch.start)) / 60000
     );
-    return { status: "Lunch Taken", duration: `${mins} min` };
+    return { status: "Lunch Taken", duration: `${mins} min`, durationMins: mins };
   }
 
-  return { status: "--", duration: "--" };
+  return { status: "--", duration: "--", durationMins: 0 };
 }
 
 export default async function handler(req, res) {
@@ -250,6 +250,7 @@ export default async function handler(req, res) {
 
         lunch: lunchInfo.duration,
         lunchStatus: lunchInfo.status,
+        lunchMins: lunchInfo.durationMins,
         status: statusText,
       };
     });

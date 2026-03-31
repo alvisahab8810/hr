@@ -151,6 +151,15 @@ export default async function handler(req, res) {
         .json({ success: false, message: "Not clocked in" });
     }
 
+    // ❌ Block clock-out if employee is currently on lunch break
+    if (att.status === "on_break") {
+      return res.status(400).json({
+        success: false,
+        message: "Please end your lunch break before clocking out.",
+        code: "ON_BREAK",
+      });
+    }
+
     att.endTime = now;
     att.status = "clocked_out";
 

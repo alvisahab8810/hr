@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node -e \":*)",
+      "Bash(find /d/viralon-payroll/pages/dashboard/admin -type f -name *.js -o -name *.jsx)",
+      "Bash(find /d/viralon-payroll/pages/api/hr -type f -name *.js)",
+      "Bash(find /d/viralon-payroll/pages/api/employee -type f -name *.js)"
+    ]
+  }
+}

@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
     const emp = await Employee.findById(payload.id).select(
-      "employeeId firstName lastName email personal hasCompletedProfile salary professional documents"
+      "employeeId firstName lastName email personal hasCompletedProfile salary professional documents faceEnrolled"
     );
 
     if (!emp) { res.status(404).json({ success: false, message: "Employee not found" }); return; }

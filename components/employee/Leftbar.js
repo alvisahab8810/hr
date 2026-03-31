@@ -108,22 +108,22 @@ export default function EmployeeLeftbar() {
           </td>
 
           {/* Name cell */}
-          <td style={{ padding:"12px 0 10px 8px", verticalAlign:"middle" }}>
+          <td style={{ padding:"12px 0 10px 15px", verticalAlign:"middle" }}>
             <p style={{
               margin:0, padding:0,
               fontSize:13, fontWeight:700,
-              color:"#ffffff !important",
+              color:"#111 !important",
               whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
               lineHeight:"1.3",
               // Force white regardless of sidebar CSS
-              WebkitTextFillColor:"#fff",
+              WebkitTextFillColor:"#111",
             }}>
               {employee.firstName} {employee.lastName}
             </p>
             <p style={{
               margin:"2px 0 0 0", padding:0,
               fontSize:10,
-              WebkitTextFillColor:"rgba(255,255,255,.45)",
+              WebkitTextFillColor:"rgba(0, 0, 0, 0.45)",
               lineHeight:"1.3",
             }}>
               {employee.employeeId}
@@ -140,7 +140,7 @@ export default function EmployeeLeftbar() {
               width:22, height:22, borderRadius:6,
               background:"rgba(255,255,255,.08)",
             }}>
-              <i className="bi bi-chevron-right" style={{ fontSize:10, WebkitTextFillColor:"rgba(255,255,255,.4)" }} />
+              <i className="bi bi-chevron-right" style={{ fontSize:10, WebkitTextFillColor:"rgba(0, 0, 0, 0.4)" }} />
             </span>
           </td>
         </tr>
@@ -151,7 +151,7 @@ export default function EmployeeLeftbar() {
             <table cellPadding="0" cellSpacing="0" style={{ width:"100%", marginBottom:5 }}>
               <tbody>
                 <tr>
-                  <td style={{ fontSize:10, WebkitTextFillColor:"rgba(255,255,255,.4)" }}>
+                  <td style={{ fontSize:10, WebkitTextFillColor:"rgba(0, 0, 0, 0.4)" }}>
                     Profile
                   </td>
                   <td style={{
@@ -188,7 +188,7 @@ export default function EmployeeLeftbar() {
         <ProfileCard />
 
         {/* Divider */}
-        <div style={{ height:1, background:"rgba(255,255,255,.07)", margin:"10px 10px 4px" }} />
+        <div style={{ height:1, background:"rgb(237 237 237 / 26%)", margin:"10px 10px 4px" }} />
 
         <div className="menu">
           <ul className="list" style={{ paddingBottom:16 }}>
@@ -214,7 +214,7 @@ export default function EmployeeLeftbar() {
                       />
                       <i
                         className={`bi ${biIcon}`}
-                        style={{ display:"none", fontSize:15, color: active ? "#818CF8" : "rgba(255,255,255,.55)" }}
+                        style={{ display:"none", fontSize:15, color: active ? "#818CF8" : "rgba(0, 0, 0, 0.55)" }}
                       />
                     </span>
                     <span>{item.label}</span>
@@ -227,8 +227,8 @@ export default function EmployeeLeftbar() {
             <li style={{ listStyle:"none", padding:"6px 12px 4px" }}>
               <button onClick={handleLogout} style={{
                 width:"100%", padding:"9px 16px", borderRadius:10,
-                background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.1)",
-                color:"rgba(255,255,255,.7)", fontSize:13, fontWeight:600,
+                background:"rgb(212 212 212 / 54%)", border:"1px solid rgba(255,255,255,.1)",
+                 fontSize:13, fontWeight:600,
                 cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:7,
               }}>
                 <i className="bi bi-box-arrow-right" /> Logout

@@ -465,12 +465,12 @@ export default function AddEmployee() {
                         </td>
                         <td>
                           <div className="d-flex gap-2 actions-btn">
-                            {/* <Link
-                              href={`/dashboard/employees/${emp._id}`}
+                            <Link
+                              href={`/dashboard/admin/employee-profile/${emp._id}`}
                               className="btn btn-sm btn-outline-light"
                             >
-                              <FaEye />
-                            </Link> */}
+                              <FaEye /> View
+                            </Link>
                             <button
                               className="btn btn-sm btn-outline-light"
                               onClick={() => {

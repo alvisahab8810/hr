@@ -122,6 +122,10 @@ const EmployeeSchema = new mongoose.Schema({
 
   isActive: { type: Boolean, default: true },
   hasCompletedProfile: { type: Boolean, default: false },
+
+  // Face recognition
+  faceDescriptor: { type: [Number], default: [] },
+  faceEnrolled:   { type: Boolean, default: false },
 }, { timestamps: true });
 
 export default mongoose.models.Employee ||
