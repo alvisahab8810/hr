@@ -441,7 +441,7 @@ export default function EmployeeDashboard() {
                   ) : holidays.length === 0 ? (
                     <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
                       <i className="bi bi-calendar-x" style={{ fontSize:32, display:"block", marginBottom:8 }}></i>
-                      No upcoming holidays
+                      No Upcoming Holidays
                     </div>
                   ) : (
                     holidays.slice(0, 6).map((h, i) => {
