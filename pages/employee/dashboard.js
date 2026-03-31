@@ -301,21 +301,22 @@ export default function EmployeeDashboard() {
         <Dashnav />
 
         <section className="content home">
-          {/* ── Breadcrumb + TimeTracker ── */}
+          {/* ── Breadcrumb ── */}
           <div className="breadcrum-bx">
-            <ul className="breadcrumb bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <ul className="breadcrumb bg-white">
               <li className="breadcrumb-item">
                 <Link href="/employee/dashboard">
                   <img src="/icons/home.svg" alt="" /> Home
                 </Link>
               </li>
-              <li style={{ marginLeft:"auto" }}>
-                <TimeTracker />
-              </li>
             </ul>
           </div>
 
           <div className="block-header">
+            {/* ── Time Tracker — full-width card ── */}
+            <div style={{ marginBottom:20 }}>
+              <TimeTracker />
+            </div>
 
             {/* ── Profile incomplete nudge ── */}
             {completion < 100 && (

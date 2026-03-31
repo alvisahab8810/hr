@@ -353,83 +353,70 @@ export default function TimeTracker() {
   return (
     <>
       {/* ═══════════════════════════════════════════
-          TRACKER CARD
-          Desktop: inline flex in breadcrumb
-          Mobile:  full-width card, stacked layout
+          TRACKER CARD — standalone full-width
       ═══════════════════════════════════════════ */}
       <div className="tt-card">
 
-        {/* Row 1: Status + Timers */}
-        <div className="tt-row-top">
+        {/* ── Left: status + timers ── */}
+        <div className="tt-left">
+
           {/* Status badge */}
           <span className="tt-status" style={{ background:statusBg, color:statusColor }}>
             <span className="tt-dot" style={{ background:statusColor }} />
             {statusLabel}
           </span>
 
-          {/* Timers */}
-          <div className="tt-timers">
-            <div className="tt-timer-block">
-              <span className="tt-timer-label">Work</span>
-              <span className="tt-timer-value">{msToClock(timerMs)}</span>
-            </div>
-            {isOnBreak && (
-              <div className="tt-timer-block">
-                <span className="tt-timer-label" style={{ color: lunchOverdue ? "#DC2626" : "#D97706" }}>
-                  {lunchOverdue ? "⚠ Overtime" : "Lunch"}
-                </span>
-                <span className="tt-timer-value" style={{
-                  color: lunchOverdue ? "#DC2626" : "#D97706",
-                  animation: lunchOverdue ? "lunchBlink 1s ease-in-out infinite" : "none",
-                }}>
-                  {msToClock(breakMs)}
-                </span>
-              </div>
-            )}
+          {/* Main work clock */}
+          <div className="tt-clock-wrap">
+            <span className="tt-clock-label">Work Time</span>
+            <span className="tt-clock-value">{msToClock(timerMs)}</span>
           </div>
 
-          {/* Check-in time — desktop only */}
+          {/* Lunch timer — only when on break */}
+          {isOnBreak && (
+            <div className="tt-clock-wrap">
+              <span className="tt-clock-label" style={{ color: lunchOverdue ? "#DC2626" : "#D97706" }}>
+                {lunchOverdue ? "⚠ Lunch OT" : "Lunch"}
+              </span>
+              <span className="tt-clock-value" style={{
+                color: lunchOverdue ? "#DC2626" : "#D97706",
+                animation: lunchOverdue ? "lunchBlink 1s ease-in-out infinite" : "none",
+              }}>
+                {msToClock(breakMs)}
+              </span>
+            </div>
+          )}
+
+          {/* Check-in time */}
           {attendance?.startTime && (
-            <span className="tt-checkin-time">
+            <div className="tt-checkin-chip">
               <i className="bi bi-box-arrow-in-right" />
               {new Date(attendance.startTime).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}
-            </span>
+            </div>
           )}
         </div>
 
-        {/* Row 2: Action buttons */}
-        <div className="tt-row-btns">
-          {!isClockedIn && !attendance?.endTime && <BtnClockIn />}
-          {isClockedIn && <BtnClockOut />}
-          {isClockedIn && !isOnBreak && <BtnLunchStart />}
-          {isOnBreak && <BtnLunchEnd />}
-          <BtnFaceSetup />
-        </div>
+        {/* ── Divider ── */}
+        <div className="tt-divider" />
 
-        {/* Re-enroll link — only shown when already enrolled */}
-        {faceEnrolled && (
-          <div style={{ textAlign:"right", marginTop:4 }}>
-            <button
-              onClick={openEnroll}
-              style={{
-                background:"none", border:"none", padding:0,
-                fontSize:11, color:"#9CA3AF", cursor:"pointer",
-                display:"inline-flex", alignItems:"center", gap:4,
-              }}
-            >
-              <i className="bi bi-shield-check" style={{ color:"#10B981" }} />
+        {/* ── Right: action buttons ── */}
+        <div className="tt-right">
+          <div className="tt-row-btns">
+            {!isClockedIn && !attendance?.endTime && <BtnClockIn />}
+            {isClockedIn && <BtnClockOut />}
+            {isClockedIn && !isOnBreak && <BtnLunchStart />}
+            {isOnBreak && <BtnLunchEnd />}
+            <BtnFaceSetup />
+          </div>
+
+          {/* Face ID status */}
+          {faceEnrolled && (
+            <button onClick={openEnroll} className="tt-face-link">
+              <i className="bi bi-shield-fill-check" style={{ color:"#10B981" }} />
               Face ID active · <span style={{ textDecoration:"underline" }}>Update</span>
             </button>
-          </div>
-        )}
-
-        {/* Mobile check-in time */}
-        {attendance?.startTime && (
-          <div className="tt-checkin-mobile">
-            <i className="bi bi-box-arrow-in-right" style={{ marginRight:4 }} />
-            Checked in at {new Date(attendance.startTime).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Lunch auto-started notice ── */}
@@ -489,116 +476,162 @@ export default function TimeTracker() {
       )}
 
       <style>{`
-        /* ── TimeTracker card ── */
+        /* ══════════════════════════════════════
+           TIME TRACKER — standalone card
+        ══════════════════════════════════════ */
         .tt-loading {
           display: flex; align-items: center; gap: 8px;
-          padding: 8px 12px; font-size: 12px; color: #9CA3AF;
+          padding: 14px 18px; font-size: 12px; color: #9CA3AF;
+          background: #fff; border-radius: 16px;
+          border: 1.5px solid #E5E7EB;
         }
+
+        /* Card shell */
         .tt-card {
           background: #fff;
           border: 1.5px solid #E5E7EB;
-          border-radius: 14px;
-          padding: 10px 14px 10px;
-          box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-          display: flex; flex-direction: column; gap: 8px;
+          border-radius: 18px;
+          padding: 18px 22px;
+          box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          flex-wrap: wrap;
         }
-        .tt-row-top {
+
+        /* Left section: status + clocks */
+        .tt-left {
           display: flex; align-items: center;
-          gap: 12px; flex-wrap: wrap;
+          gap: 20px; flex-wrap: wrap; flex: 1; min-width: 0;
         }
+
+        /* Status pill */
         .tt-status {
-          display: inline-flex; align-items: center; gap: 5px;
-          padding: 4px 11px; border-radius: 20px;
-          font-size: 11.5px; font-weight: 700; white-space: nowrap;
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 14px; border-radius: 24px;
+          font-size: 12px; font-weight: 700; white-space: nowrap;
+          flex-shrink: 0;
         }
         .tt-dot {
-          width: 7px; height: 7px; border-radius: 50%;
+          width: 8px; height: 8px; border-radius: 50%;
           display: inline-block; flex-shrink: 0;
         }
-        .tt-timers {
-          display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+
+        /* Clock blocks */
+        .tt-clock-wrap {
+          display: flex; flex-direction: column;
+          align-items: center; text-align: center;
+          padding: 0 16px;
+          border-left: 1.5px solid #F3F4F6;
         }
-        .tt-timer-block { text-align: center; }
-        .tt-timer-label {
-          display: block; font-size: 10px; color: #9CA3AF;
-          font-weight: 500; line-height: 1;
+        .tt-clock-label {
+          font-size: 10px; color: #9CA3AF; font-weight: 600;
+          text-transform: uppercase; letter-spacing: 0.5px;
+          margin-bottom: 2px;
         }
-        .tt-timer-value {
-          display: block; font-size: 17px; font-weight: 800;
-          color: #111827; letter-spacing: 1px;
-          font-variant-numeric: tabular-nums; font-family: monospace;
-          line-height: 1.2;
+        .tt-clock-value {
+          font-size: 22px; font-weight: 800; color: #111827;
+          letter-spacing: 1.5px; font-family: monospace;
+          font-variant-numeric: tabular-nums; line-height: 1.1;
         }
-        .tt-checkin-time {
-          font-size: 11px; color: #9CA3AF; white-space: nowrap;
-          display: inline-flex; align-items: center; gap: 4px;
+
+        /* Check-in chip */
+        .tt-checkin-chip {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 5px 12px; border-radius: 20px;
+          background: #F9FAFB; border: 1px solid #E5E7EB;
+          font-size: 11.5px; font-weight: 600; color: #6B7280;
+          white-space: nowrap; flex-shrink: 0;
+        }
+
+        /* Vertical divider (desktop) */
+        .tt-divider {
+          width: 1.5px; height: 56px; background: #F3F4F6;
+          flex-shrink: 0;
+        }
+
+        /* Right section: buttons */
+        .tt-right {
+          display: flex; flex-direction: column;
+          align-items: flex-end; gap: 8px; flex-shrink: 0;
         }
         .tt-row-btns {
-          display: flex; gap: 7px; flex-wrap: wrap; align-items: center;
+          display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+          justify-content: flex-end;
         }
-        .tt-btn {
-          display: inline-flex; align-items: center; gap: 6px;
-          border: none; border-radius: 10px;
-          padding: 8px 15px; font-size: 13px; font-weight: 700;
-          cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
-        }
-        .tt-btn:hover { opacity: 0.88; }
-        .tt-btn-green  { background: linear-gradient(135deg,#10B981,#059669); color:#fff; box-shadow:0 3px 10px rgba(16,185,129,0.3); }
-        .tt-btn-red    { background: linear-gradient(135deg,#EF4444,#DC2626); color:#fff; box-shadow:0 3px 10px rgba(239,68,68,0.3); }
-        .tt-btn-amber  { background: linear-gradient(135deg,#F59E0B,#D97706); color:#fff; box-shadow:0 3px 10px rgba(245,158,11,0.3); }
-        .tt-btn-outline { background:#EEF2FF; color:#4F46E5; border:1.5px solid #C7D2FE; box-shadow:none; font-size:12px; padding:8px 12px; }
-        .tt-btn-disabled { background:#F3F4F6; color:#9CA3AF; border:1.5px solid #E5E7EB; cursor:not-allowed; }
-        .tt-pill {
-          font-size: 10px; background: rgba(0,0,0,0.15);
-          padding: 1px 6px; border-radius: 8px;
-        }
-        .tt-checkin-mobile { display: none; }
 
-        /* ── MOBILE ── */
+        /* Buttons */
+        .tt-btn {
+          display: inline-flex; align-items: center; gap: 7px;
+          border: none; border-radius: 11px;
+          padding: 10px 18px; font-size: 13.5px; font-weight: 700;
+          cursor: pointer; white-space: nowrap;
+          transition: transform 0.1s, opacity 0.15s;
+        }
+        .tt-btn:active { transform: scale(0.97); }
+        .tt-btn:hover  { opacity: 0.9; }
+        .tt-btn-green    { background: linear-gradient(135deg,#10B981,#059669); color:#fff; box-shadow:0 4px 14px rgba(16,185,129,0.35); }
+        .tt-btn-red      { background: linear-gradient(135deg,#EF4444,#DC2626); color:#fff; box-shadow:0 4px 14px rgba(239,68,68,0.35); }
+        .tt-btn-amber    { background: linear-gradient(135deg,#F59E0B,#D97706); color:#fff; box-shadow:0 4px 14px rgba(245,158,11,0.35); }
+        .tt-btn-outline  { background:#EEF2FF; color:#4F46E5; border:1.5px solid #C7D2FE; box-shadow:none; padding:9px 14px; font-size:12.5px; }
+        .tt-btn-disabled { background:#F3F4F6; color:#9CA3AF; border:1.5px solid #E5E7EB; cursor:not-allowed; }
+        .tt-pill { font-size:10px; background:rgba(0,0,0,0.15); padding:1px 7px; border-radius:8px; }
+
+        /* Face ID link */
+        .tt-face-link {
+          background: none; border: none; padding: 0;
+          font-size: 11px; color: #9CA3AF; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 4px;
+        }
+
+        /* ── MOBILE (≤ 991px) ── */
         @media (max-width: 991px) {
           .tt-card {
-            border-radius: 12px;
-            padding: 12px 14px;
-            gap: 10px;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 16px;
+            gap: 14px;
+            border-radius: 16px;
           }
-          .tt-row-top {
+          .tt-left {
+            gap: 14px;
             justify-content: space-between;
           }
-          .tt-checkin-time { display: none; }
-          .tt-checkin-mobile {
-            display: block;
-            font-size: 11px; color: #9CA3AF;
-            padding-top: 2px;
+          .tt-clock-wrap {
+            padding: 0 12px;
           }
-          .tt-timers { gap: 20px; }
-          .tt-timer-value { font-size: 18px; }
+          .tt-clock-value { font-size: 20px; }
+          .tt-divider { display: none; }
+          .tt-right {
+            align-items: stretch;
+          }
           .tt-row-btns {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            gap: 9px;
+            justify-content: stretch;
           }
           .tt-btn {
             width: 100%;
             justify-content: center;
-            padding: 11px 10px;
+            padding: 12px 10px;
             font-size: 13px;
-            border-radius: 11px;
+            border-radius: 12px;
           }
-          /* Setup Face ID spans full width on mobile */
           .tt-btn-outline {
             grid-column: 1 / -1;
-            justify-content: center;
           }
+          .tt-face-link { justify-content: center; }
         }
-        @media (max-width: 400px) {
+        @media (max-width: 420px) {
           .tt-row-btns { grid-template-columns: 1fr; }
           .tt-btn-outline { grid-column: unset; }
+          .tt-left { gap: 10px; }
+          .tt-clock-wrap { padding: 0 8px; }
+          .tt-clock-value { font-size: 18px; }
         }
 
-        @keyframes lunchBlink {
-          0%,100% { opacity:1; }
-          50% { opacity:0.55; }
-        }
+        @keyframes lunchBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
       `}</style>
     </>
   );
