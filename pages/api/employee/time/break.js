@@ -128,10 +128,14 @@ export default async function handler(req, res) {
 
     /* ---------- SEND EMAIL ONCE ---------- */
     if (totalBreakMs > allowedMs && !att.lunchReminderSent) {
+      const exceededMin = Math.ceil((totalBreakMs - allowedMs) / 60000);
+      const totalMin    = Math.round(totalBreakMs / 60000);
       await sendLunchReminderEmail({
-        to: employee.email,
-        employeeName: employee.firstName,
-      });
+        to:      employee.email,
+        name:    employee.firstName,
+        minutes: totalMin,
+        exceeded: exceededMin,
+      }).catch(() => {});
 
       att.lunchReminderSent = true;
     }

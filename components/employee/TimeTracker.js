@@ -141,29 +141,36 @@ export default function TimeTracker() {
   }, [isOnBreak, breakStart]);
 
   // ── Auto lunch at 13:30 ────────────────────────────────────────────────────
+  // Runs every 20s but only fires within the 13:30:00–13:30:59 window
   useEffect(() => {
     lunchCheckRef.current = setInterval(async () => {
       if (!isClockedIn || isOnBreak || autoLunchFired) return;
       const now = new Date();
-      if (now.getHours() === LUNCH_HOUR && now.getMinutes() === LUNCH_MIN) {
-        setAutoLunchFired(true);
-        setShowLunchNotice(true);
-        // Auto start lunch
-        try {
-          const r = await apiPost("/api/employee/time/break", { action: "start", type: "lunch" });
-          if (r.success) {
-            setAttendance(r.attendance);
-            setIsOnBreak(true);
-            const last = r.attendance.breaks?.slice(-1)[0];
-            if (last?.start) setBreakStart(new Date(last.start));
-            toast.info("Lunch time! Break started automatically (01:30 PM)", { autoClose: 8000 });
-            new Audio("/sounds/lunch-warning.mp3").play().catch(() => {});
-          }
-        } catch { /* ignore */ }
-        // Reset fired flag next day
-        setTimeout(() => setAutoLunchFired(false), 86400000);
-      }
-    }, 15000); // check every 15 s
+      if (now.getHours() !== LUNCH_HOUR || now.getMinutes() !== LUNCH_MIN) return;
+
+      setAutoLunchFired(true);
+      // Reset at midnight
+      const msToMidnight = new Date().setHours(24,0,0,0) - Date.now();
+      setTimeout(() => setAutoLunchFired(false), msToMidnight);
+
+      // Play sound immediately (before API call)
+      new Audio("/sounds/lunch-warning.mp3").play().catch(() => {});
+
+      try {
+        const r = await apiPost("/api/employee/time/break", { action: "start", type: "lunch" });
+        if (r.success) {
+          setAttendance(r.attendance);
+          setIsOnBreak(true);
+          const last = r.attendance.breaks?.slice(-1)[0];
+          if (last?.start) setBreakStart(new Date(last.start));
+        }
+      } catch { /* ignore */ }
+
+      // Show banner notification
+      setShowLunchNotice(true);
+      // Auto-hide after 12s
+      setTimeout(() => setShowLunchNotice(false), 12000);
+    }, 20000); // every 20s — guarantees hitting the 60s window
     return () => clearInterval(lunchCheckRef.current);
   }, [isClockedIn, isOnBreak, autoLunchFired, apiPost]);
 
@@ -419,49 +426,73 @@ export default function TimeTracker() {
         </div>
       </div>
 
-      {/* ── Lunch auto-started notice ── */}
-      {showLunchNotice && (
+      {/* ── Lunch banner notification (slide-in from top-right) ── */}
+      <div style={{
+        position:"fixed", top:18, right:18, zIndex:9990,
+        transform: showLunchNotice ? "translateY(0) scale(1)" : "translateY(-120%) scale(0.95)",
+        opacity: showLunchNotice ? 1 : 0,
+        transition:"transform 0.42s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s ease",
+        pointerEvents: showLunchNotice ? "auto" : "none",
+        maxWidth: 340, width:"calc(100vw - 36px)",
+      }}>
         <div style={{
-          position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          zIndex:9990, padding:16,
+          background:"linear-gradient(135deg,#1e1b4b 0%,#D97706 200%)",
+          background:"#fff",
+          borderRadius:18,
+          boxShadow:"0 8px 40px rgba(0,0,0,0.18), 0 0 0 1.5px #FCD34D",
+          overflow:"hidden",
         }}>
+          {/* Amber top strip */}
           <div style={{
-            background:"#fff", borderRadius:20, padding:"28px 32px",
-            maxWidth:360, width:"100%", textAlign:"center",
-            boxShadow:"0 16px 48px rgba(0,0,0,0.25)",
+            background:"linear-gradient(90deg,#F59E0B,#D97706)",
+            padding:"10px 16px",
+            display:"flex", alignItems:"center", justifyContent:"space-between",
           }}>
-            <div style={{
-              width:64, height:64, borderRadius:"50%",
-              background:"#FEF3C7", display:"flex", alignItems:"center",
-              justifyContent:"center", margin:"0 auto 16px", fontSize:30,
-            }}>🍽️</div>
-            <h5 style={{ fontWeight:800, color:"#111827", fontSize:18, marginBottom:6 }}>
-              Lunch Time!
-            </h5>
-            <p style={{ fontSize:36, fontWeight:900, color:"#D97706", margin:"4px 0 8px", lineHeight:1 }}>
-              01:30 PM
-            </p>
-            <p style={{ fontSize:13, color:"#6B7280", marginBottom:6 }}>
-              Your lunch break has started automatically.
-            </p>
-            <p style={{ fontSize:12, color:"#9CA3AF", marginBottom:20 }}>
-              Allowed: <strong style={{ color:"#374151" }}>45 minutes</strong> — deduction applies if exceeded.
-            </p>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:20 }}>🍽️</span>
+              <span style={{ color:"#fff", fontWeight:800, fontSize:14 }}>Lunch Break Started!</span>
+            </div>
             <button
               onClick={() => setShowLunchNotice(false)}
               style={{
-                background:"linear-gradient(135deg,#F59E0B,#D97706)",
-                color:"#fff", border:"none", borderRadius:12,
-                padding:"12px 28px", fontSize:14, fontWeight:700,
-                cursor:"pointer", width:"100%",
+                background:"rgba(255,255,255,0.2)", border:"none", borderRadius:6,
+                width:26, height:26, cursor:"pointer", color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:13, fontWeight:700, flexShrink:0,
               }}
-            >
-              Got it — Enjoy your lunch!
-            </button>
+            >×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding:"14px 18px 16px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <div style={{
+                width:44, height:44, borderRadius:12, flexShrink:0,
+                background:"#FEF3C7",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:22,
+              }}>⏰</div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#111827" }}>
+                  01:30 PM — Auto break started
+                </div>
+                <div style={{ fontSize:11.5, color:"#6B7280", marginTop:2 }}>
+                  You have <strong style={{ color:"#D97706" }}>45 min</strong> for lunch. Deduction applies if exceeded.
+                </div>
+              </div>
+            </div>
+
+            {/* Progress bar — counts down 12s auto-dismiss */}
+            <div style={{ height:3, background:"#F3F4F6", borderRadius:10, overflow:"hidden" }}>
+              <div style={{
+                height:"100%", borderRadius:10,
+                background:"linear-gradient(90deg,#F59E0B,#D97706)",
+                animation: showLunchNotice ? "lunchBarShrink 12s linear forwards" : "none",
+              }} />
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* ── Face Recognition Modal ── */}
       {showFace && (
@@ -631,7 +662,8 @@ export default function TimeTracker() {
           .tt-clock-value { font-size: 18px; }
         }
 
-        @keyframes lunchBlink { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
+        @keyframes lunchBlink     { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
+        @keyframes lunchBarShrink { from{ width:100%; } to{ width:0%; } }
       `}</style>
     </>
   );
