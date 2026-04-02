@@ -10,6 +10,7 @@ const NAV = [
   { href: "/employee/leaves-management",  icon: "bi-calendar-minus-fill", label: "Leaves"        },
   { href: "/employee/reimbursement",      icon: "bi-receipt",             label: "Reimbursement" },
   { href: "/employee/overtime",           icon: "bi-clock-history",       label: "Overtime"      },
+  { href: "/employee/deduction-waiver",   icon: "bi-shield-check",        label: "Deductions"        },
   { href: "/employee/profile",            icon: "bi-person-circle",       label: "My Profile"    },
   { href: "/employee/complete-profile",   icon: "bi-folder2-open",        label: "Documents"     },
 ];

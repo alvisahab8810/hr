@@ -54,6 +54,7 @@ export default function EmployeeLeftbar() {
     "leaves-management": "bi-calendar-minus-fill",
     "reimbursement":     "bi-receipt",
     "overtime":          "bi-clock-history",
+    "deduction-waiver":  "bi-shield-check",
     "profile":           "bi-person-circle",
   };
 
@@ -63,6 +64,7 @@ export default function EmployeeLeftbar() {
     { href: "/employee/leaves-management",  label: "Leaves Management",  icon: "leaves-management" },
     { href: "/employee/reimbursement",      label: "Reimbursement",      icon: "reimbursement"     },
     { href: "/employee/overtime",           label: "Overtime",           icon: "overtime"          },
+    { href: "/employee/deduction-waiver",   label: "My Deductions",      icon: "deduction-waiver"  },
     { href: "/employee/profile",            label: "My Profile",         icon: "profile"           },
   ];
 

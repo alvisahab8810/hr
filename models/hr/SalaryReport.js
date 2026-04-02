@@ -37,6 +37,7 @@ const SalaryReportSchema = new mongoose.Schema(
       lunch:       { type: Number, default: 0 }, // lunch overrun penalty
       other:       { type: Number, default: 0 }, // manual adjustments
       total:       { type: Number, default: 0 },
+      waived:      { type: Number, default: 0 }, // total approved waiver credits
     },
 
     // ── Overtime ────────────────────────────────────────

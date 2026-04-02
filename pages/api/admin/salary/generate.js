@@ -24,6 +24,7 @@ import Reimbursement from "@/models/employees/Reimbursement";
 import SalaryReport from "@/models/hr/SalaryReport";
 import Overtime from "@/models/employees/Overtime";
 import Holiday from "@/models/Holiday";
+import DeductionWaiverRequest from "@/models/employees/DeductionWaiverRequest";
 import { getEmployeeFromToken } from "@/utils/auth";
 
 // ── Policy ─────────────────────────────────────────────────────────────────────
@@ -165,8 +166,8 @@ export default async function handler(req, res) {
 
       const empId = emp._id;
 
-      // Per-day rate always based on FULL month working days (fair deduction rate)
-      const perDaySalary = basicSalary / totalWorkingDays;
+      // Per-day rate based on 30-day calendar month (₹28,000 ÷ 30 = ₹933.33/day)
+      const perDaySalary = basicSalary / 30;
 
       // Earned salary = pro-rated if mid-month, full if month end
       // This is what gets shown — absent/late deductions come off this
@@ -272,11 +273,48 @@ export default async function handler(req, res) {
       }
 
       // ── Deductions (off earned salary, not basic) ────────────────────────
-      const absentDeduction      = Math.round(absentDays   * perDaySalary);
-      const halfDayDeduction     = Math.round(halfDayCount * perDaySalary * 0.5);
-      const lateDeduction        = calcLatePenalty(lateCount);
-      const unpaidLeaveDeduction = Math.round(unpaidLeaveDates.size * perDaySalary);
-      const lunchPenaltyRounded  = Math.round(lunchPenalty);
+      let absentDeduction      = Math.round(absentDays   * perDaySalary);
+      let halfDayDeduction     = Math.round(halfDayCount * perDaySalary * 0.5);
+      let lateDeduction        = calcLatePenalty(lateCount);
+      let unpaidLeaveDeduction = Math.round(unpaidLeaveDates.size * perDaySalary);
+      let lunchPenaltyRounded  = Math.round(lunchPenalty);
+
+      // ── Apply approved deduction waivers ────────────────────────────────
+      const approvedWaivers = await DeductionWaiverRequest.find({
+        employee: empId,
+        month,
+        year,
+        status: "Approved",
+      }).lean();
+
+      let waivedAbsent      = 0;
+      let waivedHalfDay     = 0;
+      let waivedLate        = 0;
+      let waivedUnpaidLeave = 0;
+      let waivedLunch       = 0;
+      let waivedOther       = 0;
+
+      for (const w of approvedWaivers) {
+        const amt = Number(w.amount) || 0;
+        switch (w.deductionType) {
+          case "absent":      waivedAbsent      += amt; break;
+          case "halfDay":     waivedHalfDay     += amt; break;
+          case "late":        waivedLate        += amt; break;
+          case "unpaidLeave": waivedUnpaidLeave += amt; break;
+          case "lunch":       waivedLunch       += amt; break;
+          default:            waivedOther       += amt; break;
+        }
+      }
+
+      // Cap waivers so deductions never go below 0
+      absentDeduction      = Math.max(0, absentDeduction      - waivedAbsent);
+      halfDayDeduction     = Math.max(0, halfDayDeduction     - waivedHalfDay);
+      lateDeduction        = Math.max(0, lateDeduction        - waivedLate);
+      unpaidLeaveDeduction = Math.max(0, unpaidLeaveDeduction - waivedUnpaidLeave);
+      lunchPenaltyRounded  = Math.max(0, lunchPenaltyRounded  - waivedLunch);
+
+      const totalWaived =
+        waivedAbsent + waivedHalfDay + waivedLate + waivedUnpaidLeave + waivedLunch + waivedOther;
 
       const totalDeduction =
         absentDeduction +
@@ -348,6 +386,7 @@ export default async function handler(req, res) {
               lunch:       lunchPenaltyRounded,
               other:       0,
               total:       totalDeduction,
+              waived:      totalWaived,
             },
             overtime: {
               hours:  otHours,

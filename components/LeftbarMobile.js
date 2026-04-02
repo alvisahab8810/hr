@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard/admin/salary-report",       icon: "bi-cash-stack",          label: "Salary"        },
   { href: "/dashboard/admin/reimbursement",       icon: "bi-receipt",             label: "Reimbursement" },
   { href: "/dashboard/admin/overtime",            icon: "bi-clock-history",       label: "Overtime"      },
+  { href: "/dashboard/admin/deduction-waiver",    icon: "bi-shield-check-fill",   label: "Waivers"       },
   { href: "/dashboard/admin/holidays",            icon: "bi-calendar-event-fill", label: "Holidays"      },
 ];
 
