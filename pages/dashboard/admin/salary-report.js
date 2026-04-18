@@ -1,7 +1,7 @@
 
 // pages/dashboard/admin/salary-report.js
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Head from "next/head";
 import React, { useEffect, useState } from "react";
@@ -360,7 +360,7 @@ export default function SalaryReport() {
 
       <div className="add-employee-area">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 
@@ -772,7 +772,7 @@ export default function SalaryReport() {
 }
 
 // import Dashnav from "@/components/Dashnav";
-// import Leftbar from "@/components/Leftbar";
+// import SmartLeftbar from "@/components/SmartLeftbar";
 // import LeftbarMobile from "@/components/LeftbarMobile";
 // import Head from "next/head";
 // import React, { useEffect, useState } from "react";
@@ -922,7 +922,7 @@ export default function SalaryReport() {
 
 //       <div className="add-employee-area">
 //         <div className="main-nav">
-//           <Leftbar />
+//           <SmartLeftbar />
 //           <LeftbarMobile />
 //           <Dashnav />
 

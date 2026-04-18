@@ -1,7 +1,7 @@
 import { toast } from "react-toastify";
 
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
@@ -175,7 +175,7 @@ export default function LeaveManagement() {
 
       <div className="add-employee-area">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 

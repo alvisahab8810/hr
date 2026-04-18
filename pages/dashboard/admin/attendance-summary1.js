@@ -1,5 +1,5 @@
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import { useEffect, useState } from "react";
 import Head from "next/head";
@@ -123,7 +123,7 @@ export default function AttendanceDashboard() {
       </Head>
       <div className="dashboard-container add-employee-area">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 

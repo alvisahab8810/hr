@@ -1804,3 +1804,7 @@ a.navbar-brand{
   white-space: nowrap;
 }
 
+.main-container{
+  width: 100%;
+}
+

@@ -13,13 +13,10 @@ const MONTHS = [
 
 const fmt = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
-// Late penalty table — mirrors generate.js
+// ₹250 per late arrival after 10:10 AM — mirrors generate.js
 function latePenaltyTier(count) {
-  if (count <= 2) return { label: "No penalty (≤2 lates)", penalty: 0 };
-  if (count === 3) return { label: "3 lates → ₹500", penalty: 500 };
-  if (count <= 5) return { label: `${count} lates → ₹1,500`, penalty: 1500 };
-  if (count <= 9) return { label: `${count} lates → ₹3,500`, penalty: 3500 };
-  return { label: `${count} lates → ₹5,000`, penalty: 5000 };
+  if (count === 0) return { label: "No late arrivals", penalty: 0 };
+  return { label: `${count} late${count !== 1 ? "s" : ""} × ₹250/late`, penalty: count * 250 };
 }
 
 export default function EmployeeDeductionDetail() {
@@ -50,8 +47,8 @@ export default function EmployeeDeductionDetail() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Derived values
-  const ded     = report?.deductions || {};
-  const perDay  = report?.basicSalary ? Math.round(report.basicSalary / 30) : 0;
+  const ded      = report?.deductions || {};
+  const perDay   = report?.basicSalary ? Math.round(report.basicSalary / 30) : 0;
   const lateTier = latePenaltyTier(report?.lateCount || 0);
 
   // Build deduction detail lines
@@ -68,7 +65,7 @@ export default function EmployeeDeductionDetail() {
       detail: `${report.halfDayCount} half-day${report.halfDayCount !== 1 ? "s" : ""} × ₹${fmt(Math.round(perDay / 2))}/half-day`,
       amount: ded.halfDay || 0,
     },
-    (ded.late || 0) > 0 && {
+    (report?.lateCount || 0) > 0 && {
       icon: "bi-alarm-fill", bg: "#FEF3C7", color: "#D97706",
       label: "Late Arrivals",
       detail: lateTier.label,

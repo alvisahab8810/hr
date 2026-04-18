@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
 
@@ -44,7 +44,35 @@ function InfoRow({ label, value, mono }) {
   );
 }
 
-function SectionCard({ title, icon, children }) {
+function FormField({ label, name, value, onChange, type = "text", options, required }) {
+  const inputStyle = {
+    width:"100%", padding:"8px 12px", fontSize:13, borderRadius:8,
+    border:"1.5px solid #E5E7EB", outline:"none", background:"#fff",
+    color:"#111827", fontWeight:500, transition:"border .15s",
+  };
+  return (
+    <div style={{ marginBottom:14 }}>
+      <label style={{ fontSize:12, fontWeight:600, color:"#6B7280", display:"block", marginBottom:5 }}>
+        {label}{required && <span style={{ color:"#DC2626", marginLeft:3 }}>*</span>}
+      </label>
+      {options ? (
+        <select name={name} value={value || ""} onChange={onChange} style={inputStyle}>
+          <option value="">— Select —</option>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input
+          type={type} name={name} value={value || ""}
+          onChange={onChange} style={inputStyle}
+          onFocus={e => e.target.style.borderColor = "#4F46E5"}
+          onBlur={e => e.target.style.borderColor = "#E5E7EB"}
+        />
+      )}
+    </div>
+  );
+}
+
+function SectionCard({ title, icon, children, onEdit, editing, onSave, onCancel, saving }) {
   return (
     <div style={{
       background:"#fff", borderRadius:16, padding:"20px 22px",
@@ -52,18 +80,45 @@ function SectionCard({ title, icon, children }) {
     }}>
       {title && (
         <div style={{
-          display:"flex", alignItems:"center", gap:8,
-          marginBottom:14, paddingBottom:12,
-          borderBottom:"1px solid #F3F4F6",
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          marginBottom:14, paddingBottom:12, borderBottom:"1px solid #F3F4F6",
         }}>
-          <div style={{
-            width:32, height:32, borderRadius:9,
-            background:"linear-gradient(135deg,#EEF2FF,#DDD6FE)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}>
-            <i className={`bi ${icon}`} style={{ color:"#4F46E5", fontSize:15 }} />
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{
+              width:32, height:32, borderRadius:9,
+              background:"linear-gradient(135deg,#EEF2FF,#DDD6FE)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <i className={`bi ${icon}`} style={{ color:"#4F46E5", fontSize:15 }} />
+            </div>
+            <span style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{title}</span>
           </div>
-          <span style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{title}</span>
+          {onEdit && !editing && (
+            <button onClick={onEdit} style={{
+              display:"flex", alignItems:"center", gap:5,
+              background:"#EEF2FF", border:"1.5px solid #C7D2FE", borderRadius:8,
+              padding:"6px 12px", fontSize:12, fontWeight:700, color:"#4F46E5", cursor:"pointer",
+            }}>
+              <i className="bi bi-pencil-fill" style={{ fontSize:11 }} /> Edit
+            </button>
+          )}
+          {editing && (
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={onCancel} style={{
+                background:"#F3F4F6", border:"1.5px solid #E5E7EB", borderRadius:8,
+                padding:"6px 12px", fontSize:12, fontWeight:700, color:"#6B7280", cursor:"pointer",
+              }}>
+                Cancel
+              </button>
+              <button onClick={onSave} disabled={saving} style={{
+                background: saving ? "#A5B4FC" : "#4F46E5", border:"none", borderRadius:8,
+                padding:"6px 16px", fontSize:12, fontWeight:700, color:"#fff", cursor:"pointer",
+                display:"flex", alignItems:"center", gap:5,
+              }}>
+                {saving ? <><i className="bi bi-arrow-repeat" style={{ animation:"spin .7s linear infinite", fontSize:12 }} /> Saving…</> : <><i className="bi bi-check-lg" /> Save</>}
+              </button>
+            </div>
+          )}
         </div>
       )}
       {children}
@@ -86,15 +141,12 @@ function DocLink({ label, url, icon = "bi-file-earmark" }) {
     </div>
   );
   return (
-    <a
-      href={url} target="_blank" rel="noopener noreferrer"
-      style={{
-        display:"flex", alignItems:"center", gap:10,
-        padding:"12px 14px", borderRadius:10,
-        background:"#F0FDF4", border:"1px solid #BBF7D0",
-        textDecoration:"none", transition:"all 0.15s",
-      }}
-    >
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{
+      display:"flex", alignItems:"center", gap:10,
+      padding:"12px 14px", borderRadius:10,
+      background:"#F0FDF4", border:"1px solid #BBF7D0",
+      textDecoration:"none",
+    }}>
       <div style={{
         width:36, height:36, borderRadius:9,
         background:"linear-gradient(135deg,#D1FAE5,#A7F3D0)",
@@ -103,9 +155,7 @@ function DocLink({ label, url, icon = "bi-file-earmark" }) {
         <i className={`bi ${icon}`} style={{ color:"#059669", fontSize:17 }} />
       </div>
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:"#065F46", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-          {label}
-        </div>
+        <div style={{ fontSize:13, fontWeight:600, color:"#065F46", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</div>
         <div style={{ fontSize:11, color:"#6EE7B7", marginTop:1 }}>Click to view</div>
       </div>
       <i className="bi bi-box-arrow-up-right" style={{ color:"#059669", fontSize:13, flexShrink:0 }} />
@@ -115,9 +165,15 @@ function DocLink({ label, url, icon = "bi-file-earmark" }) {
 
 export default function EmployeeProfilePage({ id }) {
   const router = useRouter();
-  const [employee, setEmployee] = useState(null);
-  const [loading, setLoading]   = useState(true);
+  const [employee, setEmployee]   = useState(null);
+  const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Edit state per section
+  const [editSection, setEditSection] = useState(null); // "personal" | "professional" | "salary"
+  const [formData, setFormData]       = useState({});
+  const [saving, setSaving]           = useState(false);
+  const [saveMsg, setSaveMsg]         = useState(null); // { type: "success"|"error", text }
 
   useEffect(() => {
     if (!id) return;
@@ -138,9 +194,62 @@ export default function EmployeeProfilePage({ id }) {
   const initials   = `${(p.firstName || emp.firstName || "?")[0]}${(p.lastName || emp.lastName || "")[0] || ""}`.toUpperCase();
   const statusMeta = STATUS_COLORS[prof.status] || { bg:"#F3F4F6", color:"#374151" };
   const typeMeta   = TYPE_COLORS[prof.employeeType] || { bg:"#F3F4F6", color:"#374151" };
-
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }) : "—";
 
+  // ── Edit helpers ────────────────────────────────────────────────────────────
+  const startEdit = (section) => {
+    if (section === "personal") {
+      setFormData({ ...p });
+    } else if (section === "professional") {
+      setFormData({
+        ...prof,
+        dateOfJoining: prof.dateOfJoining ? new Date(prof.dateOfJoining).toISOString().slice(0,10) : "",
+      });
+    } else if (section === "salary") {
+      setFormData({ ...sal });
+    }
+    setEditSection(section);
+    setSaveMsg(null);
+  };
+
+  const cancelEdit = () => { setEditSection(null); setFormData({}); };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = async (section) => {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const payload = section === "personal"
+        ? { personal: formData }
+        : section === "professional"
+        ? { professional: formData }
+        : { salary: formData };
+
+      const res  = await fetch(`/api/employee/update/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to save");
+
+      setEmployee(data.employee);
+      setEditSection(null);
+      setFormData({});
+      setSaveMsg({ type:"success", text:"Changes saved successfully" });
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch (err) {
+      setSaveMsg({ type:"error", text: err.message || "Something went wrong" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
   return (
     <div>
       <Head>
@@ -148,15 +257,19 @@ export default function EmployeeProfilePage({ id }) {
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+          @keyframes spin { to { transform:rotate(360deg); } }
+          @keyframes fadeIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+          .save-toast { animation: fadeIn .2s ease; }
+        `}</style>
       </Head>
 
       <div className="main-nav">
-        <Leftbar />
+        <SmartLeftbar />
         <LeftbarMobile />
         <Dashnav />
 
         <section className="content home">
-          {/* Breadcrumb */}
           <div className="breadcrum-bx">
             <ul className="breadcrumb bg-white">
               <li className="breadcrumb-item">
@@ -169,32 +282,43 @@ export default function EmployeeProfilePage({ id }) {
           </div>
 
           <div className="block-header" style={{ padding:"16px 20px", minHeight:"90vh" }}>
+
+            {/* Save message toast */}
+            {saveMsg && (
+              <div className="save-toast" style={{
+                position:"fixed", top:24, right:24, zIndex:9999,
+                background: saveMsg.type === "success" ? "#ECFDF5" : "#FEF2F2",
+                border:`1.5px solid ${saveMsg.type === "success" ? "#6EE7B7" : "#FCA5A5"}`,
+                borderRadius:12, padding:"12px 18px",
+                display:"flex", alignItems:"center", gap:10,
+                fontSize:13, fontWeight:600,
+                color: saveMsg.type === "success" ? "#065F46" : "#991B1B",
+                boxShadow:"0 4px 20px rgba(0,0,0,0.12)",
+              }}>
+                <i className={`bi bi-${saveMsg.type === "success" ? "check-circle-fill" : "x-circle-fill"}`} style={{ fontSize:16 }} />
+                {saveMsg.text}
+              </div>
+            )}
+
             {loading ? (
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:300, gap:14, flexDirection:"column" }}>
-                <div style={{
-                  width:48, height:48, border:"3px solid #4F46E5", borderTopColor:"transparent",
-                  borderRadius:"50%", animation:"spin 0.9s linear infinite",
-                }} />
-                <style>{`@keyframes spin { to { transform:rotate(360deg); } }`}</style>
+                <div style={{ width:48, height:48, border:"3px solid #4F46E5", borderTopColor:"transparent", borderRadius:"50%", animation:"spin 0.9s linear infinite" }} />
                 <span style={{ color:"#9CA3AF", fontSize:13 }}>Loading profile…</span>
               </div>
             ) : !employee ? (
               <div style={{ textAlign:"center", padding:"80px 20px" }}>
                 <i className="bi bi-person-x" style={{ fontSize:56, color:"#E5E7EB" }} />
                 <h5 style={{ color:"#374151", marginTop:16 }}>Employee not found</h5>
-                <Link href="/dashboard/admin/employee-management" style={{ color:"#4F46E5", fontWeight:600 }}>
-                  Back to list
-                </Link>
+                <Link href="/dashboard/admin/employee-management" style={{ color:"#4F46E5", fontWeight:600 }}>Back to list</Link>
               </div>
             ) : (
               <>
-                {/* ── HERO CARD ─────────────────────────────── */}
+                {/* ── HERO CARD ───────────────────────────────── */}
                 <div style={{
                   background:"linear-gradient(135deg,#1e1b4b 0%,#4338CA 60%,#6D28D9 100%)",
                   borderRadius:20, padding:"28px 24px 0", marginBottom:20,
                   position:"relative", overflow:"hidden",
                 }}>
-                  {/* decorative circles */}
                   <div style={{ position:"absolute", top:-40, right:-40, width:180, height:180, borderRadius:"50%", background:"rgba(255,255,255,0.05)" }} />
                   <div style={{ position:"absolute", top:20, right:60, width:100, height:100, borderRadius:"50%", background:"rgba(255,255,255,0.04)" }} />
 
@@ -202,10 +326,7 @@ export default function EmployeeProfilePage({ id }) {
                     {/* Avatar */}
                     <div style={{ flexShrink:0 }}>
                       {p.avatar ? (
-                        <img
-                          src={p.avatar} alt={fullName}
-                          style={{ width:84, height:84, borderRadius:"50%", objectFit:"cover", border:"3px solid rgba(255,255,255,0.25)" }}
-                        />
+                        <img src={p.avatar} alt={fullName} style={{ width:84, height:84, borderRadius:"50%", objectFit:"cover", border:"3px solid rgba(255,255,255,0.25)" }} />
                       ) : (
                         <div style={{
                           width:84, height:84, borderRadius:"50%",
@@ -213,53 +334,33 @@ export default function EmployeeProfilePage({ id }) {
                           display:"flex", alignItems:"center", justifyContent:"center",
                           fontSize:30, fontWeight:900, color:"#fff",
                           border:"3px solid rgba(255,255,255,0.25)",
-                        }}>
-                          {initials}
-                        </div>
+                        }}>{initials}</div>
                       )}
                     </div>
 
                     {/* Info */}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <h2 style={{ color:"#fff", fontWeight:800, fontSize:22, margin:"0 0 4px", lineHeight:1.2 }}>
-                        {fullName}
-                      </h2>
+                      <h2 style={{ color:"#fff", fontWeight:800, fontSize:22, margin:"0 0 4px", lineHeight:1.2 }}>{fullName}</h2>
                       <div style={{ color:"rgba(255,255,255,0.6)", fontSize:13, marginBottom:12 }}>
                         {prof.designation || "—"} · {prof.department || "—"}
                       </div>
-
-                      {/* Badges row */}
                       <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:20 }}>
                         {prof.employeeId && (
-                          <span style={{
-                            background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)",
-                            borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700, color:"#fff",
-                          }}>
+                          <span style={{ background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700, color:"#fff" }}>
                             <i className="bi bi-hash" style={{ marginRight:3 }} />{prof.employeeId}
                           </span>
                         )}
                         {prof.status && (
-                          <span style={{
-                            background: statusMeta.bg, color: statusMeta.color,
-                            borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700,
-                          }}>
-                            {prof.status}
-                          </span>
+                          <span style={{ background: statusMeta.bg, color: statusMeta.color, borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700 }}>{prof.status}</span>
                         )}
                         {prof.employeeType && (
-                          <span style={{
-                            background: typeMeta.bg, color: typeMeta.color,
-                            borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700,
-                          }}>
+                          <span style={{ background: typeMeta.bg, color: typeMeta.color, borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700 }}>
                             <i className={`bi bi-${prof.employeeType === "Remote" ? "house" : prof.employeeType === "Hybrid" ? "arrow-left-right" : "building"}`} style={{ marginRight:4 }} />
                             {prof.employeeType}
                           </span>
                         )}
                         {emp.faceEnrolled && (
-                          <span style={{
-                            background:"rgba(16,185,129,0.2)", border:"1px solid rgba(16,185,129,0.4)",
-                            borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700, color:"#6EE7B7",
-                          }}>
+                          <span style={{ background:"rgba(16,185,129,0.2)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:20, padding:"4px 12px", fontSize:12, fontWeight:700, color:"#6EE7B7" }}>
                             <i className="bi bi-shield-lock-fill" style={{ marginRight:4 }} />Face ID
                           </span>
                         )}
@@ -275,19 +376,15 @@ export default function EmployeeProfilePage({ id }) {
                       </div>
                     </div>
 
-                    {/* Action buttons */}
+                    {/* Back button */}
                     <div style={{ display:"flex", gap:8, flexShrink:0, alignSelf:"flex-start" }}>
-                      <Link
-                        href="/dashboard/admin/employee-management"
-                        style={{
-                          display:"flex", alignItems:"center", gap:6,
-                          background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)",
-                          borderRadius:10, padding:"8px 14px",
-                          fontSize:12, fontWeight:600, color:"#fff", textDecoration:"none",
-                        }}
-                      >
-                        <i className="bi bi-arrow-left" style={{ fontSize:14 }} />
-                        Back
+                      <Link href="/dashboard/admin/employee-management" style={{
+                        display:"flex", alignItems:"center", gap:6,
+                        background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)",
+                        borderRadius:10, padding:"8px 14px",
+                        fontSize:12, fontWeight:600, color:"#fff", textDecoration:"none",
+                      }}>
+                        <i className="bi bi-arrow-left" style={{ fontSize:14 }} /> Back
                       </Link>
                     </div>
                   </div>
@@ -295,63 +392,55 @@ export default function EmployeeProfilePage({ id }) {
                   {/* Tabs */}
                   <div style={{ display:"flex", gap:2, marginTop:4, overflowX:"auto" }}>
                     {TABS.map(tab => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        style={{
-                          display:"flex", alignItems:"center", gap:6,
-                          padding:"12px 16px", border:"none", background:"transparent",
-                          cursor:"pointer", fontSize:13, fontWeight:600,
-                          whiteSpace:"nowrap",
-                          color: activeTab === tab.key ? "#fff" : "rgba(255,255,255,0.5)",
-                          borderBottom: activeTab === tab.key ? "2px solid #A78BFA" : "2px solid transparent",
-                          transition:"all 0.15s",
-                        }}
-                      >
-                        <i className={`bi ${tab.icon}`} style={{ fontSize:14 }} />
-                        {tab.label}
+                      <button key={tab.key} onClick={() => { setActiveTab(tab.key); cancelEdit(); }} style={{
+                        display:"flex", alignItems:"center", gap:6,
+                        padding:"12px 16px", border:"none", background:"transparent",
+                        cursor:"pointer", fontSize:13, fontWeight:600, whiteSpace:"nowrap",
+                        color: activeTab === tab.key ? "#fff" : "rgba(255,255,255,0.5)",
+                        borderBottom: activeTab === tab.key ? "2px solid #A78BFA" : "2px solid transparent",
+                        transition:"all 0.15s",
+                      }}>
+                        <i className={`bi ${tab.icon}`} style={{ fontSize:14 }} />{tab.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* ── TAB CONTENT ───────────────────────────── */}
+                {/* ── TAB CONTENT ─────────────────────────────── */}
 
-                {/* OVERVIEW */}
+                {/* OVERVIEW — read-only summary */}
                 {activeTab === "overview" && (
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
                     <SectionCard title="Employment Info" icon="bi-briefcase-fill">
-                      <InfoRow label="Employee ID"   value={prof.employeeId} />
-                      <InfoRow label="Department"    value={prof.department} />
-                      <InfoRow label="Designation"   value={prof.designation} />
-                      <InfoRow label="Type"          value={prof.employeeType} />
-                      <InfoRow label="Status"        value={prof.status} />
-                      <InfoRow label="Joined"        value={fmtDate(prof.dateOfJoining)} />
+                      <InfoRow label="Employee ID"    value={prof.employeeId} />
+                      <InfoRow label="Department"     value={prof.department} />
+                      <InfoRow label="Designation"    value={prof.designation} />
+                      <InfoRow label="Type"           value={prof.employeeType} />
+                      <InfoRow label="Status"         value={prof.status} />
+                      <InfoRow label="Joined"         value={fmtDate(prof.dateOfJoining)} />
                       <InfoRow label="Official Email" value={prof.officialEmail} />
                     </SectionCard>
 
                     <SectionCard title="Contact & Personal" icon="bi-person-fill">
-                      <InfoRow label="Full Name"    value={fullName} />
-                      <InfoRow label="Mobile"       value={p.mobile} />
-                      <InfoRow label="Personal Email" value={p.email} />
-                      <InfoRow label="Date of Birth" value={fmtDate(p.dob)} />
-                      <InfoRow label="Marital Status" value={p.maritalStatus} />
-                      <InfoRow label="City"         value={p.city} />
-                      <InfoRow label="State"        value={p.state} />
+                      <InfoRow label="Full Name"       value={fullName} />
+                      <InfoRow label="Mobile"          value={p.mobile} />
+                      <InfoRow label="Personal Email"  value={p.email} />
+                      <InfoRow label="Date of Birth"   value={fmtDate(p.dob)} />
+                      <InfoRow label="Marital Status"  value={p.maritalStatus} />
+                      <InfoRow label="City"            value={p.city} />
+                      <InfoRow label="State"           value={p.state} />
                     </SectionCard>
 
                     <SectionCard title="Compensation" icon="bi-cash-stack">
-                      <InfoRow label="Monthly Salary"
-                        value={sal.monthlySalary ? `₹${Number(sal.monthlySalary).toLocaleString("en-IN")}` : undefined} />
-                      <InfoRow label="Annual Salary"
-                        value={sal.annualSalary ? `₹${Number(sal.annualSalary).toLocaleString("en-IN")}` : undefined} />
-                      <InfoRow label="Bank"          value={sal.bankName} />
+                      <InfoRow label="Monthly Salary" value={sal.monthlySalary ? `₹${Number(sal.monthlySalary).toLocaleString("en-IN")}` : undefined} />
+                      <InfoRow label="Annual Salary"  value={sal.annualSalary  ? `₹${Number(sal.annualSalary).toLocaleString("en-IN")}`  : undefined} />
+                      <InfoRow label="Bank"           value={sal.bankName} />
                       <InfoRow label="Account Holder" value={sal.accountHolderName} />
-                      <InfoRow label="PAN Number"    value={sal.panNumber} mono />
+                      <InfoRow label="PAN Number"     value={sal.panNumber} mono />
                     </SectionCard>
 
                     <SectionCard title="System" icon="bi-gear-fill">
-                      <InfoRow label="Account Email"  value={emp.email} />
+                      <InfoRow label="Account Email"   value={emp.email} />
                       <InfoRow label="Joined Platform" value={fmtDate(emp.createdAt)} />
                       <InfoRow label="Face ID"         value={emp.faceEnrolled ? "Enrolled" : "Not enrolled"} />
                       <InfoRow label="Profile"         value={emp.hasCompletedProfile ? "Complete" : "Incomplete"} />
@@ -359,82 +448,157 @@ export default function EmployeeProfilePage({ id }) {
                   </div>
                 )}
 
-                {/* PERSONAL */}
+                {/* PERSONAL — editable */}
                 {activeTab === "personal" && (
-                  <SectionCard title="Personal Information" icon="bi-person-fill">
-                    <InfoRow label="First Name"      value={p.firstName} />
-                    <InfoRow label="Last Name"       value={p.lastName} />
-                    <InfoRow label="Mobile"          value={p.mobile} />
-                    <InfoRow label="Personal Email"  value={p.email} />
-                    <InfoRow label="Date of Birth"   value={fmtDate(p.dob)} />
-                    <InfoRow label="Father's Name"   value={p.fatherName} />
-                    <InfoRow label="Mother's Name"   value={p.motherName} />
-                    <InfoRow label="Marital Status"  value={p.maritalStatus} />
-                    <InfoRow label="Address"         value={p.address} />
-                    <InfoRow label="City"            value={p.city} />
-                    <InfoRow label="State"           value={p.state} />
-                    <InfoRow label="ZIP Code"        value={p.zip} />
+                  <SectionCard
+                    title="Personal Information" icon="bi-person-fill"
+                    onEdit={() => startEdit("personal")}
+                    editing={editSection === "personal"}
+                    onSave={() => handleSave("personal")}
+                    onCancel={cancelEdit}
+                    saving={saving}
+                  >
+                    {editSection === "personal" ? (
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+                        <FormField label="First Name"     name="firstName"     value={formData.firstName}     onChange={handleChange} required />
+                        <FormField label="Last Name"      name="lastName"      value={formData.lastName}      onChange={handleChange} required />
+                        <FormField label="Mobile"         name="mobile"        value={formData.mobile}        onChange={handleChange} type="tel" />
+                        <FormField label="Personal Email" name="email"         value={formData.email}         onChange={handleChange} type="email" />
+                        <FormField label="Date of Birth"  name="dob"           value={formData.dob ? new Date(formData.dob).toISOString().slice(0,10) : ""} onChange={handleChange} type="date" />
+                        <FormField label="Father's Name"  name="fatherName"    value={formData.fatherName}    onChange={handleChange} />
+                        <FormField label="Mother's Name"  name="motherName"    value={formData.motherName}    onChange={handleChange} />
+                        <FormField label="Marital Status" name="maritalStatus" value={formData.maritalStatus} onChange={handleChange}
+                          options={["Single","Married","Divorced","Widowed"]} />
+                        <div style={{ gridColumn:"1/-1" }}>
+                          <FormField label="Address" name="address" value={formData.address} onChange={handleChange} />
+                        </div>
+                        <FormField label="City"     name="city"  value={formData.city}  onChange={handleChange} />
+                        <FormField label="State"    name="state" value={formData.state} onChange={handleChange} />
+                        <FormField label="ZIP Code" name="zip"   value={formData.zip}   onChange={handleChange} />
+                      </div>
+                    ) : (
+                      <>
+                        <InfoRow label="First Name"      value={p.firstName} />
+                        <InfoRow label="Last Name"       value={p.lastName} />
+                        <InfoRow label="Mobile"          value={p.mobile} />
+                        <InfoRow label="Personal Email"  value={p.email} />
+                        <InfoRow label="Date of Birth"   value={fmtDate(p.dob)} />
+                        <InfoRow label="Father's Name"   value={p.fatherName} />
+                        <InfoRow label="Mother's Name"   value={p.motherName} />
+                        <InfoRow label="Marital Status"  value={p.maritalStatus} />
+                        <InfoRow label="Address"         value={p.address} />
+                        <InfoRow label="City"            value={p.city} />
+                        <InfoRow label="State"           value={p.state} />
+                        <InfoRow label="ZIP Code"        value={p.zip} />
+                      </>
+                    )}
                   </SectionCard>
                 )}
 
-                {/* PROFESSIONAL */}
+                {/* PROFESSIONAL — editable */}
                 {activeTab === "professional" && (
-                  <SectionCard title="Professional Information" icon="bi-briefcase-fill">
-                    <InfoRow label="Employee ID"     value={prof.employeeId} />
-                    <InfoRow label="Official Email"  value={prof.officialEmail} />
-                    <InfoRow label="Department"      value={prof.department} />
-                    <InfoRow label="Designation"     value={prof.designation} />
-                    <InfoRow label="Employee Type"   value={prof.employeeType} />
-                    <InfoRow label="Status"          value={prof.status} />
-                    <InfoRow label="Date of Joining" value={fmtDate(prof.dateOfJoining)} />
+                  <SectionCard
+                    title="Professional Information" icon="bi-briefcase-fill"
+                    onEdit={() => startEdit("professional")}
+                    editing={editSection === "professional"}
+                    onSave={() => handleSave("professional")}
+                    onCancel={cancelEdit}
+                    saving={saving}
+                  >
+                    {editSection === "professional" ? (
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 20px" }}>
+                        <FormField label="Employee ID"     name="employeeId"     value={formData.employeeId}     onChange={handleChange} />
+                        <FormField label="Official Email"  name="officialEmail"  value={formData.officialEmail}  onChange={handleChange} type="email" />
+                        <FormField label="Department"      name="department"     value={formData.department}     onChange={handleChange}
+                          options={["Engineering","Design","Marketing","Sales","HR","Finance","Operations","Management","Content","Other"]} />
+                        <FormField label="Designation"     name="designation"    value={formData.designation}    onChange={handleChange} />
+                        <FormField label="Employee Type"   name="employeeType"   value={formData.employeeType}   onChange={handleChange}
+                          options={["Office","Remote","Hybrid"]} />
+                        <FormField label="Status"          name="status"         value={formData.status}         onChange={handleChange}
+                          options={["Permanent","Probation","Contract","Intern"]} />
+                        <FormField label="Date of Joining" name="dateOfJoining"  value={formData.dateOfJoining}  onChange={handleChange} type="date" />
+                      </div>
+                    ) : (
+                      <>
+                        <InfoRow label="Employee ID"     value={prof.employeeId} />
+                        <InfoRow label="Official Email"  value={prof.officialEmail} />
+                        <InfoRow label="Department"      value={prof.department} />
+                        <InfoRow label="Designation"     value={prof.designation} />
+                        <InfoRow label="Employee Type"   value={prof.employeeType} />
+                        <InfoRow label="Status"          value={prof.status} />
+                        <InfoRow label="Date of Joining" value={fmtDate(prof.dateOfJoining)} />
+                      </>
+                    )}
                   </SectionCard>
                 )}
 
-                {/* SALARY & BANK */}
+                {/* SALARY & BANK — editable */}
                 {activeTab === "salary" && (
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-                    <SectionCard title="Compensation" icon="bi-cash-stack">
-                      <InfoRow label="Monthly Salary"
-                        value={sal.monthlySalary ? `₹${Number(sal.monthlySalary).toLocaleString("en-IN")}` : undefined} />
-                      <InfoRow label="Annual Salary"
-                        value={sal.annualSalary ? `₹${Number(sal.annualSalary).toLocaleString("en-IN")}` : undefined} />
+                    <SectionCard
+                      title="Compensation" icon="bi-cash-stack"
+                      onEdit={() => startEdit("salary")}
+                      editing={editSection === "salary"}
+                      onSave={() => handleSave("salary")}
+                      onCancel={cancelEdit}
+                      saving={saving}
+                    >
+                      {editSection === "salary" ? (
+                        <>
+                          <FormField label="Monthly Salary (₹)" name="monthlySalary" value={formData.monthlySalary} onChange={handleChange} type="number" />
+                          <FormField label="Annual Salary (₹)"  name="annualSalary"  value={formData.annualSalary}  onChange={handleChange} type="number" />
+                        </>
+                      ) : (
+                        <>
+                          <InfoRow label="Monthly Salary" value={sal.monthlySalary ? `₹${Number(sal.monthlySalary).toLocaleString("en-IN")}` : undefined} />
+                          <InfoRow label="Annual Salary"  value={sal.annualSalary  ? `₹${Number(sal.annualSalary).toLocaleString("en-IN")}`  : undefined} />
+                        </>
+                      )}
                     </SectionCard>
 
-                    <SectionCard title="Bank Details" icon="bi-bank">
-                      <InfoRow label="Account Holder" value={sal.accountHolderName} />
-                      <InfoRow label="Bank Name"      value={sal.bankName} />
-                      <InfoRow label="Branch"         value={sal.branch} />
-                      <InfoRow label="Account No."    value={sal.accountNumber} mono />
-                      <InfoRow label="IFSC Code"      value={sal.ifscCode} mono />
-                      <InfoRow label="PAN Number"     value={sal.panNumber} mono />
-                      <InfoRow label="UPI ID"         value={sal.upiId} />
+                    <SectionCard
+                      title="Bank Details" icon="bi-bank"
+                      onEdit={editSection !== "salary" ? () => startEdit("salary") : undefined}
+                      editing={editSection === "salary"}
+                      onSave={() => handleSave("salary")}
+                      onCancel={cancelEdit}
+                      saving={saving}
+                    >
+                      {editSection === "salary" ? (
+                        <>
+                          <FormField label="Account Holder Name" name="accountHolderName" value={formData.accountHolderName} onChange={handleChange} />
+                          <FormField label="Bank Name"           name="bankName"           value={formData.bankName}           onChange={handleChange} />
+                          <FormField label="Branch"              name="branch"             value={formData.branch}             onChange={handleChange} />
+                          <FormField label="Account Number"      name="accountNumber"      value={formData.accountNumber}      onChange={handleChange} />
+                          <FormField label="IFSC Code"           name="ifscCode"           value={formData.ifscCode}           onChange={handleChange} />
+                          <FormField label="PAN Number"          name="panNumber"          value={formData.panNumber}          onChange={handleChange} />
+                          <FormField label="UPI ID"              name="upiId"              value={formData.upiId}              onChange={handleChange} />
+                        </>
+                      ) : (
+                        <>
+                          <InfoRow label="Account Holder" value={sal.accountHolderName} />
+                          <InfoRow label="Bank Name"      value={sal.bankName} />
+                          <InfoRow label="Branch"         value={sal.branch} />
+                          <InfoRow label="Account No."    value={sal.accountNumber} mono />
+                          <InfoRow label="IFSC Code"      value={sal.ifscCode} mono />
+                          <InfoRow label="PAN Number"     value={sal.panNumber} mono />
+                          <InfoRow label="UPI ID"         value={sal.upiId} />
+                        </>
+                      )}
                     </SectionCard>
                   </div>
                 )}
 
-                {/* DOCUMENTS */}
+                {/* DOCUMENTS — view only */}
                 {activeTab === "documents" && (
                   <div>
                     <SectionCard title="Uploaded Documents" icon="bi-folder2-open">
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                        <DocLink
-                          label="Appointment Letter"
-                          url={docs.appointmentLetter}
-                          icon="bi-file-earmark-text"
-                        />
-                        <DocLink
-                          label="Relieving Letter"
-                          url={docs.relievingLetter}
-                          icon="bi-file-earmark-check"
-                        />
-                        <DocLink
-                          label="Experience Letter"
-                          url={docs.experienceLetter}
-                          icon="bi-file-earmark-person"
-                        />
+                        <DocLink label="Appointment Letter" url={docs.appointmentLetter} icon="bi-file-earmark-text" />
+                        <DocLink label="Relieving Letter"   url={docs.relievingLetter}   icon="bi-file-earmark-check" />
+                        <DocLink label="Experience Letter"  url={docs.experienceLetter}  icon="bi-file-earmark-person" />
                       </div>
 
-                      {/* Salary Slips */}
                       {docs.salarySlips && docs.salarySlips.length > 0 ? (
                         <div style={{ marginTop:16 }}>
                           <div style={{ fontSize:12, fontWeight:700, color:"#6B7280", marginBottom:8, textTransform:"uppercase", letterSpacing:0.5 }}>
@@ -442,35 +606,22 @@ export default function EmployeeProfilePage({ id }) {
                           </div>
                           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                             {docs.salarySlips.map((url, i) => (
-                              <DocLink
-                                key={i}
-                                label={`Salary Slip ${i + 1}`}
-                                url={url}
-                                icon="bi-file-earmark-spreadsheet"
-                              />
+                              <DocLink key={i} label={`Salary Slip ${i + 1}`} url={url} icon="bi-file-earmark-spreadsheet" />
                             ))}
                           </div>
                         </div>
                       ) : (
-                        <div style={{
-                          marginTop:16, padding:"14px 16px",
-                          background:"#F9FAFB", borderRadius:10, border:"1px dashed #E5E7EB",
-                        }}>
+                        <div style={{ marginTop:16, padding:"14px 16px", background:"#F9FAFB", borderRadius:10, border:"1px dashed #E5E7EB" }}>
                           <span style={{ fontSize:13, color:"#9CA3AF" }}>
-                            <i className="bi bi-info-circle" style={{ marginRight:6 }} />
-                            No salary slips uploaded yet.
+                            <i className="bi bi-info-circle" style={{ marginRight:6 }} />No salary slips uploaded yet.
                           </span>
                         </div>
                       )}
                     </SectionCard>
 
-                    {/* Profile Photo */}
                     {p.avatar && (
                       <SectionCard title="Profile Photo" icon="bi-image">
-                        <img
-                          src={p.avatar} alt="Profile"
-                          style={{ width:120, height:120, borderRadius:16, objectFit:"cover", border:"2px solid #E5E7EB" }}
-                        />
+                        <img src={p.avatar} alt="Profile" style={{ width:120, height:120, borderRadius:16, objectFit:"cover", border:"2px solid #E5E7EB" }} />
                       </SectionCard>
                     )}
                   </div>
@@ -483,7 +634,6 @@ export default function EmployeeProfilePage({ id }) {
 
       <style>{`
         @media (max-width: 767px) {
-          /* Stack two-column grids on small mobile */
           .block-header [style*="grid-template-columns: 1fr 1fr"] {
             grid-template-columns: 1fr !important;
           }

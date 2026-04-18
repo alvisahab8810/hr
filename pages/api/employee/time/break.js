@@ -90,6 +90,10 @@ export default async function handler(req, res) {
 
   /* ---------- START LUNCH ---------- */
   if (action === "start") {
+    // Guard: already on break (auto-lunch race condition on page reload)
+    if (att.status === "on_break") {
+      return res.json({ success: false, code: "ALREADY_ON_BREAK", attendance: att });
+    }
     att.breaks.push({ start: now, type });
     att.status = "on_break";
     await att.save();

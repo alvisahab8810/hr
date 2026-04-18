@@ -55,6 +55,7 @@ export default function EmployeeLeftbar() {
     "reimbursement":     "bi-receipt",
     "overtime":          "bi-clock-history",
     "deduction-waiver":  "bi-shield-check",
+    "assets":            "bi-box-seam-fill",
     "profile":           "bi-person-circle",
   };
 
@@ -65,6 +66,7 @@ export default function EmployeeLeftbar() {
     { href: "/employee/reimbursement",      label: "Reimbursement",      icon: "reimbursement"     },
     { href: "/employee/overtime",           label: "Overtime",           icon: "overtime"          },
     { href: "/employee/deduction-waiver",   label: "My Deductions",      icon: "deduction-waiver"  },
+    { href: "/employee/assets",             label: "My Assets",          icon: "assets"            },
     { href: "/employee/profile",            label: "My Profile",         icon: "profile"           },
   ];
 

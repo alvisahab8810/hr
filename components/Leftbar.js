@@ -459,12 +459,20 @@ export default function Leftbar({ role = "admin" }) {
       label: "Holiday Management",
       icon: "all-task",
     },
-    // {
-    //   type: "link",
-    //   href: "/dashboard/hr/teams",
-    //   label: "Teams",
-    //   icon: "teams",
-    // },
+    {
+      type: "link",
+      href: "/dashboard/admin/assets",
+      label: "Asset Management",
+      icon: "overtime",
+      biIcon: "bi-box-seam-fill",
+    },
+    {
+      type: "link",
+      href: "/dashboard/admin/users",
+      label: "User Management",
+      icon: "overtime",
+      biIcon: "bi-people-fill",
+    },
   ];
 
   const { data: session } = useSession();

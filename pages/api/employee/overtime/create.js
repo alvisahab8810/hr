@@ -45,10 +45,21 @@ export default async function handler(req, res) {
       });
     }
 
-    if (startTime >= endTime) {
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    const diffMins = (eh * 60 + em) - (sh * 60 + sm);
+    const actualMins = diffMins === 0 ? 0 : diffMins > 0 ? diffMins : diffMins + 24 * 60;
+
+    if (actualMins === 0) {
       return res.status(400).json({
         success: false,
-        message: "End time must be after start time",
+        message: "Start and end time cannot be the same",
+      });
+    }
+    if (actualMins > 16 * 60) {
+      return res.status(400).json({
+        success: false,
+        message: "OT duration cannot exceed 16 hours",
       });
     }
 

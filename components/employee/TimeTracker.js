@@ -1,7 +1,8 @@
 // components/employee/TimeTracker.js
 import { toast } from "react-toastify";
-import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { preloadFaceModels } from "@/utils/faceModels";
 
 // Face recognition modal — client-only, no SSR
 const FaceRecognitionModal = dynamic(
@@ -112,6 +113,8 @@ export default function TimeTracker() {
   useEffect(() => {
     fetchSummary();
     fetchFaceStatus();
+    // Preload face models silently so modal opens instantly when user clicks
+    preloadFaceModels().catch(() => {}); // ignore errors — modal will retry
     return () => {
       clearInterval(workIntervalRef.current);
       clearInterval(breakIntervalRef.current);
@@ -141,19 +144,26 @@ export default function TimeTracker() {
   }, [isOnBreak, breakStart]);
 
   // ── Auto lunch at 13:30 ────────────────────────────────────────────────────
-  // Runs every 20s but only fires within the 13:30:00–13:30:59 window
+  // Fires every 10s. Window: 13:28–13:35 to survive page reloads & slow clocks.
+  // Uses sessionStorage so a page reload at 13:31 doesn't double-trigger.
   useEffect(() => {
     lunchCheckRef.current = setInterval(async () => {
-      if (!isClockedIn || isOnBreak || autoLunchFired) return;
+      if (!isClockedIn || isOnBreak) return;
+
       const now = new Date();
-      if (now.getHours() !== LUNCH_HOUR || now.getMinutes() !== LUNCH_MIN) return;
+      const h = now.getHours(), m = now.getMinutes();
+      const inWindow = h === LUNCH_HOUR && m >= (LUNCH_MIN - 2) && m <= (LUNCH_MIN + 5);
+      if (!inWindow) return;
 
+      // Deduplicate via sessionStorage (survives page refresh within same session)
+      const todayKey = `autoLunch_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}`;
+      if (sessionStorage.getItem(todayKey) === "fired") return;
+      if (autoLunchFired) return;
+
+      sessionStorage.setItem(todayKey, "fired");
       setAutoLunchFired(true);
-      // Reset at midnight
-      const msToMidnight = new Date().setHours(24,0,0,0) - Date.now();
-      setTimeout(() => setAutoLunchFired(false), msToMidnight);
 
-      // Play sound immediately (before API call)
+      // Play sound immediately
       new Audio("/sounds/lunch-warning.mp3").play().catch(() => {});
 
       try {
@@ -163,14 +173,14 @@ export default function TimeTracker() {
           setIsOnBreak(true);
           const last = r.attendance.breaks?.slice(-1)[0];
           if (last?.start) setBreakStart(new Date(last.start));
+          setShowLunchNotice(true);
+          setTimeout(() => setShowLunchNotice(false), 12000);
+        } else if (r.code === "ALREADY_ON_BREAK") {
+          // Lunch already started (e.g. manual), just update state
+          setIsOnBreak(true);
         }
       } catch { /* ignore */ }
-
-      // Show banner notification
-      setShowLunchNotice(true);
-      // Auto-hide after 12s
-      setTimeout(() => setShowLunchNotice(false), 12000);
-    }, 20000); // every 20s — guarantees hitting the 60s window
+    }, 10000); // every 10s — reliable within the 7-min window
     return () => clearInterval(lunchCheckRef.current);
   }, [isClockedIn, isOnBreak, autoLunchFired, apiPost]);
 

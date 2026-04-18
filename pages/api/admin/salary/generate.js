@@ -33,12 +33,9 @@ const OT_MULTIPLIER         = 1.5;
 const LATE_HOUR             = 10;
 const LATE_MIN              = 10;
 
+// ₹250 deducted for every late arrival after 10:10 AM
 function calcLatePenalty(lateCount) {
-  if (lateCount <= 2) return 0;
-  if (lateCount === 3) return 500;
-  if (lateCount <= 5) return 1500;
-  if (lateCount <= 9) return 3500;
-  return 5000;
+  return lateCount * 250;
 }
 
 function isSundayStr(dk) {
@@ -254,8 +251,7 @@ export default async function handler(req, res) {
         }
 
         if (unpaidLeaveDates.has(dk)) {
-          absentDays++;
-          continue;
+          continue; // counted separately in unpaidLeaveDeduction — do NOT add to absentDays
         }
 
         if (rec?.startTime) {

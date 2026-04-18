@@ -1,7 +1,7 @@
 import { useRouter } from "next/router";
 import { useState, useEffect, useRef } from "react";
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Head from "next/head";
 import Link from "next/link";
@@ -457,7 +457,7 @@ export default function AttendanceDashboard() {
 
       <div className="dashboard-container add-employee-area admin-attendance-page">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 
@@ -957,7 +957,7 @@ export default function AttendanceDashboard() {
 // import { useRouter } from "next/router";
 // import { useState, useEffect } from "react";
 // import Dashnav from "@/components/Dashnav";
-// import Leftbar from "@/components/Leftbar";
+// import SmartLeftbar from "@/components/SmartLeftbar";
 // import LeftbarMobile from "@/components/LeftbarMobile";
 // import Head from "next/head";
 // import Link from "next/link";
@@ -1192,7 +1192,7 @@ export default function AttendanceDashboard() {
 
 //       <div className="dashboard-container add-employee-area admin-attendance-page">
 //         <div className="main-nav">
-//           <Leftbar />
+//           <SmartLeftbar />
 //           <LeftbarMobile />
 //           <Dashnav />
 

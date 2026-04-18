@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Head from "next/head";
 
@@ -191,7 +191,7 @@ export default function HolidaysAdmin() {
       </Head>
 
       <div className="main-nav">
-        <Leftbar />
+        <SmartLeftbar />
         <LeftbarMobile />
         <Dashnav />
 

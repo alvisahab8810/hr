@@ -2,7 +2,7 @@
 import Head from "next/head";
 import React, { useEffect, useState, useCallback } from "react";
 import Dashnav from "@/components/Dashnav";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import { toast } from "react-toastify";
 
@@ -149,7 +149,7 @@ export default function AdminDeductionWaiver() {
 
       <div className="add-employee-area">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 

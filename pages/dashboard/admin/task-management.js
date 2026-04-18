@@ -1,7 +1,7 @@
 // "use client";
 // import React, { useState } from "react";
 // import Head from "next/head";
-// import Leftbar from "@/components/Leftbar";
+// import SmartLeftbar from "@/components/SmartLeftbar";
 // import LeftbarMobile from "@/components/LeftbarMobile";
 // import Dashnav from "@/components/Dashnav";
 // import Link from "next/link";
@@ -163,7 +163,7 @@
 //       </Head>
 //       <div className="dashboard-container add-employee-area task-management-area">
 //         <div className="main-nav">
-//           <Leftbar />
+//           <SmartLeftbar />
 //           <LeftbarMobile />
 //           <Dashnav />
 
@@ -459,7 +459,7 @@
 "use client";
 import React, { useState } from "react";
 import Head from "next/head";
-import Leftbar from "@/components/Leftbar";
+import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
 import Link from "next/link";
@@ -622,7 +622,7 @@ export default function TaskCreator() {
       </Head>
       <div className="dashboard-container add-employee-area task-management-area">
         <div className="main-nav">
-          <Leftbar />
+          <SmartLeftbar />
           <LeftbarMobile />
           <Dashnav />
 
