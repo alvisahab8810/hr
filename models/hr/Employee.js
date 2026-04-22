@@ -120,7 +120,10 @@ const EmployeeSchema = new mongoose.Schema({
   salary: BankSchema,
   documents: DocumentSchema,
 
-  isActive: { type: Boolean, default: true },
+  isActive:   { type: Boolean, default: true },
+  exitStatus: { type: String, enum: ["Resigned","Fired","Retired","Other"], default: null },
+  exitDate:   { type: Date, default: null },
+  exitReason: { type: String, default: null },
   hasCompletedProfile: { type: Boolean, default: false },
 
   // Face recognition

@@ -17,13 +17,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: "Month required" });
     }
 
-    // ✅ FETCH ALL ATTENDANCE
-    const records = await Attendance.find()
-      .populate("employee", "name email employeeId");
+    // ✅ FETCH ATTENDANCE FOR ACTIVE EMPLOYEES ONLY
+    const Employee = (await import("@/models/hr/Employee")).default;
+    const activeEmpIds = await Employee.distinct("_id", { isActive: true });
 
-    const filtered = records.filter(
-      (rec) => rec.date && rec.date.startsWith(month)
-    );
+    const records = await Attendance.find({
+      employee: { $in: activeEmpIds },
+      date:     { $regex: `^${month}` },
+    }).populate("employee", "name email employeeId");
+
+    const filtered = records.filter(rec => rec.employee != null);
 
     const LATE_HOUR = 10;
     const LATE_MIN = 10;

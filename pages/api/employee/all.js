@@ -22,9 +22,9 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    // 📌 Fetch employees
-    const employees = await Employee.find()
-      .select("personal professional salary status hasCompletedProfile")
+    // 📌 Fetch only active employees
+    const employees = await Employee.find({ isActive: true })
+      .select("personal professional salary status hasCompletedProfile isActive")
       .lean();
 
     return res.json({ success: true, employees });

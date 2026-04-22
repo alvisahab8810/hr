@@ -461,6 +461,13 @@ export default function Leftbar({ role = "admin" }) {
     },
     {
       type: "link",
+      href: "/dashboard/admin/former-employees",
+      label: "Former Employees",
+      icon: "overtime",
+      biIcon: "bi-person-dash-fill",
+    },
+    {
+      type: "link",
       href: "/dashboard/admin/assets",
       label: "Asset Management",
       icon: "overtime",

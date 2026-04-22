@@ -26,6 +26,11 @@ export default function AddEmployee() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // Deactivate modal state
+  const [exitStatus, setExitStatus] = useState("Resigned");
+  const [exitDate,   setExitDate]   = useState(new Date().toISOString().slice(0,10));
+  const [exitReason, setExitReason] = useState("");
   const [formData, setFormData] = useState({
     personal: { firstName: "", lastName: "" },
     professional: {
@@ -98,27 +103,30 @@ export default function AddEmployee() {
     setCurrentPage(1);
   }, [search, statusFilter, departmentFilter]);
 
-  // Handle delete confirm
+  // Handle deactivate (soft delete — data is never lost)
   const handleDelete = async () => {
     if (!selectedEmployee) return;
     try {
       const res = await fetch(`/api/employee/delete/${selectedEmployee._id}`, {
         method: "DELETE",
-        credentials: "include", // ✅ IMPORTANT
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ exitStatus, exitDate, exitReason }),
       });
 
       const data = await res.json();
       if (data.success) {
-        toast.success("Employee deleted successfully");
+        toast.success(`${selectedEmployee.personal?.firstName || "Employee"} moved to Former Employees`);
         setEmployees(employees.filter((e) => e._id !== selectedEmployee._id));
       } else {
-        toast.error(data.message || "Delete failed");
+        toast.error(data.message || "Deactivation failed");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error deleting employee");
+      toast.error("Error deactivating employee");
     } finally {
       setShowDeleteModal(false);
+      setExitReason("");
     }
   };
 
@@ -253,11 +261,18 @@ export default function AddEmployee() {
                   <img src="/icons/search.png" alt=""></img>
                 </div>
                 <div className="d-flex gap-2 filter-bx-row">
-                  {/* <button className="cancel-btn">
-                    <img src="/icons/filter1.svg" alt="Filter Icon"></img>{" "}
-                    Filter
-                  </button> */}
-
+                  <Link
+                    href="/dashboard/admin/former-employees"
+                    style={{
+                      display:"flex", alignItems:"center", gap:6,
+                      background:"#FEE2E2", color:"#DC2626",
+                      border:"1.5px solid #FECACA", borderRadius:10,
+                      padding:"8px 14px", fontSize:13, fontWeight:700,
+                      textDecoration:"none",
+                    }}
+                  >
+                    <i className="bi bi-person-dash-fill" /> Former Employees
+                  </Link>
                   <a
                     href="/dashboard/admin/add-employee"
                     className="invite-btn "
@@ -501,10 +516,13 @@ export default function AddEmployee() {
                               className="btn btn-sm btn-outline-danger"
                               onClick={() => {
                                 setSelectedEmployee(emp);
+                                setExitStatus("Resigned");
+                                setExitDate(new Date().toISOString().slice(0,10));
+                                setExitReason("");
                                 setShowDeleteModal(true);
                               }}
                             >
-                              <FaTrash /> Remove
+                              <FaTrash /> Deactivate
                             </button>
                           </div>
                         </td>
@@ -760,53 +778,75 @@ export default function AddEmployee() {
       )}
 
       {showDeleteModal && (
-        <div className="show-delete-modal">
-          <div
-            className="modal fade show d-block edit-employee-modal"
-            tabIndex="-1"
-          >
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Delete Employee</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowDeleteModal(false)}
-                  ></button>
-                </div>
+        <div style={{ position:"fixed", inset:0, zIndex:1050, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div onClick={() => setShowDeleteModal(false)} style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)" }} />
+          <div style={{ position:"relative", background:"#fff", borderRadius:20, width:"100%", maxWidth:460, boxShadow:"0 20px 60px rgba(0,0,0,0.25)", padding:"28px 28px 24px" }}>
 
-                <div className="modal-body">
-                  <p className="mb-0">
-                    Are you sure you want to delete{" "}
-                    <strong>
-                      {selectedEmployee?.personal?.firstName}{" "}
-                      {selectedEmployee?.personal?.lastName}
-                    </strong>
-                    ?
-                  </p>
-                  <p className="text-muted mt-2 mb-0">
-                    This action cannot be undone.
-                  </p>
-                </div>
-
-                <div className="modal-footer">
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() => setShowDeleteModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    onClick={handleDelete}
-                  >
-                    Delete
-                  </button>
-                </div>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+              <div style={{ width:50, height:50, borderRadius:14, background:"#FEE2E2", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <i className="bi bi-person-dash-fill" style={{ fontSize:22, color:"#DC2626" }} />
               </div>
+              <div>
+                <h5 style={{ fontWeight:800, color:"#111827", margin:0, fontSize:16 }}>Deactivate Employee</h5>
+                <p style={{ margin:"3px 0 0", fontSize:12, color:"#9CA3AF" }}>
+                  {selectedEmployee?.personal?.firstName} {selectedEmployee?.personal?.lastName} · {selectedEmployee?.professional?.employeeId}
+                </p>
+              </div>
+              <button onClick={() => setShowDeleteModal(false)} style={{ marginLeft:"auto", background:"#F3F4F6", border:"none", borderRadius:8, padding:"6px 10px", cursor:"pointer", fontSize:14, color:"#374151" }}>
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+
+            {/* Info banner */}
+            <div style={{ background:"#ECFDF5", border:"1.5px solid #6EE7B7", borderRadius:10, padding:"10px 14px", marginBottom:18, display:"flex", gap:8, fontSize:12, color:"#065F46" }}>
+              <i className="bi bi-shield-check-fill" style={{ flexShrink:0, marginTop:1 }} />
+              <span>Employee data is <strong>never deleted</strong>. All history, salary records and attendance will be preserved and accessible from the Former Employees page.</span>
+            </div>
+
+            {/* Exit Status */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>Reason for Leaving *</label>
+              <div style={{ display:"flex", gap:8 }}>
+                {["Resigned","Fired","Retired","Other"].map(s => (
+                  <button key={s} type="button" onClick={() => setExitStatus(s)}
+                    style={{
+                      flex:1, padding:"8px 6px", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer", border:"1.5px solid",
+                      background: exitStatus === s ? (s === "Fired" ? "#FEE2E2" : s === "Resigned" ? "#FEF3C7" : "#EEF2FF") : "#fff",
+                      color: exitStatus === s ? (s === "Fired" ? "#DC2626" : s === "Resigned" ? "#B45309" : "#4F46E5") : "#9CA3AF",
+                      borderColor: exitStatus === s ? (s === "Fired" ? "#FCA5A5" : s === "Resigned" ? "#FCD34D" : "#C7D2FE") : "#E5E7EB",
+                    }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Exit Date */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>Last Working Date *</label>
+              <input type="date" value={exitDate} onChange={e => setExitDate(e.target.value)}
+                style={{ width:"100%", padding:"9px 12px", fontSize:13, borderRadius:8, border:"1.5px solid #E5E7EB", outline:"none", boxSizing:"border-box" }} />
+            </div>
+
+            {/* Exit Reason */}
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:6 }}>Notes / Remarks (optional)</label>
+              <textarea rows={3} value={exitReason} onChange={e => setExitReason(e.target.value)}
+                placeholder="e.g. Better opportunity, performance issues, contract end…"
+                style={{ width:"100%", padding:"9px 12px", fontSize:13, borderRadius:8, border:"1.5px solid #E5E7EB", outline:"none", resize:"vertical", boxSizing:"border-box" }} />
+            </div>
+
+            {/* Footer */}
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={() => setShowDeleteModal(false)}
+                style={{ background:"#F3F4F6", border:"none", borderRadius:9, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleDelete}
+                style={{ background:"#DC2626", color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                <i className="bi bi-person-dash-fill" /> Deactivate Employee
+              </button>
             </div>
           </div>
         </div>

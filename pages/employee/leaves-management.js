@@ -764,6 +764,17 @@ export default function LeaveManagement() {
               </div>
 
               {/* Dates */}
+              {startDate && startDate < today && (
+                <div style={{
+                  display:"flex", alignItems:"flex-start", gap:10,
+                  background:"#FFFBEB", border:"1.5px solid #FCD34D",
+                  borderRadius:10, padding:"10px 14px", marginBottom:12,
+                  fontSize:13, color:"#92400E", lineHeight:1.5,
+                }}>
+                  <i className="bi bi-clock-history" style={{ fontSize:15, color:"#D97706", flexShrink:0, marginTop:1 }}></i>
+                  <span><strong>Backdated Request:</strong> You are applying leave for a past date. Please ensure you have informed your manager.</span>
+                </div>
+              )}
               <div className="row">
                 <div className="col-md-6">
                   <div className="form-group">
@@ -771,7 +782,6 @@ export default function LeaveManagement() {
                     <input
                       type="date"
                       value={startDate}
-                      min={today}
                       onChange={(e) => setStartDate(e.target.value)}
                     />
                   </div>

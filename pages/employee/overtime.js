@@ -150,9 +150,10 @@ export default function Overtime() {
   const [reason,       setReason]       = useState("");
   const [otApprover,   setOtApprover]   = useState("");
   const [tasks,        setTasks]        = useState("");
-  const [overtimeList, setOvertimeList] = useState([]);
-  const [remarkModal,  setRemarkModal]  = useState(null);
-  const [submitting,   setSubmitting]   = useState(false);
+  const [overtimeList,   setOvertimeList]   = useState([]);
+  const [remarkModal,    setRemarkModal]    = useState(null);
+  const [submitting,     setSubmitting]     = useState(false);
+  const [selectedMonth,  setSelectedMonth]  = useState(new Date().toISOString().slice(0, 7));
 
   // Holiday state
   const [holidays,       setHolidays]       = useState([]);
@@ -205,6 +206,14 @@ export default function Overtime() {
 
   // Live duration preview
   const duration = calcDuration(startTime, endTime);
+
+  // Month-filtered OT list
+  const filteredOT = selectedMonth
+    ? overtimeList.filter((ot) => {
+        const d = ot.date ? new Date(ot.date).toISOString().slice(0, 7) : "";
+        return d === selectedMonth;
+      })
+    : overtimeList;
 
   const resetForm = () => {
     setProject(""); setDate(""); setOtType(""); setStartTime("");
@@ -320,9 +329,20 @@ export default function Overtime() {
                     <h4>My Overtime Requests</h4>
                     <p>View your overtime request history</p>
                   </div>
-                  <button className="reim-submit-btn" onClick={() => setShowOTModal(true)}>
-                    <img src="/icons/employee/plus.svg" alt="" /> Submit Overtime
-                  </button>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, background:"#F9FAFB", border:"1.5px solid #E5E7EB", borderRadius:10, padding:"6px 12px" }}>
+                      <i className="bi bi-calendar3" style={{ color:"#6B7280", fontSize:14 }}></i>
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        style={{ border:"none", background:"transparent", outline:"none", fontSize:13, color:"#374151", fontWeight:600, cursor:"pointer" }}
+                      />
+                    </div>
+                    <button className="reim-submit-btn" onClick={() => setShowOTModal(true)}>
+                      <img src="/icons/employee/plus.svg" alt="" /> Submit Overtime
+                    </button>
+                  </div>
                 </div>
 
                 <table className="reim-table">
@@ -338,12 +358,12 @@ export default function Overtime() {
                     </tr>
                   </thead>
                   <tbody>
-                    {overtimeList.length === 0 ? (
+                    {filteredOT.length === 0 ? (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: "center" }}>No overtime requests found</td>
+                        <td colSpan="7" style={{ textAlign: "center" }}>No overtime requests for this month</td>
                       </tr>
                     ) : (
-                      overtimeList.map((ot) => {
+                      filteredOT.map((ot) => {
                         const dur = calcDuration(ot.startTime, ot.endTime);
                         return (
                           <tr key={ot._id}>
