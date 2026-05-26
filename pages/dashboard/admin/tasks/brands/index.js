@@ -73,6 +73,7 @@ export default function BrandsPage() {
   const [gscSelectedSite,  setGscSelectedSite]  = useState("");
   const [gscSaving,        setGscSaving]        = useState(false);
   const [gscDisconnecting, setGscDisconnecting] = useState(false);
+  const [gscWarning,       setGscWarning]       = useState("");
 
   /* ─── Fetch ──────────────────────────────────────────────────────────── */
 
@@ -105,11 +106,32 @@ export default function BrandsPage() {
     }
   }, [router.query, brands]); // eslint-disable-line
 
-  /* Reset GSC sites when selected brand changes */
+  /* Reset GSC sites when selected brand changes; auto-load if already connected */
   useEffect(() => {
     setGscSites([]);
+    setGscWarning("");
     setGscSelectedSite(selected?.gsc?.siteUrl || "");
-  }, [selected?._id]);
+    if (selected?.gsc?.email && selected?._id) {
+      setGscSitesLoading(true);
+      fetch(`/api/admin/brands/${selected._id}/gsc/sites`, { credentials: "include" })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success) {
+            setGscSites(d.sites || []);
+            if (!d.connected) {
+              setGscWarning(d.reason === "token_refresh_failed"
+                ? `Google token expired — please disconnect and reconnect. (${d.error || ""})`
+                : "Google token not found — please disconnect and reconnect your account.");
+            } else if (d.connected && d.sites?.length === 0) {
+              if (d.reason === "api_error") setGscWarning(`GSC API error: ${d.error}`);
+              else if (d.reason === "no_properties") setGscWarning("No Search Console properties found for this Google account.");
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setGscSitesLoading(false));
+    }
+  }, [selected?._id]); // eslint-disable-line
 
   /* ─── Search debounce ────────────────────────────────────────────────── */
 
@@ -125,11 +147,23 @@ export default function BrandsPage() {
   const loadGscSites = useCallback(async () => {
     if (!selected?._id) return;
     setGscSitesLoading(true);
+    setGscWarning("");
     try {
       const res  = await fetch(`/api/admin/brands/${selected._id}/gsc/sites`, { credentials: "include" });
       const data = await res.json();
-      if (data.success) setGscSites(data.sites || []);
-      else toast.error(data.message || "Could not load GSC sites");
+      if (data.success) {
+        setGscSites(data.sites || []);
+        if (!data.connected) {
+          setGscWarning(data.reason === "token_refresh_failed"
+            ? `Google token expired — please disconnect and reconnect. (${data.error || ""})`
+            : "Google token not found — please disconnect and reconnect your account.");
+        } else if (data.connected && data.sites?.length === 0) {
+          if (data.reason === "api_error") setGscWarning(`GSC API error: ${data.error}`);
+          else if (data.reason === "no_properties") setGscWarning("No Search Console properties found for this Google account.");
+        }
+      } else {
+        toast.error(data.message || "Could not load GSC sites");
+      }
     } catch { toast.error("Network error"); }
     finally { setGscSitesLoading(false); }
   }, [selected?._id]);
@@ -431,6 +465,7 @@ export default function BrandsPage() {
                       setGscSelectedSite={setGscSelectedSite}
                       gscSaving={gscSaving}
                       gscDisconnecting={gscDisconnecting}
+                      gscWarning={gscWarning}
                       onLoadGscSites={loadGscSites}
                       onSaveGscSite={saveGscSite}
                       onDisconnectGsc={disconnectGsc}
@@ -464,7 +499,7 @@ export default function BrandsPage() {
    Brand Detail
 ═══════════════════════════════════════════════════════════════════════════ */
 
-function BrandDetail({ brand, activeTab, setActiveTab, onEdit, onDelete, gscSites, gscSitesLoading, gscSelectedSite, setGscSelectedSite, gscSaving, gscDisconnecting, onLoadGscSites, onSaveGscSite, onDisconnectGsc }) {
+function BrandDetail({ brand, activeTab, setActiveTab, onEdit, onDelete, gscSites, gscSitesLoading, gscSelectedSite, setGscSelectedSite, gscSaving, gscDisconnecting, gscWarning, onLoadGscSites, onSaveGscSite, onDisconnectGsc }) {
   const activeSvc = SERVICES.filter(s => (brand.services || []).includes(s.key));
 
   return (
@@ -554,6 +589,7 @@ function BrandDetail({ brand, activeTab, setActiveTab, onEdit, onDelete, gscSite
             gscSites={gscSites} gscSitesLoading={gscSitesLoading}
             gscSelectedSite={gscSelectedSite} setGscSelectedSite={setGscSelectedSite}
             gscSaving={gscSaving} gscDisconnecting={gscDisconnecting}
+            gscWarning={gscWarning}
             onLoadGscSites={onLoadGscSites} onSaveGscSite={onSaveGscSite} onDisconnectGsc={onDisconnectGsc} />}
           {activeTab === "ads"         && <AdsView brand={brand} />}
           {activeTab === "branding"    && <BrandingView brand={brand} />}
@@ -669,7 +705,7 @@ function WebsiteView({ brand }) {
   );
 }
 
-function SeoView({ brand, gscSites, gscSitesLoading, gscSelectedSite, setGscSelectedSite, gscSaving, gscDisconnecting, onLoadGscSites, onSaveGscSite, onDisconnectGsc }) {
+function SeoView({ brand, gscSites, gscSitesLoading, gscSelectedSite, setGscSelectedSite, gscSaving, gscDisconnecting, gscWarning, onLoadGscSites, onSaveGscSite, onDisconnectGsc }) {
   const ss = brand.seoSettings || {};
   const blogSchedule = ss.blogSchedule || [];
   const competitors  = ss.competitors  || [];
@@ -726,7 +762,13 @@ function SeoView({ brand, gscSites, gscSitesLoading, gscSelectedSite, setGscSele
                   {gscSaving ? "…" : "Save"}
                 </button>
               </div>
-              {gscSites.length === 0 && !gscSitesLoading && (
+              {gscWarning && (
+                <div style={{ fontSize: 11, color: "#B45309", background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 8, padding: "8px 12px", marginTop: 6, display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  <i className="bi bi-exclamation-triangle-fill" style={{ marginTop: 1, flexShrink: 0 }} />
+                  <span>{gscWarning}</span>
+                </div>
+              )}
+              {!gscWarning && gscSites.length === 0 && !gscSitesLoading && (
                 <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 5 }}>
                   Click <i className="bi bi-arrow-clockwise" /> to list available properties, or type the URL below.
                 </div>

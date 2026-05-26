@@ -80,6 +80,14 @@ export default function BrandDetailPage() {
         setTaskStats(bData.taskStats || []);
         setStageStats(bData.stageStats || []);
         if (bData.brand?.gsc?.siteUrl) setGscSelectedSite(bData.brand.gsc.siteUrl);
+        if (bData.brand?.gsc?.email) {
+          setGscSitesLoading(true);
+          fetch(`/api/admin/brands/${id}/gsc/sites`, { credentials: "include" })
+            .then(r => r.json())
+            .then(d => { if (d.success) setGscSites(d.sites || []); })
+            .catch(() => {})
+            .finally(() => setGscSitesLoading(false));
+        }
       }
       if (tData.success) setTasks(tData.tasks || []);
     }).catch(() => toast.error("Failed to load"))

@@ -40,16 +40,29 @@ export default async function handler(req, res) {
 
     const refreshToken = brand.gsc?.refreshToken;
     if (!refreshToken) {
-      return res.json({ success: true, sites: [], connected: false });
+      return res.json({ success: true, sites: [], connected: false, reason: "no_refresh_token" });
     }
 
-    const accessToken = await getAccessToken(refreshToken);
+    let accessToken;
+    try {
+      accessToken = await getAccessToken(refreshToken);
+    } catch (tokenErr) {
+      return res.json({ success: true, sites: [], connected: false, reason: "token_refresh_failed", error: tokenErr.message });
+    }
 
     const sitesRes  = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const sitesData = await sitesRes.json();
+
+    if (sitesData.error) {
+      return res.json({ success: true, sites: [], connected: true, reason: "api_error", error: `${sitesData.error.code}: ${sitesData.error.message}` });
+    }
+
     const sites = (sitesData.siteEntry || []).map(s => s.siteUrl);
+    if (sites.length === 0) {
+      return res.json({ success: true, sites: [], connected: true, reason: "no_properties" });
+    }
 
     return res.json({ success: true, sites, connected: true });
   } catch (err) {
