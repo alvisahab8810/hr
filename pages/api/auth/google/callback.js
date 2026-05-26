@@ -17,7 +17,10 @@ export default async function handler(req, res) {
 
   const clientId     = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  const redirectUri  = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  const baseUrl      = process.env.NEXTAUTH_URL ||
+    `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}`;
+  const redirectUri  = process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+    `${baseUrl}/api/auth/google/callback`;
 
   try {
     // Exchange code for tokens

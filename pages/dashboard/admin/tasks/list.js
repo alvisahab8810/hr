@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -49,7 +49,42 @@ const SEO_CAT_META = {
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const STAGE_KEYS = ["S1","S2","S3","S4"];
+
+const EMPTY_GEN_FORM  = { title: "", description: "", priority: "medium", assignedTo: "", projectId: "", sprintId: "", dueDate: "", estimatedHours: "", brandId: "" };
+const SEO_CATS = [
+  { key: "blog",      label: "Blog Post",      icon: "bi-file-text",             color: "#6366F1" },
+  { key: "technical", label: "Technical SEO",  icon: "bi-code-slash",            color: "#EF4444" },
+  { key: "onpage",    label: "On-Page",         icon: "bi-file-earmark-richtext", color: "#3B82F6" },
+  { key: "offpage",   label: "Off-Page",        icon: "bi-link-45deg",            color: "#F59E0B" },
+  { key: "backlinks", label: "Backlinks",        icon: "bi-arrow-left-right",      color: "#10B981" },
+];
+const EMPTY_SEO_FORM = { seoCategory: "blog", title: "", primaryKeywords: "", pageUrls: [""], internalLinking: false, internalLinkingTask: "", externalLinking: false, externalLinkingTask: "", description: "", priority: "medium", assignedTo: "", dueDate: "" };
+const BLOG_SCHED_DAY_ORDER = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const SVC_LABELS = { socialMedia: "Social Media", website: "Website", seo: "SEO", ads: "Ads", branding: "Branding" };
+const SVC_COLORS = { socialMedia: ["#EDE9FE","#7C3AED"], website: ["#DBEAFE","#1D4ED8"], seo: ["#D1FAE5","#065F46"], ads: ["#FEF3C7","#B45309"], branding: ["#FCE7F3","#BE185D"] };
+const PRIORITIES_LIST = ["low","medium","high","urgent"];
+const PRIORITY_META_C = { low: { label:"Low" }, medium: { label:"Medium" }, high: { label:"High" }, urgent: { label:"Urgent" } };
+
+function seoDayName(dateStr) {
+  if (!dateStr) return "";
+  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const d = new Date(dateStr);
+  return `${days[d.getDay()]}, ${d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`;
+}
+function nextDateForDay(dayName) {
+  const MAP = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const target = MAP[dayName];
+  if (target === undefined) return "";
+  const today = new Date();
+  let diff = target - today.getDay();
+  if (diff < 0) diff += 7;
+  const result = new Date(today);
+  result.setDate(today.getDate() + diff);
+  return result.toISOString().slice(0, 10);
+}
 const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot/Design","Edit/Develop","Posted/Live"];
+const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: "" }));
+const EMPTY_PROD_FORM = { brandId: "", contentType: "reel", stages: freshStages() };
 const STAGE_COLORS = ["#F59E0B","#6366F1","#10B981","#EC4899"];
 const STAGE_DEPT_KEYWORDS = [
   ["content"], ["production", "design", "creative"],
@@ -122,6 +157,20 @@ export default function TasksListPage() {
   const [filters, setFilters] = useState({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "" });
   const [hideCompleted, setHideCompleted] = useState(false);
 
+  /* Create form state */
+  const [showCreate,          setShowCreate]          = useState(false);
+  const [createMode,          setCreateMode]          = useState("production");
+  const [submitting,          setSubmitting]          = useState(false);
+  const [prodForm,            setProdForm]            = useState(EMPTY_PROD_FORM);
+  const [genForm,             setGenForm]             = useState(EMPTY_GEN_FORM);
+  const [seoForm,             setSeoForm]             = useState(EMPTY_SEO_FORM);
+  const [webForm,             setWebForm]             = useState({ title:"", description:"", priority:"medium", assignedTo:"", webTaskType:"feature", projectId:"", sprintId:"", dueDate:"", estimatedHours:"" });
+  const [topBrandId,          setTopBrandId]          = useState("");
+  const [nomenclaturePreview, setNomenclaturePreview] = useState("");
+  const [nomenclatureLoading, setNomenclatureLoading] = useState(false);
+  const [projects,            setProjects]            = useState([]);
+  const [sprints,             setSprints]             = useState([]);
+
   /* Stage editor */
   const [stageModal,        setStageModal]        = useState(false);
   const [stageTask,         setStageTask]         = useState(null);
@@ -137,11 +186,170 @@ export default function TasksListPage() {
     Promise.all([
       fetch("/api/admin/brands",          { credentials: "include" }).then(r => r.json()),
       fetch("/api/admin/assets/employees",{ credentials: "include" }).then(r => r.json()),
-    ]).then(([bData, eData]) => {
+      fetch("/api/admin/projects",        { credentials: "include" }).then(r => r.json()),
+    ]).then(([bData, eData, pData]) => {
       if (bData.success) setBrands(bData.brands || []);
       if (eData.success) setEmployees(eData.employees || []);
+      if (pData.success) setProjects(pData.projects || []);
     }).catch(() => {});
   }, []);
+
+  /* Load sprints when project selected */
+  useEffect(() => {
+    if (!genForm.projectId) { setSprints([]); return; }
+    fetch(`/api/admin/sprints?projectId=${genForm.projectId}`, { credentials: "include" })
+      .then(r => r.json()).then(d => { if (d.success) setSprints(d.sprints || []); }).catch(() => {});
+  }, [genForm.projectId]);
+
+  /* Auto-fill blog due date from brand schedule */
+  useEffect(() => {
+    if (createMode !== "seo" || seoForm.seoCategory !== "blog" || seoForm.dueDate) return;
+    const brand = brands.find(b => b._id === topBrandId) || null;
+    const schedule = brand?.seoSettings?.blogSchedule || [];
+    if (schedule.length === 0) return;
+    const firstDay = BLOG_SCHED_DAY_ORDER.find(d => schedule.includes(d));
+    if (!firstDay) return;
+    const date = nextDateForDay(firstDay);
+    if (date) setSeoForm(f => ({ ...f, dueDate: date }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createMode, seoForm.seoCategory, topBrandId]);
+
+  /* Live nomenclature preview */
+  useEffect(() => {
+    if (!prodForm.brandId || !prodForm.contentType) { setNomenclaturePreview(""); return; }
+    setNomenclatureLoading(true);
+    fetch(`/api/admin/tasks/nomenclature?brandId=${prodForm.brandId}&contentType=${prodForm.contentType}`, { credentials: "include" })
+      .then(r => r.json()).then(d => { if (d.success) setNomenclaturePreview(d.nomenclature); })
+      .catch(() => {}).finally(() => setNomenclatureLoading(false));
+  }, [prodForm.brandId, prodForm.contentType]);
+
+  /* Create form derived state */
+  const selectedBrand = useMemo(() => brands.find(b => b._id === topBrandId) || null, [brands, topBrandId]);
+
+  const dmEmployees = useMemo(() => employees.filter(emp => {
+    const dept  = (emp.professional?.department  || "").toLowerCase();
+    const desig = (emp.professional?.designation || "").toLowerCase();
+    return dept.includes("digital") || dept.includes("marketing") || dept.includes("seo") ||
+           desig.includes("digital") || desig.includes("marketing") || desig.includes("seo");
+  }), [employees]);
+
+  const availableModes = useMemo(() => {
+    if (!topBrandId) return [["production","🎬 Production"],["general","📝 General Task"]];
+    const svc = selectedBrand?.services || [];
+    return [
+      ...(svc.includes("socialMedia") ? [["production","🎬 Social Media"]] : []),
+      ...(svc.includes("website")     ? [["website",   "🌐 Website"]]      : []),
+      ...(svc.includes("seo")         ? [["seo",       "🔍 SEO"]]          : []),
+      ...(svc.includes("ads")         ? [["ads",       "📢 Ads"]]          : []),
+      ...(svc.includes("branding")    ? [["branding",  "🎨 Branding"]]     : []),
+      ["general","📝 General"],
+    ];
+  }, [topBrandId, selectedBrand]);
+
+  const availableContentTypes = useMemo(() => {
+    const all = [["reel","Reel"],["post","Post"],["carousel","Carousel"],["story","Story"]];
+    if (!selectedBrand) return all;
+    const d = selectedBrand.monthlyDeliverables || {};
+    const keyMap = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+    const withTarget = all.filter(([k]) => (d[keyMap[k]] || 0) > 0);
+    return withTarget.length > 0 ? withTarget : all;
+  }, [selectedBrand]);
+
+  const handleBrandChange = (brandId) => {
+    setTopBrandId(brandId);
+    setProdForm(f => ({ ...f, brandId }));
+    setGenForm(f => ({ ...f, brandId }));
+    if (brandId) {
+      const b = brands.find(b => b._id === brandId);
+      const svc = b?.services || [];
+      const modeKeys = [
+        ...(svc.includes("socialMedia") ? ["production"] : []),
+        ...(svc.includes("website")     ? ["website"]    : []),
+        ...(svc.includes("seo")         ? ["seo"]        : []),
+        ...(svc.includes("ads")         ? ["ads"]        : []),
+        ...(svc.includes("branding")    ? ["branding"]   : []),
+        "general",
+      ];
+      if (!modeKeys.includes(createMode)) setCreateMode(modeKeys[0]);
+    } else {
+      if (!["production","general"].includes(createMode)) setCreateMode("production");
+    }
+  };
+
+  const closeCreateModal = () => {
+    setShowCreate(false);
+    setTopBrandId("");
+    setNomenclaturePreview("");
+    setProdForm(EMPTY_PROD_FORM);
+    setGenForm(EMPTY_GEN_FORM);
+    setSeoForm(EMPTY_SEO_FORM);
+    setWebForm({ title:"", description:"", priority:"medium", assignedTo:"", webTaskType:"feature", projectId:"", sprintId:"", dueDate:"", estimatedHours:"" });
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      let body = {};
+      if (createMode === "production") {
+        if (!prodForm.brandId)    { toast.error("Please select a brand"); setSubmitting(false); return; }
+        if (!prodForm.contentType){ toast.error("Please select creative type"); setSubmitting(false); return; }
+        body = { taskType: "production", brandId: prodForm.brandId, contentType: prodForm.contentType, stage: "S1",
+          stages: prodForm.stages.map(s => ({ name: s.name, assignedTo: s.assignedTo || [], deadline: s.deadline || null })),
+          assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
+      } else if (createMode === "website") {
+        if (!webForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        const wType = webForm.webTaskType;
+        body = { title: webForm.title, description: webForm.description, priority: webForm.priority,
+          assignedTo: webForm.assignedTo || null,
+          taskType: wType === "sprint" ? "sprint" : (wType === "feature" || wType === "page") ? "project" : "manual",
+          brandId: topBrandId || null, projectId: webForm.projectId || null, sprintId: webForm.sprintId || null,
+          dueDate: webForm.dueDate || null, estimatedHours: webForm.estimatedHours ? Number(webForm.estimatedHours) : null,
+          tags: [wType], assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
+      } else if (createMode === "seo") {
+        let seoDesc = seoForm.description || "";
+        let seoTitle = seoForm.title.trim();
+        let pillarVal = "";
+        if (seoForm.seoCategory === "blog") {
+          pillarVal = seoForm.primaryKeywords;
+          if (seoForm.primaryKeywords) seoDesc = `Primary Keywords: ${seoForm.primaryKeywords}${seoDesc ? "\n\n" + seoDesc : ""}`;
+        } else if (seoForm.seoCategory === "onpage") {
+          const urls = (seoForm.pageUrls || []).map(u => u.trim()).filter(Boolean);
+          if (urls.length) seoDesc = `Pages:\n${urls.map(u => "• " + u).join("\n")}${seoDesc ? "\n\n" + seoDesc : ""}`;
+        } else if (seoForm.seoCategory === "backlinks") {
+          const parts = [];
+          if (seoForm.internalLinking && seoForm.internalLinkingTask.trim()) parts.push(`Internal Linking:\n${seoForm.internalLinkingTask.trim()}`);
+          if (seoForm.externalLinking && seoForm.externalLinkingTask.trim()) parts.push(`External Linking:\n${seoForm.externalLinkingTask.trim()}`);
+          if (parts.length) seoDesc = parts.join("\n\n") + (seoDesc ? "\n\n" + seoDesc : "");
+          if (!seoTitle) seoTitle = [seoForm.internalLinking && "Internal", seoForm.externalLinking && "External"].filter(Boolean).join(" & ") + " Linking Task";
+        } else if (["offpage","technical"].includes(seoForm.seoCategory)) {
+          if (!seoTitle) seoTitle = seoDesc.slice(0, 80) || (seoForm.seoCategory === "offpage" ? "Off-Page SEO Task" : "Technical SEO Task");
+        }
+        if (!seoTitle) { toast.error("Title is required"); setSubmitting(false); return; }
+        body = { title: seoTitle, description: seoDesc, pillar: pillarVal, priority: seoForm.priority,
+          assignedTo: seoForm.assignedTo || null, taskType: "manual", brandId: topBrandId || null,
+          seoCategory: seoForm.seoCategory, tags: ["seo", seoForm.seoCategory], dueDate: seoForm.dueDate || null,
+          assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
+      } else if (["ads","branding"].includes(createMode)) {
+        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        body = { ...genForm, taskType: "manual", brandId: topBrandId || genForm.brandId || null, tags: [createMode],
+          assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
+      } else {
+        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        body = { ...genForm, taskType: genForm.taskType || "manual", brandId: topBrandId || genForm.brandId || null,
+          assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
+      }
+
+      const res  = await fetch("/api/admin/tasks", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Task created! ${data.task?.nomenclature ? `(${data.task.nomenclature})` : ""}`);
+        closeCreateModal();
+        fetchTasks();
+      } else toast.error(data.message || "Failed to create task");
+    } catch { toast.error("Network error"); }
+    finally { setSubmitting(false); }
+  };
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -285,6 +493,20 @@ export default function TasksListPage() {
           .tl-field-input:focus { border-color:#6366F1; }
           .overdue-row td { background:#FFF5F5 !important; }
           .tl-tab { display:flex; align-items:center; gap:7px; padding:9px 18px; border-radius:12px; font-size:13px; font-weight:700; cursor:pointer; border:1.5px solid transparent; transition:all .14s; white-space:nowrap; }
+          .tmd-btn { border:none; cursor:pointer; border-radius:10px; padding:8px 18px; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px; transition:all .15s; }
+          .tmd-btn-primary { background:#4F46E5; color:#fff; }
+          .tmd-btn-primary:hover { background:#4338CA; }
+          .tmd-btn-ghost { background:#F1F5F9; color:#475569; }
+          .tmd-btn-ghost:hover { background:#E2E8F0; }
+          .tmd-input { padding:8px 12px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:13px; outline:none; width:100%; background:#fff; box-sizing:border-box; }
+          .tmd-input:focus { border-color:#6366F1; }
+          .tmd-select { padding:8px 12px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:13px; outline:none; width:100%; background:#fff; cursor:pointer; }
+          .tmd-overlay { position:fixed; inset:0; background:rgba(15,15,35,.55); backdrop-filter:blur(4px); z-index:1050; display:flex; align-items:stretch; justify-content:flex-end; }
+          .tmd-drawer { background:#fff; width:740px; max-width:100vw; height:100vh; display:flex; flex-direction:column; box-shadow:-10px 0 60px rgba(0,0,0,.2); animation:drawerSlideIn .22s cubic-bezier(.4,0,.2,1); }
+          @keyframes drawerSlideIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
+          .tmd-drawer-header { padding:18px 26px; display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #F1F5F9; flex-shrink:0; }
+          .tmd-drawer-body { flex:1; overflow-y:auto; padding:22px 26px; }
+          .tmd-drawer-footer { padding:14px 26px; display:flex; gap:8px; justify-content:flex-end; border-top:1.5px solid #F1F5F9; flex-shrink:0; background:#fff; }
         `}</style>
       </Head>
 
@@ -321,7 +543,7 @@ export default function TasksListPage() {
                     {hideCompleted ? "Show completed" : "Hide completed"}
                   </button>
                   <button className="invite-btn tl-btn-primary"
-                    onClick={() => router.push("/dashboard/admin/tasks?create=1")}>
+                    onClick={() => setShowCreate(true)}>
                     <i className="bi bi-plus-circle" /> New Task
                   </button>
                 </div>
@@ -428,8 +650,8 @@ export default function TasksListPage() {
                               <tr key={t._id} className={over ? "overdue-row" : ""}
                                 style={{ cursor: "pointer" }}
                                 onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
-                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#6366F1", fontSize: 12 }}>
-                                  #{String(t._id).slice(-4).toUpperCase()}
+                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#6366F1", fontSize: 12, whiteSpace: "nowrap" }}>
+                                  {t.taskId || `#${String(t._id).slice(-4).toUpperCase()}`}
                                 </td>
                                 <td>
                                   <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
@@ -536,8 +758,8 @@ export default function TasksListPage() {
                               <tr key={t._id} className={over ? "overdue-row" : ""}
                                 style={{ cursor: "pointer" }}
                                 onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
-                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#10B981", fontSize: 12 }}>
-                                  #{String(t._id).slice(-4).toUpperCase()}
+                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#10B981", fontSize: 12, whiteSpace: "nowrap" }}>
+                                  {t.taskId || `#${String(t._id).slice(-4).toUpperCase()}`}
                                 </td>
                                 <td>
                                   <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
@@ -602,8 +824,8 @@ export default function TasksListPage() {
                               <tr key={t._id} className={over ? "overdue-row" : ""}
                                 style={{ cursor: "pointer" }}
                                 onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
-                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: currentTab.color, fontSize: 12 }}>
-                                  #{String(t._id).slice(-4).toUpperCase()}
+                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: currentTab.color, fontSize: 12, whiteSpace: "nowrap" }}>
+                                  {t.taskId || `#${String(t._id).slice(-4).toUpperCase()}`}
                                 </td>
                                 <td>
                                   <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
@@ -668,6 +890,319 @@ export default function TasksListPage() {
         </div>
       </div>
 
+      {/* ════ CREATE TASK DRAWER ════ */}
+      {showCreate && (() => {
+        const LBL = { fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 5 };
+        const CTYPE_COLORS = { reel:"#7C3AED", post:"#1D4ED8", carousel:"#B45309", story:"#065F46" };
+        return (
+          <div className="tmd-overlay" onClick={closeCreateModal}>
+            <div className="tmd-drawer" onClick={e => e.stopPropagation()}>
+              <div className="tmd-drawer-header">
+                <div>
+                  <h5 style={{ fontWeight: 800, color: "#1E293B", margin: 0, fontSize: 16 }}>+ New Task</h5>
+                  {selectedBrand && <div style={{ fontSize: 12, color: "#6366F1", marginTop: 2, fontWeight: 600 }}>{selectedBrand.name}</div>}
+                </div>
+                <button className="tmd-btn tmd-btn-ghost" style={{ padding: "5px 9px" }} onClick={closeCreateModal}>
+                  <i className="bi bi-x-lg" style={{ fontSize: 13 }} />
+                </button>
+              </div>
+
+              <div className="tmd-drawer-body">
+                {/* Brand selector */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={LBL}>Brand <span style={{ fontWeight: 400, color: "#94A3B8", textTransform: "none", fontSize: 10 }}>(select to see available task types)</span></label>
+                  <select className="tmd-select" value={topBrandId} onChange={e => handleBrandChange(e.target.value)}>
+                    <option value="">— No specific brand —</option>
+                    {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                  {selectedBrand?.services?.length > 0 && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }}>
+                      {selectedBrand.services.map(s => {
+                        const [bg, fg] = SVC_COLORS[s] || ["#F1F5F9","#475569"];
+                        return <span key={s} style={{ background: bg, color: fg, fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 20 }}>{SVC_LABELS[s] || s}</span>;
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mode tabs */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 18, background: "#F8FAFC", borderRadius: 10, padding: 4, flexWrap: "wrap" }}>
+                  {availableModes.map(([mode, label]) => (
+                    <button key={mode} type="button" onClick={() => setCreateMode(mode)}
+                      style={{ flex: 1, minWidth: 90, padding: "7px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                        background: createMode === mode ? "#fff" : "transparent", color: createMode === mode ? "#4F46E5" : "#64748B",
+                        boxShadow: createMode === mode ? "0 1px 4px rgba(0,0,0,.08)" : "none", transition: "all .15s" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <form id="create-task-form-list" onSubmit={handleCreate}>
+
+                  {/* ══ PRODUCTION ══ */}
+                  {createMode === "production" && (<>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
+                      <span style={{ fontSize: 16 }}>🤖</span>
+                      <div style={{ fontSize: 12, color: "#4338CA", lineHeight: 1.5 }}>ID + nomenclature auto-generated. Each stage has its own deadline &amp; assignee.</div>
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <label style={LBL}>Creative Type</label>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {availableContentTypes.map(([val, lbl]) => {
+                          const active = prodForm.contentType === val;
+                          return (
+                            <button key={val} type="button" onClick={() => setProdForm(f => ({ ...f, contentType: val }))}
+                              style={{ padding: "7px 16px", borderRadius: 8, border: `1.5px solid ${active ? CTYPE_COLORS[val] : "#E5E7EB"}`,
+                                background: active ? CTYPE_COLORS[val] + "18" : "#fff", color: active ? CTYPE_COLORS[val] : "#374151",
+                                fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all .15s" }}>
+                              {lbl}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {topBrandId && (
+                      <div style={{ background: "#F8FAFC", borderRadius: 8, borderLeft: "3px solid #6366F1", padding: "10px 14px", marginBottom: 18 }}>
+                        <div style={{ fontSize: 10, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Auto-generated</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 28, marginTop: 6 }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: "#94A3B8" }}>Task ID</div>
+                            <div style={{ fontFamily: "monospace", fontWeight: 700, color: "#6366F1", fontSize: 15 }}>
+                              {nomenclatureLoading ? "…" : nomenclaturePreview || "—"}
+                            </div>
+                          </div>
+                          {nomenclaturePreview && (
+                            <div>
+                              <div style={{ fontSize: 10, color: "#94A3B8" }}>Stage</div>
+                              <div style={{ fontFamily: "monospace", fontWeight: 700, color: "#F59E0B", fontSize: 13 }}>S1 → active</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 14 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, color: "#4F46E5", display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className="bi bi-journal-text" /> Stage assignments + per-stage deadlines
+                      </div>
+                      {prodForm.stages.map((stg, i) => (
+                        <div key={i} style={{ background: "#F8FAFC", border: "1px solid #F1F5F9", borderRadius: 10, padding: "10px 14px", marginBottom: 10 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                            <div style={{ width: 26, height: 26, borderRadius: 7, background: STAGE_COLORS[i], color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{i + 1}</div>
+                            <input type="text" className="tmd-input" value={stg.name} style={{ flex: 1, padding: "5px 10px", fontSize: 13 }}
+                              onChange={e => setProdForm(f => { const stages = [...f.stages]; stages[i] = { ...stages[i], name: e.target.value }; return { ...f, stages }; })} />
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            <div>
+                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
+                                Assignees · {["Content","Production/Design","Editing","Digital Mktg"][i]} team
+                              </label>
+                              <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, maxHeight: 120, overflowY: "auto", background: "#fff" }}>
+                                {filterByDept(employees, STAGE_DEPT_KEYWORDS[i]).map((emp, ei) => {
+                                  const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
+                                  const checked = (stg.assignedTo || []).includes(emp._id);
+                                  return (
+                                    <label key={emp._id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", cursor: "pointer", borderBottom: ei < filterByDept(employees, STAGE_DEPT_KEYWORDS[i]).length - 1 ? "1px solid #F1F5F9" : "none", background: checked ? STAGE_COLORS[i] + "12" : "transparent" }}>
+                                      <input type="checkbox" checked={checked} style={{ accentColor: STAGE_COLORS[i], width: 14, height: 14 }}
+                                        onChange={e => setProdForm(f => { const stages = [...f.stages]; const curr = stages[i].assignedTo || []; stages[i] = { ...stages[i], assignedTo: e.target.checked ? [...curr, emp._id] : curr.filter(id => id !== emp._id) }; return { ...f, stages }; })} />
+                                      <span style={{ fontSize: 12, color: checked ? "#1E293B" : "#374151", fontWeight: checked ? 700 : 400 }}>{n || "Employee"}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>Deadline (date + time)</label>
+                              <input type="datetime-local" className="tmd-input" value={stg.deadline}
+                                onChange={e => setProdForm(f => { const stages = [...f.stages]; stages[i] = { ...stages[i], deadline: e.target.value }; return { ...f, stages }; })} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>)}
+
+                  {/* ══ WEBSITE redirect ══ */}
+                  {createMode === "website" && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "32px 20px", textAlign: "center", background: "#F0F9FF", border: "1.5px dashed #BAE6FD", borderRadius: 12 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#DBEAFE", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <i className="bi bi-code-slash" style={{ fontSize: 24, color: "#1D4ED8" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Use the Web Development Projects page</div>
+                        <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6, maxWidth: 340 }}>Web development tasks are managed through the dedicated Projects page.</div>
+                      </div>
+                      <button type="button" onClick={() => router.push("/dashboard/admin/tasks/projects")}
+                        style={{ padding: "10px 22px", borderRadius: 9, border: "none", background: "#1D4ED8", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                        <i className="bi bi-arrow-right-circle" />Go to Web Dev Projects
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ══ SEO ══ */}
+                  {createMode === "seo" && (() => {
+                    const cat = SEO_CATS.find(c => c.key === seoForm.seoCategory) || SEO_CATS[0];
+                    const isBlog = seoForm.seoCategory === "blog";
+                    const isOnPage = seoForm.seoCategory === "onpage";
+                    const isOffPage = seoForm.seoCategory === "offpage";
+                    const isTechnical = seoForm.seoCategory === "technical";
+                    const isBacklinks = seoForm.seoCategory === "backlinks";
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        <div>
+                          <label style={LBL}>SEO Category</label>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {SEO_CATS.map(c => {
+                              const active = seoForm.seoCategory === c.key;
+                              return (
+                                <button key={c.key} type="button" onClick={() => setSeoForm(f => ({ ...EMPTY_SEO_FORM, seoCategory: c.key, priority: f.priority, assignedTo: f.assignedTo }))}
+                                  style={{ padding: "6px 13px", borderRadius: 8, border: `1.5px solid ${active ? c.color : "#E5E7EB"}`, background: active ? c.color + "18" : "#fff", color: active ? c.color : "#374151", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "all .15s" }}>
+                                  <i className={`bi ${c.icon}`} />{c.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div style={{ background: cat.color + "0D", border: `1px solid ${cat.color}40`, borderRadius: 10, padding: "9px 13px", fontSize: 12, color: "#374151", display: "flex", gap: 8, alignItems: "center" }}>
+                          <i className={`bi ${cat.icon}`} style={{ color: cat.color }} />
+                          <span><strong>{cat.label}</strong> task for <strong>{selectedBrand?.name || "this brand"}</strong></span>
+                        </div>
+                        {isBlog && (
+                          <>
+                            <div><label style={LBL}>Blog Title <span style={{ color: "#EF4444" }}>*</span></label><input className="tmd-input" placeholder="e.g. Top 10 Hotels in Goa" value={seoForm.title} onChange={e => setSeoForm(f => ({ ...f, title: e.target.value }))} /></div>
+                            <div><label style={LBL}>Primary Keywords</label><input className="tmd-input" placeholder="e.g. hotels in goa, best hotels goa" value={seoForm.primaryKeywords} onChange={e => setSeoForm(f => ({ ...f, primaryKeywords: e.target.value }))} /></div>
+                          </>
+                        )}
+                        {isOnPage && (
+                          <>
+                            <div><label style={LBL}>Task Title <span style={{ color: "#EF4444" }}>*</span></label><input className="tmd-input" placeholder="e.g. Optimise homepage meta tags" value={seoForm.title} onChange={e => setSeoForm(f => ({ ...f, title: e.target.value }))} /></div>
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                                <label style={LBL}>Page URLs</label>
+                                <button type="button" onClick={() => setSeoForm(f => ({ ...f, pageUrls: [...(f.pageUrls || [""]), ""] }))} style={{ background: "#EEF2FF", color: "#4F46E5", border: "1.5px solid #C7D2FE", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ Add URL</button>
+                              </div>
+                              {(seoForm.pageUrls || [""]).map((url, i) => (
+                                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                                  <input className="tmd-input" placeholder={`https://example.com/page-${i + 1}`} value={url} onChange={e => { const urls = [...(seoForm.pageUrls || [""])]; urls[i] = e.target.value; setSeoForm(f => ({ ...f, pageUrls: urls })); }} />
+                                  {(seoForm.pageUrls || []).length > 1 && <button type="button" onClick={() => setSeoForm(f => ({ ...f, pageUrls: (f.pageUrls || []).filter((_, idx) => idx !== i) }))} style={{ background: "#FEF2F2", color: "#DC2626", border: "1.5px solid #FECACA", borderRadius: 7, padding: "0 9px", cursor: "pointer", fontSize: 13 }}><i className="bi bi-x-lg" /></button>}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {(isOffPage || isTechnical) && (
+                          <>
+                            <div><label style={LBL}>Task Title</label><input className="tmd-input" placeholder={isOffPage ? "e.g. Guest post on travelblog.com" : "e.g. Fix Core Web Vitals"} value={seoForm.title} onChange={e => setSeoForm(f => ({ ...f, title: e.target.value }))} /></div>
+                            <div><label style={LBL}>Description <span style={{ color: "#EF4444" }}>*</span></label><textarea className="tmd-input" style={{ height: 90, resize: "vertical" }} placeholder="Describe the task…" value={seoForm.description} onChange={e => setSeoForm(f => ({ ...f, description: e.target.value }))} /></div>
+                          </>
+                        )}
+                        {isBacklinks && (
+                          <>
+                            <div><label style={LBL}>Task Title</label><input className="tmd-input" placeholder="e.g. Build 5 DoFollow backlinks from DA40+ sites" value={seoForm.title} onChange={e => setSeoForm(f => ({ ...f, title: e.target.value }))} /></div>
+                            <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, padding: 12 }}>
+                              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: seoForm.internalLinking ? "#059669" : "#374151", marginBottom: seoForm.internalLinking ? 10 : 0 }}>
+                                <input type="checkbox" checked={seoForm.internalLinking} onChange={e => setSeoForm(f => ({ ...f, internalLinking: e.target.checked }))} style={{ accentColor: "#059669", width: 15, height: 15 }} />
+                                Internal Linking
+                              </label>
+                              {seoForm.internalLinking && <textarea className="tmd-input" style={{ height: 72, resize: "vertical" }} placeholder="Describe internal linking task…" value={seoForm.internalLinkingTask} onChange={e => setSeoForm(f => ({ ...f, internalLinkingTask: e.target.value }))} />}
+                            </div>
+                            <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, padding: 12 }}>
+                              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, color: seoForm.externalLinking ? "#4F46E5" : "#374151", marginBottom: seoForm.externalLinking ? 10 : 0 }}>
+                                <input type="checkbox" checked={seoForm.externalLinking} onChange={e => setSeoForm(f => ({ ...f, externalLinking: e.target.checked }))} style={{ accentColor: "#4F46E5", width: 15, height: 15 }} />
+                                External Linking
+                              </label>
+                              {seoForm.externalLinking && <textarea className="tmd-input" style={{ height: 72, resize: "vertical" }} placeholder="Describe external linking task…" value={seoForm.externalLinkingTask} onChange={e => setSeoForm(f => ({ ...f, externalLinkingTask: e.target.value }))} />}
+                            </div>
+                          </>
+                        )}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                          <div><label style={LBL}>Priority</label><select className="tmd-select" value={seoForm.priority} onChange={e => setSeoForm(f => ({ ...f, priority: e.target.value }))}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{PRIORITY_META_C[p].label}</option>)}</select></div>
+                          <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={seoForm.assignedTo} onChange={e => setSeoForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{(dmEmployees.length > 0 ? dmEmployees : employees).map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
+                        </div>
+                        <div>
+                          <label style={LBL}>Due Date</label>
+                          <input type="date" className="tmd-input" value={seoForm.dueDate} onChange={e => setSeoForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {seoForm.dueDate && <div style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, marginTop: 5 }}><i className="bi bi-calendar-check me-1" />{seoDayName(seoForm.dueDate)}</div>}
+                          {isBlog && (selectedBrand?.seoSettings?.blogSchedule || []).length > 0 && (
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 5 }}>Brand schedule — pick a day</div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                {BLOG_SCHED_DAY_ORDER.filter(d => (selectedBrand.seoSettings.blogSchedule || []).includes(d)).map(day => {
+                                  const date = nextDateForDay(day);
+                                  const isSelected = seoForm.dueDate === date;
+                                  return (
+                                    <button key={day} type="button" onClick={() => setSeoForm(f => ({ ...f, dueDate: date }))}
+                                      style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", background: isSelected ? "#6366F1" : "#EEF2FF", color: isSelected ? "#fff" : "#4F46E5", border: `1.5px solid ${isSelected ? "#6366F1" : "#C7D2FE"}`, transition: "all .12s" }}>
+                                      {day} · {new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {(isBlog || isOnPage || isBacklinks) && <div><label style={LBL}>Notes</label><textarea className="tmd-input" style={{ height: 60, resize: "vertical" }} placeholder="Additional notes…" value={seoForm.description} onChange={e => setSeoForm(f => ({ ...f, description: e.target.value }))} /></div>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ══ ADS / BRANDING ══ */}
+                  {["ads","branding"].includes(createMode) && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ background: createMode === "ads" ? "#FFFBEB" : "#FDF2F8", border: `1px solid ${createMode === "ads" ? "#FDE68A" : "#F9A8D4"}`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#374151", display: "flex", gap: 8 }}>
+                        <span>{createMode === "ads" ? "📢" : "🎨"}</span>
+                        {createMode === "ads" ? `Ad task for ${selectedBrand?.name || "this brand"}` : `Branding task for ${selectedBrand?.name || "this brand"}`}
+                      </div>
+                      <div><label style={LBL}>Title <span style={{ color: "#EF4444" }}>*</span></label><input className="tmd-input" placeholder="Task title" value={genForm.title} onChange={e => setGenForm(f => ({ ...f, title: e.target.value }))} /></div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div><label style={LBL}>Priority</label><select className="tmd-select" value={genForm.priority} onChange={e => setGenForm(f => ({ ...f, priority: e.target.value }))}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{PRIORITY_META_C[p].label}</option>)}</select></div>
+                        <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div><label style={LBL}>Due Date</label><input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
+                        <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
+                      </div>
+                      <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 70, resize: "vertical" }} placeholder="Task details…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
+                    </div>
+                  )}
+
+                  {/* ══ GENERAL ══ */}
+                  {createMode === "general" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div><label style={LBL}>Title <span style={{ color: "#EF4444" }}>*</span></label><input className="tmd-input" placeholder="Task title" value={genForm.title} onChange={e => setGenForm(f => ({ ...f, title: e.target.value }))} /></div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div><label style={LBL}>Priority</label><select className="tmd-select" value={genForm.priority} onChange={e => setGenForm(f => ({ ...f, priority: e.target.value }))}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{PRIORITY_META_C[p].label}</option>)}</select></div>
+                        <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div><label style={LBL}>Project</label><select className="tmd-select" value={genForm.projectId} onChange={e => setGenForm(f => ({ ...f, projectId: e.target.value, sprintId: "" }))}><option value="">No project</option>{projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
+                        <div><label style={LBL}>Sprint</label><select className="tmd-select" value={genForm.sprintId} disabled={!genForm.projectId} onChange={e => setGenForm(f => ({ ...f, sprintId: e.target.value }))}><option value="">No sprint</option>{sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</select></div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        <div><label style={LBL}>Due Date</label><input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
+                        <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
+                      </div>
+                      <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 80, resize: "vertical" }} placeholder="Task description…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
+                    </div>
+                  )}
+
+                </form>
+              </div>
+
+              <div className="tmd-drawer-footer">
+                <button type="button" className="tmd-btn tmd-btn-ghost" onClick={closeCreateModal}>Cancel</button>
+                {createMode !== "website" && (
+                  <button type="submit" form="create-task-form-list" className="tmd-btn tmd-btn-primary" disabled={submitting}>
+                    {submitting
+                      ? <><div className="spinner-border spinner-border-sm" style={{ width: 14, height: 14 }} /> Creating…</>
+                      : <><i className="bi bi-plus-circle-fill" /> Create Task</>}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ════ STAGE EDITOR MODAL ════ */}
       {stageModal && stageTask && (
         <div className="tl-overlay" onClick={() => setStageModal(false)}>
@@ -683,7 +1218,7 @@ export default function TasksListPage() {
               <div style={{ background: "#F8FAFC", borderRadius: 10, padding: "10px 14px", marginBottom: 14, borderLeft: `3px solid ${STAGE_COLORS[stageIdx]}` }}>
                 <div style={{ fontSize: 10.5, color: "#94A3B8", marginBottom: 3 }}>Task</div>
                 <div style={{ fontWeight: 700, fontFamily: "monospace", color: "#4F46E5", fontSize: 14 }}>
-                  #{stageTask._id?.slice(-4).toUpperCase()} · {stageTask.nomenclature || stageTask.title}
+                  {stageTask.taskId || `#${stageTask._id?.slice(-4).toUpperCase()}`} · {stageTask.nomenclature || stageTask.title}
                 </div>
               </div>
               <div style={{ marginBottom: 14 }}>

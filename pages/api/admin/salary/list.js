@@ -55,11 +55,13 @@ export default async function handler(req, res) {
     })
       .populate(
         "employee",
-        "firstName lastName professional salary"
+        "firstName lastName professional salary isActive"
       )
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data });
+    const filtered = data.filter(d => d.employee && d.employee.isActive !== false);
+
+    return res.json({ success: true, data: filtered });
   } catch (err) {
     console.error("Admin salary list error:", err);
     return res.status(500).json({ success: false });

@@ -120,6 +120,9 @@ const TaskSchema = new mongoose.Schema(
 
     /* ── Per-stage assignments & deadlines (production tasks) ── */
     stages: { type: [StageEntrySchema], default: [] },
+
+    /* ── Human-readable task ID (brand-wise serial: CO001, TO002, …) ── */
+    taskId: { type: String, default: "" },
   },
   { timestamps: true }
 );
@@ -131,6 +134,7 @@ TaskSchema.index({ dueDate: 1 });
 TaskSchema.index({ status: 1, priority: 1 });
 TaskSchema.index({ brandId: 1, stage: 1 });
 TaskSchema.index({ brandId: 1, contentType: 1, createdAt: -1 });
+TaskSchema.index({ taskId: 1 }, { unique: true, sparse: true });
 
 /* Clear cached model so schema changes take effect on hot reload */
 delete mongoose.models["Task"];

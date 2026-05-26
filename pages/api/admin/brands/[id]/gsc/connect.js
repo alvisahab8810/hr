@@ -8,10 +8,15 @@ export default function handler(req, res) {
   }
 
   const { id } = req.query;
-  const clientId   = process.env.GOOGLE_OAUTH_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 
-  if (!clientId || !redirectUri) {
+  // Derive base URL: explicit env var → NEXTAUTH_URL → request host
+  const baseUrl   = process.env.NEXTAUTH_URL ||
+    `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}`;
+  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+    `${baseUrl}/api/auth/google/callback`;
+
+  if (!clientId) {
     return res.status(500).json({ success: false, message: "Google OAuth not configured in .env.local" });
   }
 

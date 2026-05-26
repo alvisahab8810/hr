@@ -508,14 +508,6 @@ export default function Leftbar({ role = "admin" }) {
       biIcon: "bi-building",
       match: ["/dashboard/admin/clients"],
     },
-    {
-      type: "link",
-      href: "/dashboard/admin/tasks/instagram",
-      label: "Instagram Connect",
-      icon: "overtime",
-      biIcon: "bi-instagram",
-      match: ["/dashboard/admin/tasks/instagram"],
-    },
   ];
 
   const { data: session } = useSession();
@@ -676,18 +668,6 @@ export default function Leftbar({ role = "admin" }) {
             </a>
           </li>
 
-          {/* ── Offers & Announcements ── */}
-          <li style={{ listStyle: "none" }} className={pathname === "/dashboard/admin/offers" ? "active" : ""}>
-            <a href="/dashboard/admin/offers" className="waves-effect waves-block"
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}>
-              <i className="bi bi-megaphone-fill" style={{
-                fontSize: 17, width: 20, textAlign: "center", flexShrink: 0,
-                color: pathname === "/dashboard/admin/offers" ? "#818CF8" : "rgba(0,0,0,0.5)",
-              }} />
-              <span style={{ flex: 1 }}>Offers</span>
-            </a>
-          </li>
-
           {/* ── Task Management System ── */}
           <li id="task-management-area" className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
             <a
@@ -742,6 +722,16 @@ export default function Leftbar({ role = "admin" }) {
               <li className={pathname === "/dashboard/admin/tasks/weekly" ? "active" : ""}>
                 <Link href="/dashboard/admin/tasks/weekly">
                   <i className="bi bi-clock-history" style={{ marginRight: 6, fontSize: 12 }} />Weekly Tracker
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/instagram" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/instagram">
+                  <i className="bi bi-instagram" style={{ marginRight: 6, fontSize: 12 }} />Instagram Connect
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/offers" ? "active" : ""}>
+                <Link href="/dashboard/admin/offers">
+                  <i className="bi bi-megaphone-fill" style={{ marginRight: 6, fontSize: 12 }} />Offers
                 </Link>
               </li>
 

@@ -145,6 +145,18 @@ export default async function handler(req, res) {
 
       if (!taskType) return res.status(400).json({ success: false, message: "taskType is required" });
 
+      /* ── Generate brand-wise serial task ID (e.g. CO001, TO002) ── */
+      let taskId = "";
+      if (brandId) {
+        const brand = await Brand.findById(brandId).select("name").lean();
+        const prefix = (brand?.name || "XX").replace(/\s+/g, "").slice(0, 2).toUpperCase();
+        const brandCount = await Task.countDocuments({ brandId });
+        taskId = `${prefix}${String(brandCount + 1).padStart(3, "0")}`;
+      } else {
+        const totalCount = await Task.countDocuments({ brandId: null });
+        taskId = `T${String(totalCount + 1).padStart(4, "0")}`;
+      }
+
       /* ── Auto-generate nomenclature for production tasks ── */
       let nomenclature = "";
       if (taskType === "production" && brandId && contentType) {
@@ -192,6 +204,7 @@ export default async function handler(req, res) {
         seoCategory:   seoCategory   || "",
         stage:         stage         || (taskType === "production" ? "S1" : ""),
         nomenclature,
+        taskId,
         stages:        stagesArr.map(s => ({
           name:       s.name     || "",
           assignedTo: Array.isArray(s.assignedTo) ? s.assignedTo.filter(Boolean) : (s.assignedTo ? [s.assignedTo] : []),
