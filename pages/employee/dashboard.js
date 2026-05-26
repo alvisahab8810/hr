@@ -36,6 +36,57 @@ function calcCompletion(emp) {
 const getInitials = (f, l) =>
   `${f?.[0] || ""}${l?.[0] || ""}`.toUpperCase() || "?";
 
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const fmtMoney = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
+function getGrade(present, elapsed) {
+  if (!elapsed || elapsed === 0) return { letter:"—", pct:0, color:"#9CA3AF", bg:"#F3F4F6", label:"No data yet" };
+  const pct = Math.round((present / elapsed) * 100);
+  if (pct >= 95) return { letter:"A", pct, color:"#15803D", bg:"#DCFCE7", label:"Excellent" };
+  if (pct >= 85) return { letter:"B", pct, color:"#1D4ED8", bg:"#DBEAFE", label:"Good" };
+  if (pct >= 75) return { letter:"C", pct, color:"#D97706", bg:"#FEF3C7", label:"Average" };
+  return { letter:"D", pct, color:"#DC2626", bg:"#FEE2E2", label:"Needs Improvement" };
+}
+
+function calcTaskGrade(tasks) {
+  const comp   = tasks.filter(t => t.status === "completed");
+  const onTime = comp.filter(t => !t.dueDate || !isTaskDuePast(t.dueDate)).length;
+  const rate   = comp.length ? Math.round(onTime / comp.length * 100) : 0;
+  const letter = rate >= 90 ? "A" : rate >= 80 ? "A−" : rate >= 70 ? "B+" : rate >= 60 ? "B" : rate >= 50 ? "C" : "D";
+  const color  = rate >= 80 ? "#22C55E" : rate >= 60 ? "#F5A623" : "#EF4444";
+  const bg     = rate >= 80 ? "#DCFCE7" : rate >= 60 ? "#FEF3C7" : "#FEE2E2";
+  return { rate, letter, color, bg, total: comp.length };
+}
+function isTaskDuePast(d) {
+  const n = new Date(); n.setHours(0,0,0,0);
+  const x = new Date(d); x.setHours(0,0,0,0);
+  return x < n;
+}
+function isTaskDueToday(d) {
+  if (!d) return false;
+  const n = new Date(); n.setHours(0,0,0,0);
+  const x = new Date(d); x.setHours(0,0,0,0);
+  return x.getTime() === n.getTime();
+}
+function taskDeadlineText(d) {
+  if (!d) return null;
+  const n = new Date(); n.setHours(0,0,0,0);
+  const x = new Date(d); x.setHours(0,0,0,0);
+  const diff = Math.round((x - n) / 86400000);
+  if (diff < 0)  return { text:`${-diff}d overdue`, color:"#EF4444" };
+  if (diff === 0) return { text:"Due today",        color:"#F59E0B" };
+  if (diff === 1) return { text:"Due tomorrow",     color:"#6B7280" };
+  return { text: new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"}), color:"#9CA3AF" };
+}
+const TASK_ST = {
+  todo:        { label:"To Do",       bg:"#F3F4F6", color:"#374151" },
+  in_progress: { label:"In Progress", bg:"#EEF2FF", color:"#4F46E5" },
+  review:      { label:"In Review",   bg:"#FEF3C7", color:"#B45309" },
+  completed:   { label:"Done",        bg:"#DCFCE7", color:"#15803D" },
+  blocked:     { label:"Blocked",     bg:"#FEE2E2", color:"#DC2626" },
+};
+const PRIO_DOT = { low:"#9CA3AF", medium:"#3B82F6", high:"#F97316", urgent:"#EF4444" };
+
 export default function EmployeeDashboard() {
   const [employee,           setEmployee]           = useState(null);
   const [holidays,           setHolidays]           = useState([]);
@@ -46,6 +97,12 @@ export default function EmployeeDashboard() {
   const [triggeredToday,     setTriggeredToday]     = useState(false);
   const [employeeStatus,     setEmployeeStatus]     = useState({});
   const [summary,            setSummary]            = useState({ total:0, checkedIn:0, yetToCheckIn:0, leaveTaken:0 });
+  const [liveReport,         setLiveReport]         = useState(null);
+  const [loadingLive,        setLoadingLive]        = useState(true);
+  const [leaveBalance,       setLeaveBalance]       = useState(null);
+  const [showSalary,         setShowSalary]         = useState(false);
+  const [tasks,              setTasks]              = useState([]);
+  const [loadingTasks,       setLoadingTasks]       = useState(true);
 
   // ── Employee ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -108,6 +165,27 @@ export default function EmployeeDashboard() {
     tick();
     const id = setInterval(tick, 60000);
     return () => clearInterval(id);
+  }, []);
+
+  // ── Live salary + leave balance ───────────────────────────────────────────
+  useEffect(() => {
+    const now   = new Date();
+    const token = localStorage.getItem("employeeToken");
+    const hdr   = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch(`/api/employee/my-salary-live?month=${now.getMonth()}&year=${now.getFullYear()}`, { headers:hdr, credentials:"include" })
+      .then(r => r.json())
+      .then(d => { if (d.success) setLiveReport(d.report); })
+      .catch(console.error)
+      .finally(() => setLoadingLive(false));
+    fetch("/api/employee/leave/balance", { headers:hdr, credentials:"include" })
+      .then(r => r.json())
+      .then(d => { if (d.success) setLeaveBalance(d.balance); })
+      .catch(console.error);
+    fetch("/api/employee/tasks", { headers:hdr, credentials:"include" })
+      .then(r => r.json())
+      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .catch(console.error)
+      .finally(() => setLoadingTasks(false));
   }, []);
 
   // ── Lunch reminder (backup — primary auto-start is in TimeTracker) ──────────
@@ -252,17 +330,24 @@ export default function EmployeeDashboard() {
           .ed-announce-date  { font-size:11px; color:#9CA3AF; }
           .ed-high-badge { background:#FEE2E2; color:#DC2626; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; }
 
-          /* Quick links */
-          .ed-quick-links { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-          @media(max-width:400px){ .ed-quick-links{ grid-template-columns:repeat(2,1fr); } }
-          .ed-quick-link {
-            display:flex; flex-direction:column; align-items:center; justify-content:center;
-            padding:14px 8px; border-radius:12px; border:1.5px solid #F0F0F0;
-            text-decoration:none; gap:6px; transition:all .15s; background:#fff;
+          /* Summary stats grid */
+          .ed-summary-grid {
+            display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;
           }
-          .ed-quick-link:hover { border-color:#4F46E5; background:#EEF2FF; }
-          .ed-quick-link i { font-size:20px; color:#4F46E5; }
-          .ed-quick-link span { font-size:11px; font-weight:600; color:#374151; text-align:center; }
+          @media(max-width:1200px){ .ed-summary-grid{ grid-template-columns:repeat(3,1fr); } }
+          @media(max-width:600px){  .ed-summary-grid{ grid-template-columns:repeat(2,1fr); } }
+
+          /* Main content grid */
+          .ed-main-grid { display:grid; grid-template-columns:1fr 360px; gap:20px; }
+          @media(max-width:1100px){ .ed-main-grid{ grid-template-columns:1fr; } }
+
+          /* Stat card skeleton */
+          .ed-skeleton { background:#F3F4F6; border-radius:8px; animation:pulse 1.5s ease-in-out infinite; }
+          @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+          /* Today checklist row */
+          .ed-task-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #F5F5F5; }
+          .ed-task-row:last-child { border-bottom:none; }
 
           /* Profile incomplete nudge */
           .ed-nudge {
@@ -395,114 +480,426 @@ export default function EmployeeDashboard() {
               ))}
             </div> */}
 
-            {/* ── Quick links ── */}
-            <div className="ed-card" style={{ marginBottom:20 }}>
-              <div className="ed-card-header">
-                <h5><i className="bi bi-grid-3x3-gap me-2" style={{ color:"#4F46E5" }}></i>Quick Access</h5>
-              </div>
-              <div className="ed-card-body">
-                <div className="ed-quick-links">
-                  {[
-                    { href:"/employee/attendance-summary", icon:"bi-calendar3",        label:"Attendance"     },
-                    { href:"/employee/leaves-management",  icon:"bi-calendar-minus",    label:"Leaves"         },
-                    { href:"/employee/reimbursement",      icon:"bi-receipt",           label:"Reimbursement"  },
-                    { href:"/employee/overtime",           icon:"bi-clock-history",     label:"Overtime"       },
-                    { href:"/employee/profile",            icon:"bi-person-circle",     label:"My Profile"     },
-                    { href:"/employee/complete-profile",   icon:"bi-folder2-open",      label:"Documents"      },
-                  ].map((l) => (
-                    <Link key={l.href} href={l.href} className="ed-quick-link">
-                      <i className={`bi ${l.icon}`}></i>
-                      <span>{l.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+            {/* ══════════════════════════════════════
+                5 SUMMARY STAT CARDS
+            ══════════════════════════════════════ */}
+            <div className="ed-summary-grid">
+              {loadingLive
+                ? Array.from({length:5}).map((_,i) => (
+                    <div key={i} style={{ background:"#fff", border:"1px solid #F0F0F0", borderRadius:14, padding:"16px 18px" }}>
+                      <div className="ed-skeleton" style={{ width:40, height:40, borderRadius:12, marginBottom:10 }} />
+                      <div className="ed-skeleton" style={{ width:"55%", height:18, borderRadius:6, marginBottom:6 }} />
+                      <div className="ed-skeleton" style={{ width:"70%", height:12, borderRadius:4 }} />
+                    </div>
+                  ))
+                : [
+                    { label:"Present Days",    val: liveReport?.presentDays  ?? "—",
+                      sub:`of ${liveReport?.elapsedWorkingDays || "—"} elapsed days`,
+                      icon:"bi-check-circle-fill", bg:"#DCFCE7", color:"#15803D", border:"#BBF7D0" },
+                    { label:"Absent Days",     val: liveReport?.absentDays   ?? "—",
+                      sub:(liveReport?.absentDays||0) > 0 ? "Salary deducted" : "No absences",
+                      icon:"bi-x-circle-fill",    bg:"#FEE2E2", color:"#DC2626", border:"#FECACA" },
+                    { label:"Late Arrivals",   val: liveReport?.lateCount ?? "—",
+                      sub:(liveReport?.lateCount||0) > 0 ? `₹${fmtMoney(liveReport?.deductions?.late)} deducted` : "No late arrivals",
+                      icon:"bi-alarm-fill",      bg:"#FEF9C3", color:"#B45309", border:"#FDE68A" },
+                    { label:"Deductions",      val:`₹${fmtMoney(liveReport?.deductions?.total)}`,
+                      sub:"This month so far",
+                      icon:"bi-dash-circle-fill", bg:"#FFF1F2", color:"#E11D48", border:"#FECDD3" },
+                ].map((s, i) => (
+                    <div key={i} style={{ background:"#fff", border:`1.5px solid ${s.border}`, borderRadius:14, padding:"16px 18px" }}>
+                      <div style={{ width:42, height:42, borderRadius:12, background:s.bg, color:s.color,
+                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, marginBottom:12, flexShrink:0 }}>
+                        <i className={`bi ${s.icon}`} />
+                      </div>
+                      <div style={{ fontSize:22, fontWeight:800, color:"#111827", lineHeight:1 }}>{s.val}</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#374151", marginTop:5 }}>{s.label}</div>
+                      <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>{s.sub}</div>
+                    </div>
+                  )).concat(
+                    /* Net Salary card — hidden by default, eye icon to reveal */
+                    <div key="net" style={{ background:"#fff", border:"1.5px solid #C7D2FE", borderRadius:14, padding:"16px 18px" }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                        <div style={{ width:42, height:42, borderRadius:12, background:"#EEF2FF", color:"#4F46E5",
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>
+                          <i className="bi bi-wallet2" />
+                        </div>
+                        <button onClick={() => setShowSalary(v => !v)}
+                          style={{ border:"none", background:"none", cursor:"pointer", color:"#9CA3AF", fontSize:16, padding:4, lineHeight:1 }}>
+                          <i className={`bi bi-eye${showSalary ? "-slash" : ""}`} />
+                        </button>
+                      </div>
+                      <div style={{ fontSize:22, fontWeight:800, color:"#111827", lineHeight:1, letterSpacing: showSalary ? 0 : 2 }}>
+                        {showSalary ? `₹${fmtMoney(liveReport?.netPay)}` : "₹ ••••••"}
+                      </div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#374151", marginTop:5 }}>Net Salary</div>
+                      <div style={{ fontSize:11, color:"#9CA3AF", marginTop:2 }}>Estimated this month</div>
+                    </div>
+                  )
+              }
             </div>
 
-            {/* ── Main grid: Holidays + Announcements ── */}
-            <div className="ed-grid">
-              {/* Holidays */}
-              <div className="ed-card">
-                <div className="ed-card-header">
-                  <h5>
-                    <i className="bi bi-calendar-heart me-2" style={{ color:"#4F46E5" }}></i>
-                    Upcoming Holidays {new Date().getFullYear()}
-                  </h5>
-                  <span style={{ background:"#EEF2FF", color:"#4F46E5", borderRadius:20, padding:"2px 12px", fontSize:12, fontWeight:700 }}>
-                    {holidays.length}
-                  </span>
-                </div>
-                <div className="ed-card-body">
-                  {loadingHolidays ? (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
-                      <div className="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
-                      <div style={{ fontSize:12 }}>Loading…</div>
-                    </div>
-                  ) : holidays.length === 0 ? (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
-                      <i className="bi bi-calendar-x" style={{ fontSize:32, display:"block", marginBottom:8 }}></i>
-                      No Upcoming Holidays
-                    </div>
-                  ) : (
-                    holidays.slice(0, 6).map((h, i) => {
-                      const st      = holidayStatus(h);
-                      const isToday = st === "today";
-                      const isMulti = h.totalDays > 1;
-                      return (
-                        <div key={i} className={`ed-holiday-item ${isToday ? "today-item" : ""}`}>
-                          <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:0 }}>
-                            {isMulti && (
-                              <span className="ed-holiday-tag" style={{ background:isToday?"#DBEAFE":"#EEF2FF", color:isToday?"#1D4ED8":"#4F46E5" }}>
-                                {h.totalDays}d
+            {/* ══════════════════════════════════════
+                MAIN 2-COLUMN GRID
+            ══════════════════════════════════════ */}
+            <div className="ed-main-grid">
+
+              {/* ── LEFT COLUMN ── */}
+              <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+
+                {/* Monthly Attendance Summary */}
+                <div className="ed-card">
+                  <div className="ed-card-header">
+                    <h5>
+                      <i className="bi bi-bar-chart-line me-2" style={{ color:"#4F46E5" }}></i>
+                      Monthly Attendance — {MONTHS[new Date().getMonth()]} {new Date().getFullYear()}
+                    </h5>
+                    {liveReport?.isPartialMonth && (
+                      <span style={{ background:"#EFF6FF", color:"#1E40AF", padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700 }}>
+                        Partial Month
+                      </span>
+                    )}
+                  </div>
+                  <div className="ed-card-body">
+                    {liveReport ? (
+                      <>
+                        {/* Attendance progress bars */}
+                        {[
+                          { label:"Present", val:liveReport.presentDays, max:liveReport.elapsedWorkingDays, unit:"days",     color:"#22C55E" },
+                          { label:"Absent",  val:liveReport.absentDays,  max:liveReport.elapsedWorkingDays, unit:"days",     color:"#EF4444" },
+                          { label:"Late",    val:liveReport.lateCount,   max:Math.max(liveReport.elapsedWorkingDays,1), unit:"arrivals", color:"#F59E0B" },
+                        ].map(bar => (
+                          <div key={bar.label} style={{ marginBottom:16 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                              <span style={{ fontSize:12, fontWeight:600, color:"#374151" }}>{bar.label}</span>
+                              <span style={{ fontSize:13, fontWeight:800, color:"#111827" }}>
+                                {bar.val} {bar.unit}
                               </span>
-                            )}
-                            <div style={{ minWidth:0 }}>
-                              <div className="ed-holiday-name">{h.name}</div>
-                              {h.description && <div className="ed-holiday-desc">{h.description}</div>}
+                            </div>
+                            <div style={{ height:8, borderRadius:10, background:"#F3F4F6", overflow:"hidden" }}>
+                              <div style={{
+                                height:"100%", borderRadius:10, background:bar.color,
+                                width:`${bar.max ? Math.min((bar.val/bar.max)*100, 100) : 0}%`,
+                                transition:"width .7s ease"
+                              }} />
                             </div>
                           </div>
-                          <span className={`ed-holiday-date ${isToday ? "today-badge" : ""}`}>
-                            {isMulti
-                              ? `${fmtShort(h.startDate)} – ${fmtShort(h.endDate)}`
-                              : fmtShort(h.startDate)}
-                          </span>
+                        ))}
+
+                        {/* Deduction breakdown */}
+                        <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #F3F4F6" }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:"#6B7280", textTransform:"uppercase", letterSpacing:".05em", marginBottom:12 }}>
+                            Deduction Breakdown
+                          </div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+                            {[
+                              { label:"Absent",       val:liveReport.deductions?.absent      || 0, color:"#DC2626" },
+                              { label:"Late",         val:liveReport.deductions?.late        || 0, color:"#D97706" },
+                              { label:"Unpaid Leave", val:liveReport.deductions?.unpaidLeave || 0, color:"#7C3AED" },
+                              { label:"Half Day",     val:liveReport.deductions?.halfDay     || 0, color:"#1D4ED8" },
+                              { label:"Lunch",        val:liveReport.deductions?.lunch       || 0, color:"#A21CAF" },
+                              { label:"Total",        val:liveReport.deductions?.total       || 0, color:"#E11D48", bold:true },
+                            ].map(d => (
+                              <div key={d.label} style={{ background: d.bold ? "#FFF1F2" : "#F9FAFB", borderRadius:10, padding:"10px 12px",
+                                border: d.bold ? "1px solid #FECDD3" : "none" }}>
+                                <div style={{ fontSize:14, fontWeight:d.bold?800:700, color:d.val>0?d.color:"#9CA3AF" }}>
+                                  ₹{fmtMoney(d.val)}
+                                </div>
+                                <div style={{ fontSize:10, color:"#9CA3AF", marginTop:2 }}>{d.label}</div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      );
-                    })
-                  )}
+                      </>
+                    ) : (
+                      <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
+                        <div className="spinner-border spinner-border-sm text-primary mb-2" role="status" />
+                        <div style={{ fontSize:12 }}>Loading attendance data…</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Grade + Leave Balance — 2-col row */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+
+                  {/* Work Performance Grade */}
+                  <div className="ed-card">
+                    <div className="ed-card-header">
+                      <h5><i className="bi bi-graph-up me-2" style={{ color:"#7C3AED" }}></i>Work Performance</h5>
+                    </div>
+                    <div className="ed-card-body" style={{ textAlign:"center" }}>
+                      {loadingTasks ? (
+                        <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                      ) : (() => {
+                        const g = calcTaskGrade(tasks);
+                        return (
+                          <>
+                            <div style={{
+                              width:76, height:76, borderRadius:"50%",
+                              background:g.bg, border:`3px solid ${g.color}`,
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              margin:"0 auto 12px", fontSize:32, fontWeight:900, color:g.color,
+                            }}>
+                              {g.letter}
+                            </div>
+                            <div style={{ fontSize:15, fontWeight:800, color:"#111827" }}>
+                              {g.rate >= 80 ? "On Track" : g.rate >= 60 ? "Needs Attention" : tasks.length === 0 ? "No Tasks Yet" : "Behind Schedule"}
+                            </div>
+                            <div style={{ fontSize:12, color:"#9CA3AF", marginTop:3 }}>
+                              {g.total > 0 ? `${g.rate}% on-time · ${g.total} completed` : "No completed tasks yet"}
+                            </div>
+                            {/* Mini stat row */}
+                            <div style={{ display:"flex", gap:0, marginTop:14, borderRadius:10, overflow:"hidden", border:"1px solid #F0F0F0" }}>
+                              {[
+                                { val: tasks.filter(t=>t.status==="todo").length,        label:"To Do",  color:"#6B7280", bg:"#F9FAFB" },
+                                { val: tasks.filter(t=>t.status==="in_progress").length, label:"Active", color:"#4F46E5", bg:"#EEF2FF" },
+                                { val: tasks.filter(t=>t.status==="completed").length,   label:"Done",   color:"#15803D", bg:"#DCFCE7" },
+                              ].map((s,i) => (
+                                <div key={i} style={{ flex:1, textAlign:"center", padding:"8px 4px", background:s.bg }}>
+                                  <div style={{ fontSize:16, fontWeight:800, color:s.color }}>{s.val}</div>
+                                  <div style={{ fontSize:10, color:s.color, opacity:.8 }}>{s.label}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ marginTop:10, padding:"7px 10px", borderRadius:8, background:"#F9FAFB", fontSize:11, color:"#6B7280", lineHeight:1.5 }}>
+                              {g.letter==="A" || g.letter==="A−" ? "Excellent! Submitting tasks on time." :
+                               g.letter==="B+" || g.letter==="B" ? "Good work! Aim to submit before deadlines." :
+                               tasks.length === 0 ? "No tasks assigned yet." :
+                               "Focus on completing overdue tasks to improve."}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Leave Balance */}
+                  <div className="ed-card">
+                    <div className="ed-card-header">
+                      <h5><i className="bi bi-calendar2-check me-2" style={{ color:"#059669" }}></i>Leave Balance</h5>
+                    </div>
+                    <div className="ed-card-body">
+                      {leaveBalance ? (
+                        [
+                          { label:"Sick",   used:leaveBalance.sick?.used||0,   total:leaveBalance.sick?.total||6,   color:"#F59E0B" },
+                          { label:"Casual", used:leaveBalance.casual?.used||0, total:leaveBalance.casual?.total||6, color:"#6366F1" },
+                        ].map(lb => (
+                          <div key={lb.label} style={{ marginBottom:16 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                              <span style={{ fontSize:12, fontWeight:600, color:"#374151" }}>{lb.label}</span>
+                              <span style={{ fontSize:11, color:"#9CA3AF" }}>
+                                {lb.total - lb.used} left / {lb.total}
+                              </span>
+                            </div>
+                            <div style={{ height:6, borderRadius:10, background:"#F3F4F6", overflow:"hidden" }}>
+                              <div style={{
+                                height:"100%", borderRadius:10, background:lb.color,
+                                width:`${lb.total ? Math.min((lb.used/lb.total)*100,100) : 0}%`,
+                                transition:"width .7s"
+                              }} />
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                      )}
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
-              {/* Announcements */}
-              <div className="ed-card">
-                <div className="ed-card-header">
-                  <h5><i className="bi bi-megaphone me-2" style={{ color:"#4F46E5" }}></i>Announcements</h5>
-                </div>
-                <div className="ed-card-body">
-                  {loadingAnnounce ? (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
-                      <div className="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
-                    </div>
-                  ) : announcements.length === 0 ? (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9CA3AF" }}>
-                      <i className="bi bi-megaphone" style={{ fontSize:32, display:"block", marginBottom:8 }}></i>
-                      No announcements
-                    </div>
-                  ) : (
-                    announcements.map((a) => (
-                      <div key={a._id} className="ed-announce-item">
-                        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8, marginBottom:4 }}>
-                          <div className="ed-announce-title">{a.title}</div>
-                          {a.priority === "high" && <span className="ed-high-badge">High</span>}
-                        </div>
-                        <div className="ed-announce-msg">{a.message}</div>
-                        <div className="ed-announce-date">
-                          {new Date(a.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
-                        </div>
+              {/* ── RIGHT COLUMN ── */}
+              <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+
+                {/* Today's Tasks */}
+                <div className="ed-card">
+                  <div className="ed-card-header">
+                    <h5><i className="bi bi-clipboard2-check me-2" style={{ color:"#4F46E5" }}></i>Today's Tasks</h5>
+                    <Link href="/employee/tasks" style={{ fontSize:11, color:"#4F46E5", fontWeight:700, textDecoration:"none" }}>
+                      View All →
+                    </Link>
+                  </div>
+                  <div className="ed-card-body" style={{ padding:"14px 18px" }}>
+                    {loadingTasks ? (
+                      <div style={{ textAlign:"center", padding:"16px 0" }}>
+                        <div className="spinner-border spinner-border-sm text-primary" role="status" />
                       </div>
-                    ))
-                  )}
+                    ) : (() => {
+                      const todayTasks   = tasks.filter(t => isTaskDueToday(t.dueDate) && t.status !== "completed");
+                      const inProgress   = tasks.filter(t => t.status === "in_progress" && !isTaskDueToday(t.dueDate));
+                      const overdueTasks = tasks.filter(t => t.dueDate && isTaskDuePast(t.dueDate) && t.status !== "completed");
+                      const showTasks    = [...todayTasks, ...inProgress].slice(0, 5);
+
+                      if (tasks.length === 0) return (
+                        <div style={{ textAlign:"center", padding:"20px 0", color:"#9CA3AF" }}>
+                          <i className="bi bi-clipboard2" style={{ fontSize:32, display:"block", marginBottom:8 }} />
+                          <div style={{ fontSize:13, fontWeight:600 }}>No tasks assigned yet</div>
+                        </div>
+                      );
+
+                      return (
+                        <>
+                          {/* Overdue warning */}
+                          {overdueTasks.length > 0 && (
+                            <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:9,
+                              padding:"9px 12px", marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
+                              <i className="bi bi-exclamation-triangle-fill" style={{ color:"#EF4444", fontSize:14, flexShrink:0 }} />
+                              <span style={{ fontSize:12, color:"#B91C1C", fontWeight:600 }}>
+                                {overdueTasks.length} overdue task{overdueTasks.length > 1 ? "s" : ""} — submit now
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Task list */}
+                          {showTasks.length === 0 ? (
+                            <div style={{ textAlign:"center", padding:"10px 0", color:"#9CA3AF", fontSize:12 }}>
+                              No tasks due today
+                            </div>
+                          ) : showTasks.map((t) => {
+                            const st = TASK_ST[t.status] || TASK_ST.todo;
+                            const dl = t.dueDate ? taskDeadlineText(t.dueDate) : null;
+                            return (
+                              <div key={t._id} style={{ padding:"9px 0", borderBottom:"1px solid #F5F5F5" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                  <span style={{ width:7, height:7, borderRadius:"50%", background:PRIO_DOT[t.priority]||"#9CA3AF", flexShrink:0 }} />
+                                  <span style={{ fontSize:12, fontWeight:600, color:"#111827", flex:1, lineHeight:1.3 }}>
+                                    {t.title}
+                                  </span>
+                                  <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:6,
+                                    background:st.bg, color:st.color, flexShrink:0, whiteSpace:"nowrap" }}>
+                                    {st.label}
+                                  </span>
+                                </div>
+                                {(t.brandId || dl) && (
+                                  <div style={{ display:"flex", gap:10, paddingLeft:15, marginTop:3 }}>
+                                    {t.brandId?.name && (
+                                      <span style={{ fontSize:10, color:"#6B7280" }}>{t.brandId.name}</span>
+                                    )}
+                                    {dl && (
+                                      <span style={{ fontSize:10, color:dl.color, fontWeight:600 }}>{dl.text}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {/* Summary counts */}
+                          <div style={{ display:"flex", gap:0, marginTop:14, borderRadius:10, overflow:"hidden", border:"1px solid #F0F0F0" }}>
+                            {[
+                              { val:tasks.filter(t=>t.status==="todo").length,        label:"To Do",  color:"#6B7280", bg:"#F9FAFB" },
+                              { val:tasks.filter(t=>t.status==="in_progress").length, label:"Active", color:"#4F46E5", bg:"#EEF2FF" },
+                              { val:tasks.filter(t=>t.status==="review").length,      label:"Review", color:"#B45309", bg:"#FEF3C7" },
+                              { val:tasks.filter(t=>t.status==="completed").length,   label:"Done",   color:"#15803D", bg:"#DCFCE7" },
+                            ].map((s,i) => (
+                              <div key={i} style={{ flex:1, textAlign:"center", padding:"8px 4px", background:s.bg }}>
+                                <div style={{ fontSize:15, fontWeight:800, color:s.color }}>{s.val}</div>
+                                <div style={{ fontSize:9, color:s.color, opacity:.8, fontWeight:600 }}>{s.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {/* Quick links */}
+                    <div style={{ marginTop:14, display:"flex", gap:8, flexWrap:"wrap" }}>
+                      {[
+                        { href:"/employee/tasks",             icon:"bi-kanban",         label:"My Tasks",    bg:"#EEF2FF", color:"#4F46E5" },
+                        { href:"/employee/leaves-management", icon:"bi-calendar-plus",  label:"Apply Leave", bg:"#ECFDF5", color:"#059669" },
+                        { href:"/employee/deduction-waiver",  icon:"bi-shield-check",   label:"Deductions",  bg:"#FFF1F2", color:"#E11D48" },
+                      ].map(a => (
+                        <Link key={a.href} href={a.href} style={{
+                          display:"inline-flex", alignItems:"center", gap:5,
+                          fontSize:11, fontWeight:700, background:a.bg, color:a.color,
+                          padding:"6px 12px", borderRadius:8, textDecoration:"none",
+                        }}>
+                          <i className={`bi ${a.icon}`} /> {a.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Upcoming Holidays */}
+                <div className="ed-card">
+                  <div className="ed-card-header">
+                    <h5>
+                      <i className="bi bi-calendar-heart me-2" style={{ color:"#4F46E5" }}></i>
+                      Upcoming Holidays
+                    </h5>
+                    <span style={{ background:"#EEF2FF", color:"#4F46E5", borderRadius:20, padding:"2px 12px", fontSize:12, fontWeight:700 }}>
+                      {holidays.length}
+                    </span>
+                  </div>
+                  <div className="ed-card-body">
+                    {loadingHolidays ? (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"#9CA3AF" }}>
+                        <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                      </div>
+                    ) : holidays.length === 0 ? (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"#9CA3AF" }}>
+                        <i className="bi bi-calendar-x" style={{ fontSize:28, display:"block", marginBottom:6 }}></i>
+                        No Upcoming Holidays
+                      </div>
+                    ) : (
+                      holidays.slice(0, 4).map((h, i) => {
+                        const st = holidayStatus(h);
+                        const isToday = st === "today";
+                        const isMulti = h.totalDays > 1;
+                        return (
+                          <div key={i} className={`ed-holiday-item ${isToday?"today-item":""}`}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:0 }}>
+                              {isMulti && (
+                                <span className="ed-holiday-tag" style={{ background:isToday?"#DBEAFE":"#EEF2FF", color:isToday?"#1D4ED8":"#4F46E5" }}>
+                                  {h.totalDays}d
+                                </span>
+                              )}
+                              <div className="ed-holiday-name">{h.name}</div>
+                            </div>
+                            <span className={`ed-holiday-date ${isToday?"today-badge":""}`}>
+                              {isMulti ? `${fmtShort(h.startDate)} – ${fmtShort(h.endDate)}` : fmtShort(h.startDate)}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Announcements */}
+                <div className="ed-card">
+                  <div className="ed-card-header">
+                    <h5><i className="bi bi-megaphone me-2" style={{ color:"#4F46E5" }}></i>Announcements</h5>
+                  </div>
+                  <div className="ed-card-body">
+                    {loadingAnnounce ? (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"#9CA3AF" }}>
+                        <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                      </div>
+                    ) : announcements.length === 0 ? (
+                      <div style={{ textAlign:"center", padding:"16px 0", color:"#9CA3AF" }}>
+                        <i className="bi bi-megaphone" style={{ fontSize:28, display:"block", marginBottom:6 }}></i>
+                        No announcements
+                      </div>
+                    ) : (
+                      announcements.slice(0, 3).map((a) => (
+                        <div key={a._id} className="ed-announce-item">
+                          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8, marginBottom:4 }}>
+                            <div className="ed-announce-title">{a.title}</div>
+                            {a.priority === "high" && <span className="ed-high-badge">High</span>}
+                          </div>
+                          <div className="ed-announce-msg">{a.message}</div>
+                          <div className="ed-announce-date">
+                            {new Date(a.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
 

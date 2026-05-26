@@ -4,7 +4,7 @@ import Dashnav from "@/components/Dashnav";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Head from "next/head";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -46,8 +46,17 @@ export default function SalaryReport() {
   const [search,     setSearch]     = useState("");
   const [expandedId, setExpandedId] = useState(null);
 
-  const fetchSalaries = async () => {
+  const autoRefresh = useCallback(async () => {
     setLoading(true);
+    setGenerating(true);
+    try {
+      await fetch("/api/admin/salary/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, year }),
+      });
+    } catch {}
+    setGenerating(false);
     try {
       const res  = await fetch(`/api/admin/salary/list?month=${month}&year=${year}`);
       const data = await res.json();
@@ -55,25 +64,11 @@ export default function SalaryReport() {
       else toast.error("Failed to load salary data");
     } catch { toast.error("Network error"); }
     finally { setLoading(false); }
-  };
+  }, [month, year]);
 
-  useEffect(() => { fetchSalaries(); }, [month, year]);
+  useEffect(() => { autoRefresh(); }, [autoRefresh]);
 
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      const res  = await fetch("/api/admin/salary/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month, year }),
-      });
-      const data = await res.json();
-      if (!data.success) { toast.error("Salary generation failed"); return; }
-      await fetchSalaries();
-      toast.success(`Salary generated for ${data.count} employees`);
-    } catch { toast.error("Something went wrong"); }
-    finally { setGenerating(false); }
-  };
+  const handleGenerate = () => autoRefresh();
 
   const handleProcess = async (id) => {
     try {
@@ -394,12 +389,13 @@ export default function SalaryReport() {
                     value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
 
-                <div style={{ marginLeft:"auto", display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <button className="sr-btn sr-btn-primary" onClick={handleGenerate} disabled={generating}>
-                    {generating
-                      ? <><div className="spinner-border spinner-border-sm me-1" role="status"></div>Generating…</>
-                      : <><i className="bi bi-lightning-charge-fill"></i>Generate Salary</>}
-                  </button>
+                <div style={{ marginLeft:"auto", display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                  {generating && (
+                    <span style={{ fontSize:12, color:"#6B7280", display:"flex", alignItems:"center", gap:6 }}>
+                      <div className="spinner-border spinner-border-sm" role="status" style={{ color:"#4F46E5" }}></div>
+                      Refreshing…
+                    </span>
+                  )}
                   {pendingCount > 0 && (
                     <button className="sr-btn sr-btn-success" onClick={handleProcessAll}>
                       <i className="bi bi-check2-all"></i>Process All ({pendingCount})
@@ -485,9 +481,6 @@ export default function SalaryReport() {
                           <div className="sr-empty">
                             <div className="sr-empty-icon"><i className="bi bi-receipt"></i></div>
                             <p>No salary records for {MONTHS[month]} {year}</p>
-                            <button className="sr-btn sr-btn-primary" style={{ margin:"0 auto" }} onClick={handleGenerate} disabled={generating}>
-                              <i className="bi bi-lightning-charge-fill"></i> Generate Now
-                            </button>
                           </div>
                         </td>
                       </tr>

@@ -1093,6 +1093,7 @@ ul.import-list li {
 .main-nav .navbar{
     /* background: linear-gradient(90deg, #FF6F61 29%, #FBA065 95%)!important; */
     position: fixed;
+    padding: 4px 17px !important;
     top: 0;
     background-color: #2C2269;
     border-bottom: 1px solid #e5e7eb;

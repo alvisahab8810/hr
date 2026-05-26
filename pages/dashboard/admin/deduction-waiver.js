@@ -48,6 +48,13 @@ export default function AdminDeductionWaiver() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      await fetch("/api/admin/salary/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, year }),
+      });
+    } catch {}
+    try {
       const res  = await fetch(`/api/admin/deduction-waiver/report?month=${month}&year=${year}`, { credentials: "include" });
       const data = await res.json();
       if (data.success) {
@@ -206,7 +213,7 @@ export default function AdminDeductionWaiver() {
                   <div className="dw-empty">
                     <i className="bi bi-file-earmark-x" style={{ fontSize: 48, color: "#D1D5DB" }} />
                     <p style={{ marginTop: 12, fontSize: 15 }}>No salary reports for {MONTHS[month]} {year}</p>
-                    <p style={{ fontSize: 13, color:"#9CA3AF" }}>Generate payroll first to see deduction data.</p>
+                    <p style={{ fontSize: 13, color:"#9CA3AF" }}>No salary data found for this period.</p>
                   </div>
                 ) : filteredReports.map(r => {
                   const name    = empName(r.employee);

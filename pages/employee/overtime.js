@@ -2,7 +2,7 @@
 import { toast } from "react-toastify";
 import Dashnav from "@/components/Dashnav";
 import LeftbarMobile from "@/components/employee/LeftbarMobile";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import EmployeeLeftbar from "@/components/employee/Leftbar";
@@ -25,6 +25,78 @@ function calcDuration(start, end) {
   const h  = Math.floor(diff / 60);
   const mn = diff % 60;
   return { label: h > 0 ? `${h}h ${mn > 0 ? mn + "m" : ""}`.trim() : `${mn}m`, overnight: diff > 12 * 60 || (eh * 60 + em) < (sh * 60 + sm) };
+}
+
+// ── OT Timer ─────────────────────────────────────────────────────────────────
+function getOTWindow(ot) {
+  const d = new Date(ot.date);
+  const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const start = new Date(`${ds}T${ot.startTime}:00`);
+  const end   = new Date(`${ds}T${ot.endTime}:00`);
+  if (end <= start) end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function fmtMs(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sc = s % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sc).padStart(2,"0")}`;
+}
+
+function OTTimer({ ot, compact = false }) {
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const { start, end } = getOTWindow(ot);
+  const totalMs   = end - start;
+  const elapsedMs = now - start;
+  if (now >= end) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6,
+        background:"#DCFCE7", borderRadius:8, padding: compact ? "3px 10px" : "8px 14px",
+        fontSize: compact ? 11 : 13, color:"#15803D", fontWeight:700 }}>
+        <i className="bi bi-check-circle-fill" /> OT Completed
+      </div>
+    );
+  }
+  if (now < start) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6,
+        background:"#FEF9C3", borderRadius:8, padding: compact ? "3px 10px" : "8px 14px",
+        fontSize: compact ? 11 : 13, color:"#92400E", fontWeight:600 }}>
+        <i className="bi bi-clock-fill" /> Starts in {fmtMs(start - now)}
+      </div>
+    );
+  }
+  const pct = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
+  return (
+    <div style={{ background:"#EEF2FF", borderRadius:10,
+      padding: compact ? "4px 10px" : "12px 16px", minWidth: compact ? 0 : 200 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: compact ? 0 : 5 }}>
+        <span style={{ width:8, height:8, borderRadius:"50%", background:"#DC2626", flexShrink:0,
+          display:"inline-block", animation:"otPulse 1s ease-in-out infinite" }} />
+        <span style={{ fontFamily:"monospace", fontSize: compact ? 13 : 22,
+          fontWeight:800, color:"#4F46E5", letterSpacing:1 }}>
+          {fmtMs(elapsedMs)}
+        </span>
+        {!compact && (
+          <span style={{ fontSize:11, color:"#6B7280", marginLeft:"auto" }}>
+            {fmtMs(Math.max(0, end - now))} left
+          </span>
+        )}
+      </div>
+      {!compact && (
+        <div style={{ background:"#C7D2FE", borderRadius:4, height:5, overflow:"hidden" }}>
+          <div style={{ width:`${pct}%`, height:"100%",
+            background:"linear-gradient(90deg,#6366F1,#4F46E5)", borderRadius:4 }} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Custom AM/PM Time Picker ──────────────────────────────────────────────────
@@ -297,6 +369,27 @@ export default function Overtime() {
             padding: 9px 14px; font-size: 13px; color: #4F46E5; font-weight: 600;
           }
           .ot-duration-row i { font-size: 14px; }
+
+          /* Active OT banner */
+          .ot-active-banner {
+            background: linear-gradient(135deg,#4F46E5 0%,#6366F1 100%);
+            border-radius: 16px; padding: 20px 24px; margin-bottom: 24px;
+            display: flex; align-items: center; gap: 20px; color: #fff;
+          }
+          .ot-active-banner-icon {
+            width: 56px; height: 56px; border-radius: 16px;
+            background: rgba(255,255,255,0.15); display: flex;
+            align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+          }
+          .ot-active-banner-info { flex: 1; min-width: 0; }
+          .ot-active-banner-title { font-size: 13px; font-weight: 600; opacity: 0.8; margin-bottom: 2px; }
+          .ot-active-banner-project { font-size: 17px; font-weight: 800; }
+          .ot-active-banner-time { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+
+          @keyframes otPulse {
+            0%,100% { opacity:1; transform:scale(1); }
+            50% { opacity:.4; transform:scale(1.4); }
+          }
         `}</style>
       </Head>
 
@@ -322,6 +415,40 @@ export default function Overtime() {
                 <h2>Overtime</h2>
                 <p>Request overtime approval</p>
               </div>
+
+              {/* ── Active OT Banner ── */}
+              {(() => {
+                const todayStr = new Date().toISOString().split("T")[0];
+                const activeOT = overtimeList.find(ot => {
+                  if (ot.status !== "Approved") return false;
+                  const d = new Date(ot.date);
+                  const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+                  return ds === todayStr;
+                });
+                if (!activeOT) return null;
+                const { start, end } = getOTWindow(activeOT);
+                const now = new Date();
+                const isActive = now >= start && now < end;
+                const isUpcoming = now < start;
+                if (!isActive && !isUpcoming) return null;
+                return (
+                  <div className="ot-active-banner">
+                    <div className="ot-active-banner-icon">
+                      {isActive ? "🔴" : "⏰"}
+                    </div>
+                    <div className="ot-active-banner-info">
+                      <div className="ot-active-banner-title">
+                        {isActive ? "OVERTIME IN PROGRESS" : "OVERTIME SCHEDULED TODAY"}
+                      </div>
+                      <div className="ot-active-banner-project">{activeOT.project}</div>
+                      <div className="ot-active-banner-time">
+                        {fmtTime(activeOT.startTime)} → {fmtTime(activeOT.endTime)} · {activeOT.otType}
+                      </div>
+                    </div>
+                    <OTTimer ot={activeOT} />
+                  </div>
+                );
+              })()}
 
               <div className="reim-section">
                 <div className="reim-section-head">
@@ -371,7 +498,6 @@ export default function Overtime() {
                             <td>{ot.project}</td>
                             <td><span className="tag blue">{ot.otType}</span></td>
                             <td>
-                              {/* ✅ Shows AM/PM in table too */}
                               {fmtTime(ot.startTime)} – {fmtTime(ot.endTime)}
                               {dur?.overnight && (
                                 <span style={{ fontSize: 10, background: "#EEF2FF", color: "#4F46E5", borderRadius: 4, padding: "1px 5px", marginLeft: 4, fontWeight: 700 }}>
@@ -380,6 +506,12 @@ export default function Overtime() {
                               )}
                               <br />
                               <small className="text-muted">{dur?.label || "--"}</small>
+                              {ot.status === "Approved" && (() => {
+                                const otDay = new Date(ot.date).toISOString().split("T")[0];
+                                const todayStr = new Date().toISOString().split("T")[0];
+                                if (otDay !== todayStr) return null;
+                                return <div style={{ marginTop: 6 }}><OTTimer ot={ot} compact /></div>;
+                              })()}
                             </td>
                             <td>
                               {ot.status === "Rejected" ? (
@@ -440,6 +572,7 @@ export default function Overtime() {
                     <div className="reim-form-group">
                       <label>Date *</label>
                       <input type="date" className="reim-input" value={date}
+                        min={new Date().toISOString().split("T")[0]}
                         onChange={(e) => setDate(e.target.value)} required />
                     </div>
                     <div className="reim-form-group">

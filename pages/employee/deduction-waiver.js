@@ -28,15 +28,20 @@ export default function EmployeeDeductionDetail() {
 
   const years = Array.from({ length: 3 }, (_, i) => today.getFullYear() - i);
 
+  const [isLive, setIsLive] = useState(false);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("employeeToken");
+      const token   = localStorage.getItem("employeeToken");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res  = await fetch(`/api/employee/my-salary-report?month=${month}&year=${year}`, { headers, credentials: "include" });
+
+      // Always use the live calculation endpoint — no generate needed
+      const res  = await fetch(`/api/employee/my-salary-live?month=${month}&year=${year}`, { headers, credentials: "include" });
       const data = await res.json();
       if (data.success) {
         setReport(data.report);
+        setIsLive(!!data.isLive);
       } else {
         toast.error("Failed to load salary data");
       }
@@ -148,6 +153,16 @@ export default function EmployeeDeductionDetail() {
                 <select className="dd-select" value={year} onChange={e => setYear(Number(e.target.value))}>
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
+                {isLive && (
+                  <span style={{
+                    marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6,
+                    background: "#DCFCE7", color: "#15803D", fontSize: 11, fontWeight: 700,
+                    padding: "4px 10px", borderRadius: 20, letterSpacing: 0.4,
+                  }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#16a34a", display: "inline-block" }} />
+                    Live
+                  </span>
+                )}
               </div>
 
               {loading ? (
@@ -162,7 +177,7 @@ export default function EmployeeDeductionDetail() {
                     No salary report for {MONTHS[month]} {year}
                   </p>
                   <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>
-                    Payroll hasn't been generated yet. Check back after admin processes it.
+                    No salary data for this period. Your salary may not be configured yet.
                   </p>
                 </div>
               ) : (

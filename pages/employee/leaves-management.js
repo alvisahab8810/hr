@@ -44,6 +44,12 @@ export default function LeaveManagement() {
   }
 
   useEffect(() => {
+    if (leaveType === "Half Day") {
+      setEndDate(startDate);
+      setTotalDays(0.5);
+      return;
+    }
+
     if (!startDate || !endDate) return;
 
     const s = new Date(startDate);
@@ -57,7 +63,7 @@ export default function LeaveManagement() {
     const days = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
 
     setTotalDays(days);
-  }, [startDate, endDate]);
+  }, [startDate, endDate, leaveType]);
 
   async function handleSubmit(status = "Pending") {
     const token = localStorage.getItem("employeeToken");
@@ -204,6 +210,34 @@ export default function LeaveManagement() {
     fetchLeaveHistory();
   }, []);
 
+  // ================================= Delete Draft =================
+
+  async function handleDeleteDraft(leaveId) {
+    const token = localStorage.getItem("employeeToken");
+    try {
+      const res = await fetch("/api/employee/leave/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ leaveId }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success("Draft deleted");
+        setLeaveHistory((prev) => prev.filter((l) => l._id !== leaveId));
+      } else {
+        toast.error(data.message || "Failed to delete draft");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Server error");
+    }
+  }
+
   // ================================= Retract sumbission =================
 
   async function handleRetract() {
@@ -320,6 +354,13 @@ export default function LeaveManagement() {
                               <div>
                                 <div className="vl-leave-name">
                                   {leave.leaveType}
+                                  {leave.status === "Draft" && (
+                                    <span style={{
+                                      marginLeft: 8, fontSize: 11, fontWeight: 600,
+                                      background: "#f3f4f6", color: "#6b7280",
+                                      padding: "2px 8px", borderRadius: 20,
+                                    }}>Draft</span>
+                                  )}
                                 </div>
                                 <div className="vl-leave-date">
                                   {new Date(leave.startDate).toDateString()} –{" "}
@@ -336,18 +377,12 @@ export default function LeaveManagement() {
                               </div>
 
                               <div className="vl-actions">
-                                {/* <div
-                                  className={`vl-badge ${leave.status.toLowerCase()}`}
-                                >
-                                  {leave.status}
-                                </div> */}
-
                                 <div className="vl-status-stack">
-                                  <div
-                                    className={`vl-badge ${leave.status.toLowerCase()}`}
-                                  >
-                                    {leave.status}
-                                  </div>
+                                  {leave.status !== "Draft" && (
+                                    <div className={`vl-badge ${leave.status.toLowerCase()}`}>
+                                      {leave.status}
+                                    </div>
+                                  )}
 
                                   {leave.isSandwich && (
                                     <span className="vl-sandwich-badge">
@@ -356,15 +391,25 @@ export default function LeaveManagement() {
                                   )}
                                 </div>
 
-                                <button
-                                  className="vl-retract-btn"
-                                  onClick={() => {
-                                    setSelectedLeave(leave); // ✅ VERY IMPORTANT
-                                    setShowRetractModal(true); // ✅ OPEN MODAL
-                                  }}
-                                >
-                                  Retract
-                                </button>
+                                {leave.status === "Draft" ? (
+                                  <button
+                                    className="vl-retract-btn"
+                                    style={{ background: "#fee2e2", color: "#dc2626", borderColor: "#fecaca" }}
+                                    onClick={() => handleDeleteDraft(leave._id)}
+                                  >
+                                    Delete Draft
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="vl-retract-btn"
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setShowRetractModal(true);
+                                    }}
+                                  >
+                                    Retract
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))
@@ -690,7 +735,8 @@ export default function LeaveManagement() {
                         <div className="vl-ytd-box used">
                           <div className="vl-ytd-number">
                             {leaveBalance
-                              ? leaveBalance.sick.used +
+                              ? leaveBalance.casual.used +
+                                leaveBalance.sick.used +
                                 leaveBalance.earned.used
                               : "--"}
                           </div>
@@ -700,10 +746,9 @@ export default function LeaveManagement() {
                         <div className="vl-ytd-box available">
                           <div className="vl-ytd-number">
                             {leaveBalance
-                              ? leaveBalance.sick.total +
-                                leaveBalance.earned.total -
-                                (leaveBalance.sick.used +
-                                  leaveBalance.earned.used)
+                              ? (leaveBalance.casual.total - leaveBalance.casual.used) +
+                                (leaveBalance.sick.total - leaveBalance.sick.used) +
+                                (leaveBalance.earned.total - leaveBalance.earned.used)
                               : "--"}
                           </div>
                           <div className="vl-ytd-label">Total Available</div>
@@ -759,12 +804,25 @@ export default function LeaveManagement() {
                   <option value="">Select leave type</option>
                   <option>Casual Leave</option>
                   <option>Sick Leave</option>
+                  <option>Half Day</option>
                   {/* <option>Earned Leave</option> */}
                 </select>
               </div>
 
+              {leaveType === "Half Day" && (
+                <div style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  background: "#EFF6FF", border: "1.5px solid #BFDBFE",
+                  borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+                  fontSize: 13, color: "#1e40af", lineHeight: 1.5,
+                }}>
+                  <i className="bi bi-info-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}></i>
+                  <span><strong>Half Day Policy:</strong> Only 1 paid half day is allowed per month. The leave will cover the selected date only.</span>
+                </div>
+              )}
+
               {/* Dates */}
-              {startDate && startDate < today && (
+              {startDate && startDate < today && leaveType !== "Half Day" && (
                 <div style={{
                   display:"flex", alignItems:"flex-start", gap:10,
                   background:"#FFFBEB", border:"1.5px solid #FCD34D",
@@ -776,9 +834,9 @@ export default function LeaveManagement() {
                 </div>
               )}
               <div className="row">
-                <div className="col-md-6">
+                <div className={leaveType === "Half Day" ? "col-md-12" : "col-md-6"}>
                   <div className="form-group">
-                    <label>Start Date *</label>
+                    <label>{leaveType === "Half Day" ? "Date *" : "Start Date *"}</label>
                     <input
                       type="date"
                       value={startDate}
@@ -787,17 +845,19 @@ export default function LeaveManagement() {
                   </div>
                 </div>
 
-                <div className="col-md-6">
-                  <div className="form-group">
-                    <label>End Date *</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      min={startDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
+                {leaveType !== "Half Day" && (
+                  <div className="col-md-6">
+                    <div className="form-group">
+                      <label>End Date *</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        min={startDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Days */}

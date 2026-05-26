@@ -7,6 +7,67 @@ import LeftbarMobile from "@/components/LeftbarMobile";
 import Head from "next/head";
 import Link from "next/link";
 
+// ── OT Timer (shared util) ────────────────────────────────────────────────────
+function getOTWindow(ot) {
+  const d  = new Date(ot.date);
+  const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const start = new Date(`${ds}T${ot.startTime}:00`);
+  const end   = new Date(`${ds}T${ot.endTime}:00`);
+  if (end <= start) end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+function fmtMs(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor((s%3600)/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+function AdminOTTimer({ ot }) {
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const { start, end } = getOTWindow(ot);
+  const totalMs   = end - start;
+  const elapsedMs = now - start;
+  if (now >= end) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6,
+        background:"#DCFCE7", borderRadius:8, padding:"8px 14px",
+        fontSize:13, color:"#15803D", fontWeight:700, marginTop:10 }}>
+        <i className="bi bi-check-circle-fill" /> OT Completed
+      </div>
+    );
+  }
+  if (now < start) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:6,
+        background:"#FEF9C3", borderRadius:8, padding:"8px 14px",
+        fontSize:13, color:"#92400E", fontWeight:600, marginTop:10 }}>
+        <i className="bi bi-clock-fill" /> Starts in {fmtMs(start - now)}
+      </div>
+    );
+  }
+  const pct = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
+  return (
+    <div style={{ background:"#EEF2FF", borderRadius:10, padding:"12px 14px", marginTop:10 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+        <span style={{ width:8, height:8, borderRadius:"50%", background:"#DC2626", flexShrink:0,
+          display:"inline-block", animation:"otPulse 1s ease-in-out infinite" }} />
+        <span style={{ fontFamily:"monospace", fontSize:20, fontWeight:800, color:"#4F46E5", letterSpacing:1 }}>
+          {fmtMs(elapsedMs)}
+        </span>
+        <span style={{ fontSize:11, color:"#6B7280", marginLeft:"auto" }}>
+          {fmtMs(Math.max(0, end - now))} left
+        </span>
+      </div>
+      <div style={{ background:"#C7D2FE", borderRadius:4, height:5, overflow:"hidden" }}>
+        <div style={{ width:`${pct}%`, height:"100%",
+          background:"linear-gradient(90deg,#6366F1,#4F46E5)", borderRadius:4 }} />
+      </div>
+    </div>
+  );
+}
+
 const MONTHS = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
@@ -433,6 +494,11 @@ export default function AdminOvertime() {
           .ot-empty i { font-size:52px; color:#E5E7EB; display:block; margin-bottom:14px; }
           .ot-empty p { color:#9CA3AF; font-size:14px; }
           .ot-loading { text-align:center; padding:60px; color:#9CA3AF; }
+
+          @keyframes otPulse {
+            0%,100% { opacity:1; transform:scale(1); }
+            50% { opacity:.4; transform:scale(1.4); }
+          }
         `}</style>
       </Head>
 
@@ -537,6 +603,29 @@ export default function AdminOvertime() {
                   return (
                     <div key={group.empId} className="ot-emp-card"
                       onClick={() => setDrawer(group)}>
+
+                      {/* Live OT indicator */}
+                      {(() => {
+                        const todayStr = new Date().toISOString().split("T")[0];
+                        const hasActive = group.entries.some(ot => {
+                          if (ot.status !== "Approved") return false;
+                          const ds = new Date(ot.date).toISOString().split("T")[0];
+                          if (ds !== todayStr) return false;
+                          const { start, end } = getOTWindow(ot);
+                          const now = new Date();
+                          return now >= start && now < end;
+                        });
+                        if (!hasActive) return null;
+                        return (
+                          <div style={{ background:"#DC2626", color:"#fff", fontSize:10, fontWeight:800,
+                            padding:"4px 14px", display:"flex", alignItems:"center", gap:6,
+                            letterSpacing:.5 }}>
+                            <span style={{ width:6, height:6, borderRadius:"50%", background:"#fff",
+                              display:"inline-block", animation:"otPulse 1s ease-in-out infinite" }} />
+                            LIVE OT IN PROGRESS
+                          </div>
+                        );
+                      })()}
 
                       <div className="ot-emp-card-top">
                         <div className="ot-emp-avatar" style={{ background:bg, color:fc }}>
@@ -709,6 +798,14 @@ export default function AdminOvertime() {
                               <span><strong>Reason:</strong> {ot.adminRemark}</span>
                             </div>
                           )}
+
+                          {/* Live timer — approved OT on today's date */}
+                          {ot.status === "Approved" && (() => {
+                            const otDay = new Date(ot.date).toISOString().split("T")[0];
+                            const todayStr = new Date().toISOString().split("T")[0];
+                            if (otDay !== todayStr) return null;
+                            return <AdminOTTimer ot={ot} />;
+                          })()}
 
                           {/* Actions */}
                           {ot.status === "Pending" && (

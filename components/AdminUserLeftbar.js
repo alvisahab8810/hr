@@ -159,8 +159,6 @@ export default function AdminUserLeftbar({ user }) {
                     color: router.pathname?.startsWith("/dashboard/admin/tasks") ? "#818CF8" : "rgba(0,0,0,.45)",
                   }} />
                   <span style={{ flex: 1 }}>Task Management</span>
-                  <i className={`bi bi-chevron-${tmsOpen ? "up" : "down"}`}
-                    style={{ fontSize: 10, color: "#9CA3AF", marginRight: 2 }} />
                 </a>
 
                 <ul className="ml-menu" style={{ display: tmsOpen ? "block" : "none" }}>

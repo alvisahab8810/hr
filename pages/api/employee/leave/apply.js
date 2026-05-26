@@ -252,6 +252,18 @@ router.post(async (req, res) => {
       });
     }
 
+    // Casual Leave can only be applied during office hours 10:00 AM – 6:00 PM IST
+    if (leaveType === "Casual Leave" && status !== "Draft") {
+      const nowUtcMinutes = new Date().getUTCHours() * 60 + new Date().getUTCMinutes();
+      const istMinutes = (nowUtcMinutes + 330) % 1440; // IST = UTC + 5:30
+      if (istMinutes < 600 || istMinutes >= 1080) {
+        return res.status(400).json({
+          success: false,
+          message: "Casual Leave can only be applied between 10:00 AM and 6:00 PM IST (office hours).",
+        });
+      }
+    }
+
     const s = new Date(startDate);
     const e = new Date(endDate);
 
@@ -262,43 +274,65 @@ router.post(async (req, res) => {
       });
     }
 
-    /* ================= BASE DAYS ================= */
+    /* ================= HALF DAY LOGIC ================= */
 
-    const baseDays =
-      Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
-
-    /* ================= SANDWICH LOGIC (CORRECT) ================= */
-
+    let totalDays;
     let sandwichLeave = false;
     let extraDeductedDays = 0;
 
-    // ONLY check weekends BETWEEN start & end (not before / after)
-    let cursor = new Date(s);
-    cursor.setDate(cursor.getDate() + 1);
-
-    while (cursor < e) {
-      if (isWeekend(cursor) && leaveType !== "Sick Leave") {
-        sandwichLeave = true;
-        extraDeductedDays++;
+    if (leaveType === "Half Day") {
+      totalDays = 0.5;
+      // Half day: enforce max 1 paid half day per month
+      const monthStart = new Date(s.getFullYear(), s.getMonth(), 1);
+      const monthEnd   = new Date(s.getFullYear(), s.getMonth() + 1, 1);
+      const existing = await LeaveApplication.countDocuments({
+        employee: employee._id,
+        leaveType: "Half Day",
+        status: { $in: ["Pending", "Approved"] },
+        startDate: { $gte: monthStart, $lt: monthEnd },
+      });
+      if (existing >= 1) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already used your 1 paid half day leave this month.",
+        });
       }
-      cursor.setDate(cursor.getDate() + 1);
-    }
+    } else {
+      /* ================= BASE DAYS ================= */
 
-    const totalDays = baseDays + extraDeductedDays;
+      const baseDays = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
+
+      /* ================= SANDWICH LOGIC (CORRECT) ================= */
+
+      // ONLY check weekends BETWEEN start & end (not before / after)
+      let cursor = new Date(s);
+      cursor.setDate(cursor.getDate() + 1);
+
+      while (cursor < e) {
+        if (isWeekend(cursor) && leaveType !== "Sick Leave") {
+          sandwichLeave = true;
+          extraDeductedDays++;
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      totalDays = baseDays + extraDeductedDays;
+    }
 
     /* ================= LEAVE BALANCE ================= */
 
-    const year = new Date(s).getFullYear();
+    // Use Indian financial year (April–March)
+    const fyYear = s.getMonth() >= 3 ? s.getFullYear() : s.getFullYear() - 1;
 
     let balance = await LeaveBalance.findOne({
       employee: employee._id,
-      year,
+      year: fyYear,
     });
 
     if (!balance) {
       balance = await LeaveBalance.create({
         employee: employee._id,
-        year,
+        year: fyYear,
       });
     }
 

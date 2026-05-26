@@ -154,7 +154,10 @@ export default async function handler(req, res) {
     // Elapsed working days up to today (for pro-rated earned salary)
     const elapsedWorkingDays = countElapsedWorkingDays(allDates, holidayDates, cutoffStr);
 
-    const employees = await Employee.find({ isActive: true }).lean();
+    const employees = await Employee.find({
+      isActive: true,
+      "professional.department": { $ne: "Farmer" },
+    }).lean();
     const results   = [];
 
     for (const emp of employees) {
@@ -229,17 +232,9 @@ export default async function handler(req, res) {
           continue;
         }
 
-        // 3rd Saturday = half day
+        // 3rd Saturday = paid half-day off — always presentDays += 0.5, never deducted
         if (isThirdSaturdayStr(dk)) {
-          const rec = attMap[dk] || null;
-          if (rec?.startTime) {
-            halfDayCount++;
-            presentDays += 0.5;
-          } else if (paidLeaveDates.has(dk)) {
-            presentDays += 0.5;
-          } else {
-            absentDays += 0.5;
-          }
+          presentDays += 0.5;
           continue;
         }
 

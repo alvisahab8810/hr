@@ -45,8 +45,28 @@ export default async function handler(req, res) {
       });
     }
 
+    // Block past date submissions
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+    const otDate = new Date(date);
+    otDate.setHours(0, 0, 0, 0);
+    if (otDate < todayMidnight) {
+      return res.status(400).json({ success: false, message: "Cannot apply overtime for a past date." });
+    }
+
     const [sh, sm] = startTime.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
+
+    // If OT date is today, block past start times (allow 30-min grace)
+    if (otDate.getTime() === todayMidnight.getTime()) {
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      const startMins = sh * 60 + sm;
+      if (startMins < nowMins - 30) {
+        return res.status(400).json({ success: false, message: "Cannot apply overtime with a start time that has already passed." });
+      }
+    }
+
     const diffMins = (eh * 60 + em) - (sh * 60 + sm);
     const actualMins = diffMins === 0 ? 0 : diffMins > 0 ? diffMins : diffMins + 24 * 60;
 

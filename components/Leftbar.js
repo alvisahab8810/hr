@@ -556,7 +556,7 @@ export default function Leftbar({ role = "admin" }) {
 
         {/* ── Admin brand badge ── */}
         <div style={{
-          margin: "10px 10px 4px",
+          margin: "20px 10px 4px",
           padding: "12px 14px",
           background: "linear-gradient(135deg,#EEF2FF,#E0E7FF)",
           borderRadius: 12,
@@ -689,7 +689,7 @@ export default function Leftbar({ role = "admin" }) {
           </li>
 
           {/* ── Task Management System ── */}
-          <li className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
+          <li id="task-management-area" className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
             <a
               href="javascript:void(0);"
               onClick={(e) => { e.preventDefault(); toggleMenu("tms"); }}
@@ -701,8 +701,6 @@ export default function Leftbar({ role = "admin" }) {
                 color: pathname?.startsWith("/dashboard/admin/tasks") ? "#818CF8" : "rgba(0,0,0,0.5)",
               }} />
               <span style={{ flex: 1 }}>Task Management</span>
-              <i className={`bi bi-chevron-${openMenu === "tms" ? "up" : "down"}`}
-                style={{ fontSize: 10, color: "#9CA3AF", marginRight: 2 }} />
             </a>
 
             <ul className="ml-menu" style={{ display: openMenu === "tms" ? "block" : "none" }}>

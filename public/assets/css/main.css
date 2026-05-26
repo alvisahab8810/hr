@@ -16062,7 +16062,7 @@ img {
     width: 250px;
     line-height: 60px;
     font-size: 0;
-    background: #fff
+    /* background: #fff */
 }
 
 .navbar-header .navbar-brand {
@@ -24150,3 +24150,8 @@ section.content {
   width: 100%;
 }
 
+
+#task-management-area > a ::after{
+    display: none;
+
+}

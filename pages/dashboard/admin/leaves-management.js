@@ -29,6 +29,12 @@ export default function LeaveManagement() {
   const rejectedCount = leaves.filter((l) => l.status === "Rejected").length;
   const totalLeaves = leaves.length;
 
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
+  const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
+
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const YEARS  = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
+
   const [showFilter, setShowFilter] = useState(false);
 
   const [filters, setFilters] = useState({
@@ -41,10 +47,12 @@ export default function LeaveManagement() {
 
   useEffect(() => {
     async function fetchLeaves() {
+      setLoadingLeaves(true);
       try {
-        const res = await fetch("/api/admin/leave/list", {
-          credentials: "include", // admin auth
-        });
+        const res = await fetch(
+          `/api/admin/leave/list?month=${selectedMonth}&year=${selectedYear}`,
+          { credentials: "include" }
+        );
 
         const data = await res.json();
 
@@ -60,7 +68,7 @@ export default function LeaveManagement() {
     }
 
     fetchLeaves();
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
   function getWorkingDays(start, end) {
     let count = 0;
@@ -215,6 +223,37 @@ export default function LeaveManagement() {
                     <i className="bi bi-chevron-down"></i>
                   </div> */}
 
+                  {/* Month / Year picker */}
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      style={{
+                        border: "1px solid #e5e7eb", borderRadius: 8,
+                        padding: "6px 10px", fontSize: 13, cursor: "pointer",
+                        background: "#fff", color: "#374151",
+                      }}
+                    >
+                      {MONTHS.map((m, i) => (
+                        <option key={i + 1} value={i + 1}>{m}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      style={{
+                        border: "1px solid #e5e7eb", borderRadius: 8,
+                        padding: "6px 10px", fontSize: 13, cursor: "pointer",
+                        background: "#fff", color: "#374151",
+                      }}
+                    >
+                      {YEARS.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <button
                     className="filter-btn"
                     onClick={() => setShowFilter(true)}
@@ -332,8 +371,20 @@ export default function LeaveManagement() {
                           <td>{leave.leaveType}</td>
 
                           <td>
-                            {new Date(leave.startDate).toLocaleDateString()} →{" "}
-                            {new Date(leave.endDate).toLocaleDateString()}
+                            <div>
+                              {new Date(leave.startDate).toLocaleDateString("en-IN")} →{" "}
+                              {new Date(leave.endDate).toLocaleDateString("en-IN")}
+                            </div>
+                            {leave.createdAt && (
+                              <small style={{ color: "#9ca3af", fontSize: 11 }}>
+                                Applied:{" "}
+                                {new Date(leave.createdAt).toLocaleString("en-IN", {
+                                  day: "2-digit", month: "short", year: "numeric",
+                                  hour: "2-digit", minute: "2-digit", hour12: true,
+                                  timeZone: "Asia/Kolkata",
+                                })}
+                              </small>
+                            )}
                           </td>
 
                           {/* <td>{leave.totalDays}</td> */}
@@ -579,11 +630,11 @@ export default function LeaveManagement() {
 
             <div className="leave-modal-body">
               <div className="form-group">
-                <label>Admin Remark *</label>
+                <label>Admin Remark <span style={{color:"#9ca3af",fontWeight:400}}>(optional)</span></label>
                 <textarea
                   value={adminRemark}
                   onChange={(e) => setAdminRemark(e.target.value)}
-                  placeholder="Add remark for employee"
+                  placeholder="Add remark for employee (optional)"
                 />
               </div>
             </div>
@@ -592,11 +643,6 @@ export default function LeaveManagement() {
               <button
                 className="submit-btn"
                 onClick={async () => {
-                  if (!adminRemark.trim()) {
-                    toast.error("Remark is required");
-                    return;
-                  }
-
                   try {
                     const endpoint =
                       actionType === "approve"
@@ -734,6 +780,7 @@ export default function LeaveManagement() {
               <option value="">All</option>
               <option value="Casual Leave">Casual Leave</option>
               <option value="Sick Leave">Sick Leave</option>
+              <option value="Half Day">Half Day</option>
               <option value="Paid Leave">Paid Leave</option>
             </select>
           </div>
