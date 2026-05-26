@@ -11,6 +11,9 @@ const permSchema = {
   overtime:     { type: Boolean, default: false },
   deductions:   { type: Boolean, default: false },
   holidays:     { type: Boolean, default: false },
+  tasks:        { type: Boolean, default: false },
+  projects:     { type: Boolean, default: false },
+  clients:      { type: Boolean, default: false },
 };
 
 const AdminUserSchema = new mongoose.Schema(

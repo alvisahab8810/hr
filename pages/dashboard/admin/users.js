@@ -9,16 +9,53 @@ import { toast } from "react-toastify";
 const ROLES = ["Manager", "HR", "Accountant", "Viewer"];
 
 const PERMISSIONS = [
-  { key: "dashboard",    label: "Dashboard",     icon: "bi-house-fill"         },
-  { key: "employees",    label: "Employees",     icon: "bi-people-fill"        },
-  { key: "attendance",   label: "Attendance",    icon: "bi-calendar-check-fill"},
-  { key: "leaves",       label: "Leaves",        icon: "bi-calendar-minus-fill"},
-  { key: "salaryReport", label: "Salary Report", icon: "bi-cash-stack"         },
-  { key: "reimbursement",label: "Reimbursement", icon: "bi-receipt"            },
-  { key: "overtime",     label: "Overtime",      icon: "bi-clock-history"      },
-  { key: "deductions",   label: "Deductions",    icon: "bi-shield-check-fill"  },
-  { key: "holidays",     label: "Holidays",      icon: "bi-calendar-event-fill"},
+  { key: "dashboard",    label: "Dashboard",     icon: "bi-house-fill"          },
+  { key: "employees",    label: "Employees",     icon: "bi-people-fill"         },
+  { key: "attendance",   label: "Attendance",    icon: "bi-calendar-check-fill" },
+  { key: "leaves",       label: "Leaves",        icon: "bi-calendar-minus-fill" },
+  { key: "salaryReport", label: "Salary Report", icon: "bi-cash-stack"          },
+  { key: "reimbursement",label: "Reimbursement", icon: "bi-receipt"             },
+  { key: "overtime",     label: "Overtime",      icon: "bi-clock-history"       },
+  { key: "deductions",   label: "Deductions",    icon: "bi-shield-check-fill"   },
+  { key: "holidays",     label: "Holidays",      icon: "bi-calendar-event-fill" },
+  { key: "tasks",        label: "Tasks",         icon: "bi-check2-square"       },
+  { key: "projects",     label: "Projects",      icon: "bi-kanban-fill"         },
+  { key: "clients",      label: "Clients",       icon: "bi-briefcase-fill"      },
 ];
+
+const ACTION_META = {
+  task_created:         { icon: "bi-plus-circle-fill",    color: "#15803D", bg: "#DCFCE7", label: "Task Created"      },
+  task_assigned:        { icon: "bi-person-check-fill",   color: "#4F46E5", bg: "#EEF2FF", label: "Task Assigned"     },
+  reassigned:           { icon: "bi-arrow-repeat",        color: "#7C3AED", bg: "#F5F3FF", label: "Reassigned"        },
+  status_changed:       { icon: "bi-arrow-left-right",    color: "#0EA5E9", bg: "#F0F9FF", label: "Status Changed"    },
+  priority_changed:     { icon: "bi-flag-fill",           color: "#B45309", bg: "#FEF3C7", label: "Priority Changed"  },
+  due_date_changed:     { icon: "bi-calendar-check-fill", color: "#0891B2", bg: "#ECFEFF", label: "Due Date Changed"  },
+  title_changed:        { icon: "bi-pencil-fill",         color: "#F97316", bg: "#FFF7ED", label: "Title Changed"     },
+  task_deleted:         { icon: "bi-trash3-fill",         color: "#DC2626", bg: "#FEE2E2", label: "Task Deleted"      },
+  leave_approved:       { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "Leave Approved"    },
+  leave_rejected:       { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "Leave Rejected"    },
+  overtime_approved:    { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "OT Approved"       },
+  overtime_rejected:    { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "OT Rejected"       },
+};
+
+const CATEGORY_TABS = [
+  { key: "all",  label: "All Activity" },
+  { key: "task", label: "Tasks"        },
+  { key: "leave",label: "Leaves"       },
+  { key: "overtime", label: "Overtime" },
+];
+
+function fmtDateTime(d) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+    + " · " + dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDateOnly(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 const ROLE_COLORS = {
   Manager:   ["#EEF2FF", "#4F46E5"],
@@ -41,6 +78,11 @@ export default function AdminUsers() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);   // user to delete
   const [submitting,    setSubmitting]    = useState(false);
   const [resending,     setResending]     = useState(null);
+  const [trackUser,     setTrackUser]     = useState(null);
+  const [trackLogs,     setTrackLogs]     = useState([]);
+  const [trackLoading,  setTrackLoading]  = useState(false);
+  const [trackCategory, setTrackCategory] = useState("all");
+  const [trackDate,     setTrackDate]     = useState({ start: "", end: "" });
 
   // Create form state
   const [form, setForm] = useState({ name: "", email: "", role: "Manager", permissions: emptyPerms() });
@@ -133,6 +175,34 @@ export default function AdminUsers() {
       else toast.error(data.message || "Failed");
     } catch { toast.error("Network error"); }
     finally { setResending(null); }
+  };
+
+  const openTrack = async (user) => {
+    setTrackUser(user);
+    setTrackCategory("all");
+    setTrackDate({ start: "", end: "" });
+    setTrackLogs([]);
+    setTrackLoading(true);
+    try {
+      const res  = await fetch(`/api/admin/admin-users/activity?userId=${user._id}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) setTrackLogs(data.logs || []);
+    } catch { /* silent */ }
+    finally { setTrackLoading(false); }
+  };
+
+  const fetchTrackLogs = async (userId, category, dateStart, dateEnd) => {
+    setTrackLoading(true);
+    try {
+      const params = new URLSearchParams({ userId });
+      if (category && category !== "all") params.set("category", category);
+      if (dateStart) params.set("dateStart", dateStart);
+      if (dateEnd)   params.set("dateEnd",   dateEnd);
+      const res  = await fetch(`/api/admin/admin-users/activity?${params}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) setTrackLogs(data.logs || []);
+    } catch { /* silent */ }
+    finally { setTrackLoading(false); }
   };
 
   const togglePerm = (key, target = "form") => {
@@ -327,6 +397,11 @@ export default function AdminUsers() {
                       {/* Actions */}
                       <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
                         <button className="um-btn"
+                          onClick={() => openTrack(u)}
+                          style={{ background:"#F0FDF4", color:"#15803D", padding:"7px 12px", fontSize:12 }}>
+                          <i className="bi bi-activity" /> Track
+                        </button>
+                        <button className="um-btn"
                           onClick={() => setEditUser({ ...u, permissions: { ...emptyPerms(), ...(u.permissions || {}) } })}
                           style={{ background:"#EEF2FF", color:"#4F46E5", padding:"7px 12px", fontSize:12 }}>
                           <i className="bi bi-shield-lock" /> Permissions
@@ -513,6 +588,309 @@ export default function AdminUsers() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ TRACK ACTIVITY MODAL ══ */}
+      {trackUser && (
+        <div className="um-overlay"
+          style={{ alignItems:"center", justifyContent:"center", padding:"24px 16px" }}
+          onClick={() => setTrackUser(null)}>
+          <div
+            style={{ background:"#fff", width:"100%", maxWidth:920, borderRadius:24,
+              boxShadow:"0 32px 80px rgba(0,0,0,.22)", overflow:"hidden",
+              display:"flex", flexDirection:"column", maxHeight:"88vh" }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* ── HEADER ── */}
+            <div style={{ background:"linear-gradient(135deg,#0F0C29 0%,#302B63 50%,#24243e 100%)",
+              padding:"28px 32px 0", flexShrink:0, position:"relative", overflow:"hidden" }}>
+
+              {/* decorative circles */}
+              <div style={{ position:"absolute", top:-60, right:-60, width:220, height:220,
+                borderRadius:"50%", background:"rgba(255,255,255,.04)" }} />
+              <div style={{ position:"absolute", top:20, right:80, width:100, height:100,
+                borderRadius:"50%", background:"rgba(99,102,241,.15)" }} />
+
+              {/* Top row: avatar + info + close */}
+              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:20, position:"relative" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:18 }}>
+                  {/* Avatar */}
+                  <div style={{ width:64, height:64, borderRadius:18,
+                    background:"linear-gradient(135deg,#6366F1,#818CF8)",
+                    boxShadow:"0 8px 24px rgba(99,102,241,.4)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontWeight:900, fontSize:22, color:"#fff", flexShrink:0, letterSpacing:1 }}>
+                    {trackUser.name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                      <span style={{ color:"#fff", fontWeight:800, fontSize:20, letterSpacing:".2px" }}>
+                        {trackUser.name}
+                      </span>
+                      <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20,
+                        background:"rgba(99,102,241,.3)", color:"#C7D2FE", letterSpacing:.5 }}>
+                        {trackUser.role.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize:11, fontWeight:600, padding:"3px 10px", borderRadius:20,
+                        background: trackUser.status==="Active" ? "rgba(34,197,94,.2)" : "rgba(251,191,36,.2)",
+                        color: trackUser.status==="Active" ? "#86EFAC" : "#FDE68A" }}>
+                        {trackUser.status}
+                      </span>
+                    </div>
+                    <div style={{ color:"rgba(255,255,255,.5)", fontSize:13, marginTop:4 }}>
+                      <i className="bi bi-envelope" style={{ marginRight:5 }} />
+                      {trackUser.email}
+                    </div>
+                    <div style={{ color:"rgba(255,255,255,.35)", fontSize:11, marginTop:3 }}>
+                      <i className="bi bi-calendar3" style={{ marginRight:4 }} />
+                      Member since {fmt(trackUser.createdAt)}
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setTrackUser(null)}
+                  style={{ background:"rgba(255,255,255,.1)", border:"1px solid rgba(255,255,255,.15)",
+                    borderRadius:12, width:38, height:38, color:"rgba(255,255,255,.8)",
+                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                    flexShrink:0, transition:"all .15s" }}>
+                  <i className="bi bi-x-lg" style={{ fontSize:15 }} />
+                </button>
+              </div>
+
+              {/* Stats strip */}
+              <div style={{ display:"flex", gap:0, borderTop:"1px solid rgba(255,255,255,.08)", paddingTop:0, marginBottom:0 }}>
+                {[
+                  { icon:"bi-activity",       label:"Total Actions", value: trackLogs.length,                                                                                  accent:"#818CF8" },
+                  { icon:"bi-check2-square",   label:"Task Actions",  value: trackLogs.filter(l=>l.category==="task").length,                                                  accent:"#34D399" },
+                  { icon:"bi-sun",             label:"Today",         value: trackLogs.filter(l=>new Date(l.createdAt).toDateString()===new Date().toDateString()).length,      accent:"#FBBF24" },
+                  { icon:"bi-calendar-week",   label:"This Week",     value: trackLogs.filter(l=>{ const d=new Date(l.createdAt); const now=new Date(); return (now-d)<7*86400000; }).length, accent:"#F472B6" },
+                ].map((s, i) => (
+                  <div key={s.label} style={{ flex:1, padding:"16px 20px", borderLeft: i>0 ? "1px solid rgba(255,255,255,.07)" : "none",
+                    borderTop:"1px solid rgba(255,255,255,.07)" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                      <div style={{ width:28, height:28, borderRadius:8,
+                        background:`${s.accent}22`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <i className={`bi ${s.icon}`} style={{ fontSize:13, color:s.accent }} />
+                      </div>
+                      <span style={{ fontSize:11, color:"rgba(255,255,255,.4)", fontWeight:600, letterSpacing:.3 }}>
+                        {s.label.toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:28, fontWeight:900, color:"#fff", lineHeight:1 }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── CONTROLS ── */}
+            <div style={{ background:"#FAFAFA", borderBottom:"1px solid #EFEFEF",
+              padding:"12px 24px", display:"flex", flexWrap:"wrap", gap:10, alignItems:"center", flexShrink:0 }}>
+
+              {/* Category segmented control */}
+              <div style={{ display:"flex", background:"#F1F3F6", borderRadius:10, padding:3, gap:2 }}>
+                {CATEGORY_TABS.map(t => (
+                  <button key={t.key}
+                    onClick={() => {
+                      setTrackCategory(t.key);
+                      fetchTrackLogs(trackUser._id, t.key, trackDate.start, trackDate.end);
+                    }}
+                    style={{ padding:"6px 16px", fontSize:12, fontWeight:700, border:"none", cursor:"pointer",
+                      borderRadius:8, transition:"all .15s",
+                      background: trackCategory===t.key ? "#fff" : "transparent",
+                      color:      trackCategory===t.key ? "#4F46E5" : "#6B7280",
+                      boxShadow:  trackCategory===t.key ? "0 1px 6px rgba(0,0,0,.1)" : "none" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date range */}
+              <div style={{ display:"flex", gap:6, marginLeft:"auto", alignItems:"center" }}>
+                <i className="bi bi-funnel" style={{ fontSize:13, color:"#9CA3AF" }} />
+                <input type="date" value={trackDate.start} className="um-input"
+                  style={{ padding:"6px 10px", fontSize:12, width:138, borderRadius:9 }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setTrackDate(d => ({ ...d, start: v }));
+                    fetchTrackLogs(trackUser._id, trackCategory, v, trackDate.end);
+                  }} />
+                <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:600 }}>—</span>
+                <input type="date" value={trackDate.end} className="um-input"
+                  style={{ padding:"6px 10px", fontSize:12, width:138, borderRadius:9 }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setTrackDate(d => ({ ...d, end: v }));
+                    fetchTrackLogs(trackUser._id, trackCategory, trackDate.start, v);
+                  }} />
+                {(trackDate.start || trackDate.end) && (
+                  <button className="um-btn"
+                    style={{ padding:"6px 11px", fontSize:11, background:"#FEE2E2", color:"#DC2626", borderRadius:8 }}
+                    onClick={() => {
+                      setTrackDate({ start:"", end:"" });
+                      fetchTrackLogs(trackUser._id, trackCategory, "", "");
+                    }}>
+                    <i className="bi bi-x-circle" /> Reset
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ── TIMELINE ── */}
+            <div style={{ overflowY:"auto", flex:1, padding:"24px 32px", background:"#FAFBFF" }}>
+              {trackLoading ? (
+                <div style={{ textAlign:"center", padding:"60px 0" }}>
+                  <div style={{ width:48, height:48, borderRadius:14, background:"#EEF2FF",
+                    display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+                    <div className="spinner-border text-primary" style={{ width:"1.4rem", height:"1.4rem" }} />
+                  </div>
+                  <p style={{ color:"#6B7280", fontWeight:600, fontSize:14 }}>Loading activity log…</p>
+                </div>
+              ) : trackLogs.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"72px 20px" }}>
+                  <div style={{ width:72, height:72, borderRadius:20, background:"#F1F5F9",
+                    display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+                    <i className="bi bi-graph-up" style={{ fontSize:32, color:"#CBD5E1" }} />
+                  </div>
+                  <p style={{ fontWeight:800, color:"#1E293B", fontSize:16, margin:"0 0 8px" }}>
+                    No activity recorded yet
+                  </p>
+                  <p style={{ color:"#94A3B8", fontSize:13, margin:0, lineHeight:1.6 }}>
+                    Every task action performed by <strong>{trackUser.name}</strong> will appear here<br/>
+                    in real-time with full date & time details.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {trackLogs.map((log, idx) => {
+                    const meta = ACTION_META[log.action] || {
+                      icon: "bi-circle-fill", color: "#6B7280", bg: "#F3F4F6", label: log.action
+                    };
+                    const dt = new Date(log.createdAt);
+                    const showDateSep = idx === 0 ||
+                      new Date(trackLogs[idx-1].createdAt).toDateString() !== dt.toDateString();
+
+                    return (
+                      <React.Fragment key={log._id || idx}>
+                        {showDateSep && (
+                          <div style={{ display:"flex", alignItems:"center", gap:12,
+                            margin: idx === 0 ? "0 0 20px" : "28px 0 20px" }}>
+                            <div style={{ flex:1, height:1, background:"linear-gradient(90deg,transparent,#E2E8F0)" }} />
+                            <span style={{ fontSize:11, fontWeight:800, color:"#64748B",
+                              background:"#fff", padding:"5px 14px", borderRadius:20,
+                              border:"1.5px solid #E2E8F0", letterSpacing:.4, whiteSpace:"nowrap",
+                              boxShadow:"0 1px 4px rgba(0,0,0,.06)" }}>
+                              {fmtDateOnly(dt)}
+                            </span>
+                            <div style={{ flex:1, height:1, background:"linear-gradient(90deg,#E2E8F0,transparent)" }} />
+                          </div>
+                        )}
+
+                        <div style={{ display:"flex", gap:14, marginBottom:10 }}>
+                          {/* Left: icon + vertical connector */}
+                          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0, width:44 }}>
+                            <div style={{ width:44, height:44, borderRadius:14,
+                              background:`linear-gradient(135deg,${meta.bg},${meta.bg})`,
+                              border:`2px solid ${meta.color}30`,
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              boxShadow:`0 2px 8px ${meta.color}20` }}>
+                              <i className={`bi ${meta.icon}`} style={{ fontSize:17, color:meta.color }} />
+                            </div>
+                            {idx < trackLogs.length - 1 && (
+                              <div style={{ width:2, flex:1, minHeight:12, marginTop:4,
+                                background:`linear-gradient(${meta.color}40,transparent)`, borderRadius:2 }} />
+                            )}
+                          </div>
+
+                          {/* Right: card */}
+                          <div style={{ flex:1, background:"#fff", borderRadius:14,
+                            border:"1.5px solid #F1F5F9", padding:"14px 18px", minWidth:0,
+                            boxShadow:"0 2px 8px rgba(0,0,0,.04)",
+                            borderLeft:`4px solid ${meta.color}` }}>
+
+                            {/* Top row */}
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                              flexWrap:"wrap", gap:6, marginBottom:8 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                                <span style={{ fontSize:10, fontWeight:800, letterSpacing:1,
+                                  textTransform:"uppercase", color:meta.color }}>
+                                  {meta.label}
+                                </span>
+                                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
+                                  background:meta.bg, color:meta.color, fontWeight:700 }}>
+                                  {log.category}
+                                </span>
+                              </div>
+                              <div style={{ display:"flex", alignItems:"center", gap:5,
+                                background:"#F8FAFC", padding:"4px 10px", borderRadius:8 }}>
+                                <i className="bi bi-clock-fill" style={{ fontSize:10, color:"#94A3B8" }} />
+                                <span style={{ fontSize:11, color:"#64748B", fontWeight:700 }}>
+                                  {dt.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Description */}
+                            <p style={{ margin:"0 0 8px", fontSize:13.5, color:"#0F172A",
+                              lineHeight:1.6, fontWeight:600 }}>
+                              {log.description}
+                            </p>
+
+                            {/* Change indicator */}
+                            {(log.metadata?.fromValue || log.metadata?.toValue) && (
+                              <div style={{ display:"flex", alignItems:"center", gap:8,
+                                flexWrap:"wrap", marginBottom:8 }}>
+                                {log.metadata.fromValue && (
+                                  <span style={{ fontSize:11, padding:"3px 10px", borderRadius:8,
+                                    background:"#FEF2F2", color:"#DC2626", fontWeight:700,
+                                    border:"1px solid #FEE2E2" }}>
+                                    {log.metadata.fromValue}
+                                  </span>
+                                )}
+                                <i className="bi bi-arrow-right-short" style={{ fontSize:16, color:"#94A3B8" }} />
+                                {log.metadata.toValue && (
+                                  <span style={{ fontSize:11, padding:"3px 10px", borderRadius:8,
+                                    background:"#F0FDF4", color:"#15803D", fontWeight:700,
+                                    border:"1px solid #DCFCE7" }}>
+                                    {log.metadata.toValue}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Footer meta */}
+                            {(log.metadata?.taskTitle || log.metadata?.employeeName) && (
+                              <div style={{ display:"flex", gap:12, flexWrap:"wrap",
+                                paddingTop:8, borderTop:"1px solid #F1F5F9", marginTop:4 }}>
+                                {log.metadata.taskTitle && (
+                                  <span style={{ fontSize:11, color:"#6366F1", fontWeight:600 }}>
+                                    <i className="bi bi-check2-square" style={{ marginRight:4 }} />
+                                    {log.metadata.taskTitle}
+                                  </span>
+                                )}
+                                {log.metadata.employeeName && (
+                                  <span style={{ fontSize:11, color:"#10B981", fontWeight:600 }}>
+                                    <i className="bi bi-person-fill" style={{ marginRight:4 }} />
+                                    {log.metadata.employeeName}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+
+                  {/* End of log */}
+                  <div style={{ textAlign:"center", padding:"24px 0 8px", color:"#CBD5E1", fontSize:12, fontWeight:600 }}>
+                    <i className="bi bi-check-circle-fill" style={{ marginRight:6, color:"#BBF7D0" }} />
+                    All activity shown · {trackLogs.length} total action{trackLogs.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       )}

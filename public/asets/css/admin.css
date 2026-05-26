@@ -1808,3 +1808,16 @@ a.navbar-brand{
   width: 100%;
 }
 
+
+
+.top-area-row{
+  justify-content:space-between;
+  margin-bottom:15px!important;
+}
+
+.attendance-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    margin-bottom: 15px;
+}

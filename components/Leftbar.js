@@ -374,8 +374,28 @@ export default function Leftbar({ role = "admin" }) {
     if (res.ok) router.push("/dashboard/login");
   };
 
-  const [openMenu, setOpenMenu] = useState(null);
+  const [openMenu, setOpenMenu]     = useState(null);
+  const [communityUnread, setCommunityUnread] = useState(0);
   const toggleMenu = (m) => setOpenMenu(openMenu === m ? null : m);
+
+  useEffect(() => {
+    if (pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests")) {
+      setOpenMenu("tms");
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    async function fetchUnread() {
+      try {
+        const r = await fetch("/api/team/notifications", { credentials: "include" });
+        const d = await r.json();
+        if (d.success) setCommunityUnread(d.total || 0);
+      } catch {}
+    }
+    fetchUnread();
+    const t = setInterval(fetchUnread, 30000);
+    return () => clearInterval(t);
+  }, []);
 
   /* ------------- MENU DEFINITION (all custom icons) ------------- */
   const menu = [
@@ -479,6 +499,22 @@ export default function Leftbar({ role = "admin" }) {
       label: "User Management",
       icon: "overtime",
       biIcon: "bi-people-fill",
+    },
+    {
+      type: "link",
+      href: "/dashboard/admin/clients",
+      label: "Clients",
+      icon: "overtime",
+      biIcon: "bi-building",
+      match: ["/dashboard/admin/clients"],
+    },
+    {
+      type: "link",
+      href: "/dashboard/admin/tasks/instagram",
+      label: "Instagram Connect",
+      icon: "overtime",
+      biIcon: "bi-instagram",
+      match: ["/dashboard/admin/tasks/instagram"],
     },
   ];
 
@@ -614,6 +650,176 @@ export default function Leftbar({ role = "admin" }) {
                 </li>
               );
             })}
+
+          {/* ── Divider before TMS ── */}
+          <li style={{ listStyle: "none" }}>
+            <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
+          </li>
+
+          {/* ── Community ── */}
+          <li style={{ listStyle: "none" }} className={pathname === "/dashboard/admin/community" ? "active" : ""}>
+            <a
+              href="/dashboard/admin/community"
+              className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}
+            >
+              <i className="bi bi-people-fill" style={{
+                fontSize: 17, width: 20, textAlign: "center", flexShrink: 0,
+                color: pathname === "/dashboard/admin/community" ? "#818CF8" : "rgba(0,0,0,0.5)",
+              }} />
+              <span style={{ flex: 1 }}>Community</span>
+              {communityUnread > 0 && (
+                <span style={{ background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10 }}>
+                  {communityUnread > 99 ? "99+" : communityUnread}
+                </span>
+              )}
+            </a>
+          </li>
+
+          {/* ── Offers & Announcements ── */}
+          <li style={{ listStyle: "none" }} className={pathname === "/dashboard/admin/offers" ? "active" : ""}>
+            <a href="/dashboard/admin/offers" className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}>
+              <i className="bi bi-megaphone-fill" style={{
+                fontSize: 17, width: 20, textAlign: "center", flexShrink: 0,
+                color: pathname === "/dashboard/admin/offers" ? "#818CF8" : "rgba(0,0,0,0.5)",
+              }} />
+              <span style={{ flex: 1 }}>Offers</span>
+            </a>
+          </li>
+
+          {/* ── Task Management System ── */}
+          <li className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
+            <a
+              href="javascript:void(0);"
+              onClick={(e) => { e.preventDefault(); toggleMenu("tms"); }}
+              className="menu-toggle waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <i className="bi bi-kanban-fill" style={{
+                fontSize: 17, width: 20, textAlign: "center", flexShrink: 0,
+                color: pathname?.startsWith("/dashboard/admin/tasks") ? "#818CF8" : "rgba(0,0,0,0.5)",
+              }} />
+              <span style={{ flex: 1 }}>Task Management</span>
+              <i className={`bi bi-chevron-${openMenu === "tms" ? "up" : "down"}`}
+                style={{ fontSize: 10, color: "#9CA3AF", marginRight: 2 }} />
+            </a>
+
+            <ul className="ml-menu" style={{ display: openMenu === "tms" ? "block" : "none" }}>
+
+              {/* WORKSPACE */}
+              <li style={{ padding: "6px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Workspace
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks">
+                  <i className="bi bi-grid-1x2-fill" style={{ marginRight: 6, fontSize: 12 }} />Dashboard
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/list" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/list">
+                  <i className="bi bi-list-task" style={{ marginRight: 6, fontSize: 12 }} />Tasks
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/calendar" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/calendar">
+                  <i className="bi bi-calendar3" style={{ marginRight: 6, fontSize: 12 }} />Content Calendar
+                </Link>
+              </li>
+              <li className={pathname?.startsWith("/dashboard/admin/tasks/brands") ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/brands">
+                  <i className="bi bi-bookmark-star-fill" style={{ marginRight: 6, fontSize: 12 }} />Brands
+                </Link>
+              </li>
+
+              {/* SOCIAL MEDIA */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Social Media
+              </li>
+<li className={pathname === "/dashboard/admin/tasks/pipeline" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/pipeline">
+                  <i className="bi bi-funnel-fill" style={{ marginRight: 6, fontSize: 12 }} />Pipeline Stages
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/weekly" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/weekly">
+                  <i className="bi bi-clock-history" style={{ marginRight: 6, fontSize: 12 }} />Weekly Tracker
+                </Link>
+              </li>
+
+              {/* WEB & DEV */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Web &amp; Dev
+              </li>
+              <li className={pathname?.startsWith("/dashboard/admin/tasks/projects") ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/projects">
+                  <i className="bi bi-layers-fill" style={{ marginRight: 6, fontSize: 12 }} />Web Projects
+                </Link>
+              </li>
+
+              {/* SEO */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                SEO
+              </li>
+              <li className={pathname?.startsWith("/dashboard/admin/tasks/seo") ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/seo">
+                  <i className="bi bi-search" style={{ marginRight: 6, fontSize: 12 }} />SEO Hub
+                </Link>
+              </li>
+
+              {/* PERFORMANCE */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Performance
+              </li>
+              <li className={pathname?.startsWith("/dashboard/admin/tasks/ads") ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/ads">
+                  <i className="bi bi-megaphone-fill" style={{ marginRight: 6, fontSize: 12 }} />Ad Campaigns
+                </Link>
+              </li>
+
+              {/* CREATIVE */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Creative
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/branding" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/branding">
+                  <i className="bi bi-palette-fill" style={{ marginRight: 6, fontSize: 12 }} />Branding
+                </Link>
+              </li>
+
+              {/* CLIENT */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Client
+              </li>
+              <li className={pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
+                <Link href="/dashboard/admin/task-requests">
+                  <i className="bi bi-inbox-fill" style={{ marginRight: 6, fontSize: 12 }} />Client Requests
+                </Link>
+              </li>
+
+              {/* TEAM & ADMIN */}
+              <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                Team &amp; Admin
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/my-team" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/my-team">
+                  <i className="bi bi-people-fill" style={{ marginRight: 6, fontSize: 12 }} />Today · My Team
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/team-performance" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/team-performance">
+                  <i className="bi bi-bar-chart-fill" style={{ marginRight: 6, fontSize: 12 }} />Team Performance
+                </Link>
+              </li>
+              <li className={pathname === "/dashboard/admin/tasks/email-center" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/email-center">
+                  <i className="bi bi-envelope-fill" style={{ marginRight: 6, fontSize: 12 }} />Email Center
+                </Link>
+              </li>
+
+            </ul>
+          </li>
+
         </ul>
       </div>
        <div className="admin-profile-area">

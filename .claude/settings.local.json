@@ -5,7 +5,29 @@
       "Bash(node -e \":*)",
       "Bash(find /d/viralon-payroll/pages/dashboard/admin -type f -name *.js -o -name *.jsx)",
       "Bash(find /d/viralon-payroll/pages/api/hr -type f -name *.js)",
-      "Bash(find /d/viralon-payroll/pages/api/employee -type f -name *.js)"
+      "Bash(find /d/viralon-payroll/pages/api/employee -type f -name *.js)",
+      "Bash(find \"d:/viralon-payroll/pages/employee\" -type d)",
+      "Bash(ls \"d:/viralon-payroll/components/employee/\")",
+      "Bash(ls \"d:/viralon-payroll/public/asets/css/\")",
+      "Bash(ls -la \"d:/viralon-payroll/pages/employee/\")",
+      "Bash(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\employee\\\\tasks\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"done\")",
+      "Read(//c/Users/ivans/**)",
+      "Read(//d//**)",
+      "Bash(del \"d:\\\\viralon-payroll\\\\pages\\\\dashboard\\\\admin\\\\tasks\\\\content-review.js\")",
+      "Bash(del \"d:\\\\viralon-payroll\\\\pages\\\\employee\\\\tasks\\\\my-tasks.js\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\\\\pages\\\\client\" -Recurse -File)",
+      "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\\\\pages\\\\client\" -Recurse -Filter \"index.js\")",
+      "Bash(Select-Object -First 5)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\admin\\\\task-requests\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\dashboard\\\\admin\\\\task-requests\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\employee\\\\dev\")",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\employee\\\\dev\\\\features\")"
+    ],
+    "additionalDirectories": [
+      "d:\\viralon-payroll\\pages\\api\\client\\requests"
     ]
   }
 }

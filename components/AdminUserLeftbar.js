@@ -1,5 +1,6 @@
 // components/AdminUserLeftbar.js — sidebar for invited admin users (permission-filtered)
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
 const ALL_MODULES = [
@@ -16,6 +17,21 @@ const ALL_MODULES = [
 export default function AdminUserLeftbar({ user }) {
   const router = useRouter();
   const permissions = user?.permissions || {};
+  const [tmsOpen, setTmsOpen] = useState(router.pathname?.startsWith("/dashboard/admin/tasks"));
+  const [communityUnread, setCommunityUnread] = useState(0);
+
+  useEffect(() => {
+    async function fetchUnread() {
+      try {
+        const r = await fetch("/api/team/notifications", { credentials: "include" });
+        const d = await r.json();
+        if (d.success) setCommunityUnread(d.total || 0);
+      } catch {}
+    }
+    fetchUnread();
+    const t = setInterval(fetchUnread, 30000);
+    return () => clearInterval(t);
+  }, []);
 
   const visibleItems = ALL_MODULES.filter(m => permissions[m.key]);
 
@@ -93,6 +109,158 @@ export default function AdminUserLeftbar({ user }) {
                 No modules assigned yet
               </div>
             </li>
+          )}
+
+          {/* ── Community ── */}
+          <li style={{ listStyle: "none" }} className={router.pathname === "/dashboard/admin/community" ? "active" : ""}>
+            <Link href="/dashboard/admin/community" className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="bi bi-people-fill" style={{
+                fontSize: 16, width: 20, textAlign: "center", flexShrink: 0,
+                color: router.pathname === "/dashboard/admin/community" ? "#818CF8" : "rgba(0,0,0,.45)",
+              }} />
+              <span style={{ flex: 1 }}>Community</span>
+              {communityUnread > 0 && (
+                <span style={{ background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10 }}>
+                  {communityUnread > 99 ? "99+" : communityUnread}
+                </span>
+              )}
+            </Link>
+          </li>
+
+          {/* ── Offers & Announcements ── */}
+          <li style={{ listStyle: "none" }} className={router.pathname === "/dashboard/admin/offers" ? "active" : ""}>
+            <Link href="/dashboard/admin/offers" className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="bi bi-megaphone-fill" style={{
+                fontSize: 16, width: 20, textAlign: "center", flexShrink: 0,
+                color: router.pathname === "/dashboard/admin/offers" ? "#818CF8" : "rgba(0,0,0,.45)",
+              }} />
+              <span style={{ flex: 1 }}>Offers</span>
+            </Link>
+          </li>
+
+          {/* ── Task Management System (gated by permissions.tasks) ── */}
+          {permissions.tasks && (
+            <>
+              <li style={{ listStyle: "none" }}>
+                <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
+              </li>
+
+              <li className={router.pathname?.startsWith("/dashboard/admin/tasks") ? "active" : ""}>
+                <a
+                  href="javascript:void(0);"
+                  onClick={(e) => { e.preventDefault(); setTmsOpen(o => !o); }}
+                  className="menu-toggle waves-effect waves-block"
+                  style={{ display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <i className="bi bi-kanban-fill" style={{
+                    fontSize: 16, width: 20, textAlign: "center", flexShrink: 0,
+                    color: router.pathname?.startsWith("/dashboard/admin/tasks") ? "#818CF8" : "rgba(0,0,0,.45)",
+                  }} />
+                  <span style={{ flex: 1 }}>Task Management</span>
+                  <i className={`bi bi-chevron-${tmsOpen ? "up" : "down"}`}
+                    style={{ fontSize: 10, color: "#9CA3AF", marginRight: 2 }} />
+                </a>
+
+                <ul className="ml-menu" style={{ display: tmsOpen ? "block" : "none" }}>
+
+                  <li style={{ padding: "6px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Workspace
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks">
+                      <i className="bi bi-grid-1x2-fill" style={{ marginRight: 6, fontSize: 12 }} />Dashboard
+                    </Link>
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/list" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/list">
+                      <i className="bi bi-list-task" style={{ marginRight: 6, fontSize: 12 }} />Tasks
+                    </Link>
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/calendar" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/calendar">
+                      <i className="bi bi-calendar3" style={{ marginRight: 6, fontSize: 12 }} />Content Calendar
+                    </Link>
+                  </li>
+                  <li className={router.pathname?.startsWith("/dashboard/admin/tasks/brands") ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/brands">
+                      <i className="bi bi-bookmark-star-fill" style={{ marginRight: 6, fontSize: 12 }} />Brands
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    Social Media
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/pipeline" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/pipeline">
+                      <i className="bi bi-funnel-fill" style={{ marginRight: 6, fontSize: 12 }} />Pipeline Stages
+                    </Link>
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/weekly" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/weekly">
+                      <i className="bi bi-clock-history" style={{ marginRight: 6, fontSize: 12 }} />Weekly Tracker
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    Web &amp; Dev
+                  </li>
+                  <li className={router.pathname?.startsWith("/dashboard/admin/tasks/projects") ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/projects">
+                      <i className="bi bi-layers-fill" style={{ marginRight: 6, fontSize: 12 }} />Web Projects
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    SEO
+                  </li>
+                  <li className={router.pathname?.startsWith("/dashboard/admin/tasks/seo") ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/seo">
+                      <i className="bi bi-search" style={{ marginRight: 6, fontSize: 12 }} />SEO Hub
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    Performance
+                  </li>
+                  <li className={router.pathname?.startsWith("/dashboard/admin/tasks/ads") ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/ads">
+                      <i className="bi bi-megaphone-fill" style={{ marginRight: 6, fontSize: 12 }} />Ad Campaigns
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    Creative
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/branding" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/branding">
+                      <i className="bi bi-palette-fill" style={{ marginRight: 6, fontSize: 12 }} />Branding
+                    </Link>
+                  </li>
+
+                  <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
+                    Team &amp; Admin
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/my-team" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/my-team">
+                      <i className="bi bi-people-fill" style={{ marginRight: 6, fontSize: 12 }} />Today · My Team
+                    </Link>
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/team-performance" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/team-performance">
+                      <i className="bi bi-bar-chart-fill" style={{ marginRight: 6, fontSize: 12 }} />Team Performance
+                    </Link>
+                  </li>
+                  <li className={router.pathname === "/dashboard/admin/tasks/email-center" ? "active" : ""}>
+                    <Link href="/dashboard/admin/tasks/email-center">
+                      <i className="bi bi-envelope-fill" style={{ marginRight: 6, fontSize: 12 }} />Email Center
+                    </Link>
+                  </li>
+
+                </ul>
+              </li>
+            </>
           )}
 
         </ul>

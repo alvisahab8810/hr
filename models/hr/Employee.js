@@ -112,7 +112,7 @@ const EmployeeSchema = new mongoose.Schema({
   employeeId:{ type: String, required: true, unique: true },
   password:  { type: String, required: true },
 
-    slug: { type: String, unique: true, index: true }, // <-- add this
+    slug: { type: String, unique: true, sparse: true, index: true },
 
   // completion
   personal: PersonalSchema,
@@ -131,5 +131,5 @@ const EmployeeSchema = new mongoose.Schema({
   faceEnrolled:   { type: Boolean, default: false },
 }, { timestamps: true });
 
-export default mongoose.models.Employee ||
-  mongoose.model("Employee", EmployeeSchema);
+delete mongoose.models["Employee"];
+export default mongoose.model("Employee", EmployeeSchema);

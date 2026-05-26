@@ -5,15 +5,12 @@ export default function AddEmployeeForm() {
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
-    officialEmail: "",
+    email: "",
     employeeId: "",
     password: "",
     confirmPassword: "",
-
     monthlySalary: "",
     annualSalary: "",
-
-    // 🔽 NEW
     dateOfJoining: "",
     department: "",
     designation: "",
@@ -81,7 +78,7 @@ export default function AddEmployeeForm() {
       const data = await res.json();
 
       if (data.success) {
-        setMessage({ type: "success", text: "Employee invited successfully!" });
+        setMessage({ type: data.emailSent === false ? "warning" : "success", text: data.message });
         setFormData({
           firstName: "",
           lastName: "",
@@ -89,6 +86,13 @@ export default function AddEmployeeForm() {
           employeeId: "",
           password: "",
           confirmPassword: "",
+          monthlySalary: "",
+          annualSalary: "",
+          dateOfJoining: "",
+          department: "",
+          designation: "",
+          employeeType: "",
+          status: "",
         });
       } else {
         setMessage({
@@ -351,12 +355,10 @@ export default function AddEmployeeForm() {
                 type="button"
                 onClick={() =>
                   setFormData({
-                    firstName: "",
-                    lastName: "",
-                    email: "",
-                    employeeId: "",
-                    password: "",
-                    confirmPassword: "",
+                    firstName: "", lastName: "", email: "", employeeId: "",
+                    password: "", confirmPassword: "", monthlySalary: "",
+                    annualSalary: "", dateOfJoining: "", department: "",
+                    designation: "", employeeType: "", status: "",
                   })
                 }
                 className="cancel-btn"

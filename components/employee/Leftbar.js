@@ -11,6 +11,10 @@ export default function EmployeeLeftbar() {
   const [employee, setEmployee] = useState({
     firstName: "", lastName: "", employeeId: "", dept: "", completion: 0,
   });
+  const [tmsOpen, setTmsOpen]         = useState(false);
+  const [msgUnread, setMsgUnread]     = useState(0);
+  const [isDmDept, setIsDmDept]       = useState(false);
+  const [communityUnread, setCommunityUnread] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem("employeeToken");
@@ -29,17 +33,45 @@ export default function EmployeeLeftbar() {
             emp?.documents?.appointmentLetter,
           ];
           const pct = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+          const dept = emp.professional?.department || "";
           setEmployee({
             firstName:  emp.firstName  || "Employee",
             lastName:   emp.lastName   || "",
             employeeId: emp.employeeId || "",
-            dept:       emp.professional?.department || "",
+            dept,
             completion: pct,
           });
+          const dm = dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing");
+          setIsDmDept(dm);
+          if (dm) fetchMsgUnread(token);
+          fetchCommunityUnread(token);
         }
       })
       .catch(console.error);
   }, []);
+
+  async function fetchCommunityUnread(token) {
+    try {
+      const r = await fetch("/api/team/notifications", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const d = await r.json();
+      if (d.success) setCommunityUnread(d.communityUnread || 0);
+    } catch {}
+  }
+
+  async function fetchMsgUnread(token) {
+    try {
+      const r = await fetch("/api/employee/client-messages", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json();
+      if (d.success) {
+        const total = (d.brands || []).reduce((s, b) => s + (b.unread || 0), 0);
+        setMsgUnread(total);
+      }
+    } catch {}
+  }
 
   const handleLogout = async () => {
     await fetch("/api/employee/logout", { method: "POST", credentials: "include" });
@@ -70,7 +102,13 @@ export default function EmployeeLeftbar() {
     { href: "/employee/profile",            label: "My Profile",         icon: "profile"           },
   ];
 
+  useEffect(() => {
+    if (pathname?.startsWith("/employee/tasks")) setTmsOpen(true);
+  }, [pathname]);
+
   const isActive = (href) => pathname === href;
+  const tmsActive = pathname?.startsWith("/employee/tasks");
+  const devActive = pathname === "/employee/dev-portal";
 
   // ── Profile card rendered as a table — immune to flex/grid/color overrides ──
   const ProfileCard = () => (
@@ -226,6 +264,122 @@ export default function EmployeeLeftbar() {
                 </li>
               );
             })}
+
+            {/* ── Community ── */}
+            <li style={{ listStyle:"none" }} className={pathname === "/employee/community" ? "active" : ""}>
+              <Link
+                href="/employee/community"
+                className="waves-effect waves-block"
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
+              >
+                <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <i className="bi bi-people-fill" style={{ fontSize:15, color: pathname === "/employee/community" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                </span>
+                <span style={{ flex:1 }}>Community</span>
+                {communityUnread > 0 && (
+                  <span style={{ background:"#EF4444", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, minWidth:20, textAlign:"center" }}>
+                    {communityUnread > 99 ? "99+" : communityUnread}
+                  </span>
+                )}
+              </Link>
+            </li>
+
+            {/* ── Dev Portal ── */}
+            <li style={{ listStyle:"none" }} className={devActive ? "active" : ""}>
+              <Link
+                href="/employee/dev-portal"
+                className="waves-effect waves-block"
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
+              >
+                <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <i className="bi bi-kanban" style={{ fontSize:15, color: devActive ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                </span>
+                <span>Dev Portal</span>
+              </Link>
+            </li>
+
+            {/* ── Task Management dropdown ── */}
+            <li style={{ listStyle:"none" }} className={tmsActive ? "active" : ""}>
+              <button
+                onClick={() => setTmsOpen(o => !o)}
+                style={{
+                  display:"flex", alignItems:"center", gap:10,
+                  padding:"10px 16px", width:"100%",
+                  background:"transparent", border:"none", cursor:"pointer",
+                  fontSize:13, fontWeight:500, textAlign:"left",
+                  color: tmsActive ? "#818CF8" : "rgba(0,0,0,0.65)",
+                }}
+              >
+                <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <i className="bi bi-kanban" style={{ fontSize:15, color: tmsActive ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                </span>
+                <span style={{ flex:1 }}>Task Management</span>
+                <i
+                  className="bi bi-chevron-down"
+                  style={{
+                    fontSize:11, color:"rgba(0,0,0,0.35)",
+                    transition:"transform .25s",
+                    transform: tmsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  }}
+                />
+              </button>
+
+              {/* Sub-items */}
+              <ul style={{
+                listStyle:"none", margin:0, padding:"2px 0 4px",
+                overflow:"hidden",
+                maxHeight: tmsOpen ? 300 : 0,
+                transition:"max-height .3s ease",
+              }}>
+                {[
+                  { href:"/employee/tasks",          label:"Dashboard",  icon:"bi-grid-1x2" },
+                ].map(sub => {
+                  const subActive = pathname === sub.href;
+                  return (
+                    <li key={sub.href} className={subActive ? "active" : ""}>
+                      <Link
+                        href={sub.href}
+                        className="waves-effect waves-block"
+                        style={{
+                          display:"flex", alignItems:"center", gap:8,
+                          padding:"8px 16px 8px 44px", fontSize:12.5,
+                          color: subActive ? "#4F46E5" : "rgba(0,0,0,0.6)",
+                          fontWeight: subActive ? 700 : 500,
+                          textDecoration:"none",
+                        }}
+                      >
+                        <i className={`bi ${sub.icon}`} style={{ fontSize:13 }} />
+                        {sub.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+
+            {/* ── Client Messages (DM dept only) ── */}
+            {isDmDept && (
+              <li style={{ listStyle:"none" }} className={pathname === "/employee/messages" ? "active" : ""}>
+                <Link
+                  href="/employee/messages"
+                  className="waves-effect waves-block"
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
+                >
+                  <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <i className="bi bi-chat-dots" style={{ fontSize:15, color: pathname === "/employee/messages" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                  </span>
+                  <span style={{ flex:1 }}>Client Messages</span>
+                  {msgUnread > 0 && (
+                    <span style={{
+                      background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700,
+                      padding: "2px 7px", borderRadius: 10, minWidth: 20, textAlign: "center",
+                    }}>
+                      {msgUnread}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            )}
 
             {/* Logout */}
             <li style={{ listStyle:"none", padding:"6px 12px 4px" }}>

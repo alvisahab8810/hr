@@ -24141,3 +24141,12 @@ section.content {
 .preview-thumbnail.nav-tabs .nav-item {
     width: 20%;
 }
+
+.ep-side-logo img {
+    filter: brightness(0) invert(1);
+}
+
+.attendance-topbar.leave-management-topbar {
+    display: flex;
+    justify-content: space-between;
+}
