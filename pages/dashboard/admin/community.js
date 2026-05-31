@@ -344,25 +344,6 @@ export default function AdminCommunity() {
         .ac-emp-dept { font-size: 11px; color: #94a3b8; margin-top: 1px; }
         .ac-emp-time { font-size: 10px; color: #94a3b8; margin-top: 2px; }
 
-        /* DM chat bubbles */
-        .ac-dm-feed { flex: 1; overflow-y: auto; padding: 20px 20px 8px; display: flex; flex-direction: column; background: #E9EBF0; }
-        .ac-dm-feed::-webkit-scrollbar { width: 4px; }
-        .ac-dm-feed::-webkit-scrollbar-thumb { background: #C8CDD6; border-radius: 4px; }
-        .dm-brow { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 6px; }
-        .dm-brow.admin    { justify-content: flex-end; }
-        .dm-brow.employee { justify-content: flex-start; }
-        .dm-av-sm { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; flex-shrink: 0; }
-        .dm-bwrap { max-width: 68%; }
-        .dm-bname { font-size: 10.5px; font-weight: 700; margin-bottom: 4px; padding: 0 2px; }
-        .dm-brow.admin .dm-bname    { text-align: right; color: #818CF8; }
-        .dm-brow.employee .dm-bname { color: #64748b; }
-        .dm-bubble { padding: 10px 14px; border-radius: 18px; font-size: 13.5px; line-height: 1.65; overflow-wrap: break-word; word-break: normal; }
-        .dm-bubble.admin    { background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
-        .dm-bubble.employee { background: #fff; border: 1px solid #E2E8F0; color: #0f172a; border-bottom-left-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.07); }
-        .dm-btime { font-size: 10px; margin-top: 5px; }
-        .dm-bubble.admin .dm-btime    { color: rgba(255,255,255,.5); text-align: right; }
-        .dm-bubble.employee .dm-btime { color: #94a3b8; }
-
         /* DM input bar */
         .ac-dm-input { padding: 12px 14px; background: #fff; border-top: 1px solid #E2E8F0; flex-shrink: 0; }
         .ac-dm-input-row { display: flex; gap: 8px; align-items: flex-end; }
@@ -374,7 +355,7 @@ export default function AdminCommunity() {
         .ac-dm-link-btn { width: 38px; height: 38px; background: #F0F2F5; border: none; border-radius: 50%; font-size: 15px; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .12s; }
         .ac-dm-link-btn:hover { background: #E2E8F0; }
 
-        .ac-no-dm { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 10px; padding: 24px; text-align: center; background: #E9EBF0; }
+        .ac-no-dm { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 10px; padding: 24px; text-align: center; background: #F5F6FA; }
         /* DM panel (employee list) */
         .ac-dm-panel { width: 270px; border-left: 1px solid #E2E8F0; display: flex; flex-direction: column; background: #fff; flex-shrink: 0; }
         .ac-dm-hdr  { padding: 14px 14px 10px; border-bottom: 1px solid #E2E8F0; }
@@ -393,25 +374,24 @@ export default function AdminCommunity() {
         .ac-emp-name { font-size: 13px; font-weight: 700; color: #0f172a; }
         .ac-emp-dept { font-size: 11px; color: #94a3b8; margin-top: 1px; }
         .ac-emp-time { font-size: 10px; color: #94a3b8; margin-top: 2px; }
-        /* DM chat bubbles */
-        .ac-dm-feed { flex: 1; overflow-y: auto; padding: 16px 20px 8px; display: flex; flex-direction: column; background: #F0F2F5; }
+        /* DM chat bubbles — clean modern style */
+        .ac-dm-feed { flex: 1; overflow-y: auto; padding: 16px 20px 8px; display: flex; flex-direction: column; gap: 2px; background: #F5F6FA; }
         .ac-dm-feed::-webkit-scrollbar { width: 4px; }
-        .ac-dm-feed::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
-        .dm-brow { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
-        .dm-brow.admin    { justify-content: flex-end; }
-        .dm-brow.employee { justify-content: flex-start; }
-        .dm-av-sm { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; flex-shrink: 0; }
-        .dm-bwrap { max-width: 70%; }
-        .dm-bname { font-size: 10.5px; font-weight: 700; margin-bottom: 4px; }
-        .dm-brow.admin .dm-bname    { text-align: right; color: #818CF8; }
-        .dm-brow.employee .dm-bname { color: #64748b; }
-        .dm-bubble { padding: 10px 14px; border-radius: 18px; font-size: 13.5px; line-height: 1.6; overflow-wrap: break-word; word-break: normal; }
-        .dm-bubble.admin    { background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
-        .dm-bubble.employee { background: #fff; border: 1.5px solid #E8EBF0; color: #0f172a; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-        .dm-btime { font-size: 10px; margin-top: 5px; }
-        .dm-bubble.admin .dm-btime    { color: rgba(255,255,255,.5); text-align: right; }
-        .dm-bubble.employee .dm-btime { color: #94a3b8; }
-        .ac-no-dm { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 8px; padding: 24px; text-align: center; background: #F0F2F5; }
+        .ac-dm-feed::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 4px; }
+        .dm-brow { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 4px; }
+        .dm-brow.dm-sent { justify-content: flex-end; }
+        .dm-brow.dm-recv { justify-content: flex-start; }
+        .dm-av-sm { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; flex-shrink: 0; }
+        .dm-bwrap { max-width: 68%; }
+        .dm-bname { font-size: 10px; font-weight: 600; margin-bottom: 3px; color: #94a3b8; }
+        .dm-brow.dm-sent .dm-bname { text-align: right; }
+        .dm-bubble { padding: 9px 13px; border-radius: 16px; font-size: 13.5px; line-height: 1.55; overflow-wrap: break-word; word-break: break-word; }
+        .dm-bubble.dm-sent { background: #4F46E5; color: #fff; border-bottom-right-radius: 3px; }
+        .dm-bubble.dm-recv { background: #fff; color: #0f172a; border-bottom-left-radius: 3px; }
+        .dm-btime { font-size: 10px; margin-top: 4px; }
+        .dm-bubble.dm-sent .dm-btime { color: rgba(255,255,255,.55); text-align: right; }
+        .dm-bubble.dm-recv .dm-btime { color: #94a3b8; }
+        .ac-no-dm { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 8px; padding: 24px; text-align: center; background: #F5F6FA; }
         .ac-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.38); z-index: 1000; display: flex; align-items: center; justify-content: center; }
         .ac-modal-box { background: #fff; border-radius: 14px; padding: 26px; width: 380px; }
         .ac-modal-title { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 16px; }
@@ -589,7 +569,7 @@ export default function AdminCommunity() {
                                 const m = item.data;
                                 const isAdminMsg = m.senderType === "admin";
                                 return (
-                                  <div key={m._id} className={`dm-brow ${isAdminMsg ? "admin" : "employee"}`}>
+                                  <div key={m._id} className={`dm-brow ${isAdminMsg ? "dm-sent" : "dm-recv"}`}>
                                     {!isAdminMsg && (
                                       <div className="dm-av-sm" style={{ background: avColor(m.senderName) }}>
                                         {nameInitials(m.senderName)}
@@ -597,7 +577,7 @@ export default function AdminCommunity() {
                                     )}
                                     <div className="dm-bwrap">
                                       <div className="dm-bname">{isAdminMsg ? "You" : m.senderName}</div>
-                                      <div className={`dm-bubble ${isAdminMsg ? "admin" : "employee"}`}>
+                                      <div className={`dm-bubble ${isAdminMsg ? "dm-sent" : "dm-recv"}`}>
                                         {m.text && <div>{m.text}</div>}
                                         {(m.attachments || []).map((a, i) => (
                                           <a key={i} href={a.url} target="_blank" rel="noreferrer"

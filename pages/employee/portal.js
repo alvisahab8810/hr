@@ -36,6 +36,33 @@ function isOverdue(d) {
   return x < n;
 }
 
+// Returns the most relevant deadline for a task — stage deadline takes priority for production tasks
+function getTaskDeadline(task, empId) {
+  if (!task) return null;
+  if (task.taskType === "production" && task.stages?.length) {
+    // Find the earliest undone stage assigned to this employee
+    const myStages = task.stages.filter(s => {
+      if (s.done) return false;
+      const ids = (Array.isArray(s.assignedTo) ? s.assignedTo : [s.assignedTo])
+        .map(x => String(typeof x === "object" ? x._id || x : x));
+      return empId ? ids.includes(String(empId)) : ids.length > 0;
+    });
+    const deadlines = myStages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
+    if (deadlines.length) return deadlines.reduce((a, b) => a < b ? a : b);
+    // Fall back to any stage deadline if no personal stage found
+    const all = task.stages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
+    if (all.length) return all.reduce((a, b) => a < b ? a : b);
+  }
+  return task.dueDate ? new Date(task.dueDate) : null;
+}
+
+// True if this employee has an undone stage whose deadline has passed
+function isStageOverdue(task, empId) {
+  if (!task || task.status === "completed") return false;
+  const dl = getTaskDeadline(task, empId);
+  return dl ? isOverdue(dl) : false;
+}
+
 function isDueToday(d) {
   if (!d) return false;
   const n = new Date(); n.setHours(0, 0, 0, 0);
@@ -497,8 +524,17 @@ function TodayView({ emp, empRole }) {
 
   const now      = new Date(); now.setHours(0,0,0,0);
   const active   = tasks.filter(t => t.status !== "completed");
-  const overdue  = tasks.filter(t => isOverdue(t.dueDate) && t.status !== "completed");
-  const dueToday = tasks.filter(t => isDueToday(t.dueDate) && t.status !== "completed");
+  // Use stage deadlines for production tasks
+  const overdue  = tasks.filter(t => {
+    if (t.status === "completed") return false;
+    const dl = getTaskDeadline(t, null);
+    return dl ? isOverdue(dl) : false;
+  });
+  const dueToday = tasks.filter(t => {
+    if (t.status === "completed") return false;
+    const dl = getTaskDeadline(t, null);
+    return dl ? isDueToday(dl) : false;
+  });
   const doneWeek = tasks.filter(t => t.status === "completed" && new Date(t.updatedAt) >= new Date(Date.now() - 7*86400000));
   const upcoming = tasks.filter(t => {
     if (!t.dueDate || t.status === "completed") return false;
@@ -783,11 +819,19 @@ function MyTasksView() {
               </thead>
               <tbody>
                 {filtered.map(t => {
-                  const od = isOverdue(t.dueDate) && t.status !== "completed";
+                  const dl = getTaskDeadline(t, null);
+                  const od = dl ? isOverdue(dl) && t.status !== "completed" : false;
                   return (
-                    <tr key={t._id}>
+                    <tr key={t._id} style={{ background: od ? "#FFF5F5" : "" }}>
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{t.nomenclature || t.title}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {od && (
+                            <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "2px 7px", whiteSpace: "nowrap" }}>
+                              LATE
+                            </span>
+                          )}
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>{t.nomenclature || t.title}</span>
+                        </div>
                         {t.contentType && (
                           <span className="ep-chip" style={{ marginTop: 3, background: (CTYPE_COLOR[t.contentType] || "#64748b") + "22", color: CTYPE_COLOR[t.contentType] || "#64748b" }}>
                             {t.contentType}
@@ -810,9 +854,9 @@ function MyTasksView() {
                         </span>
                       </td>
                       <td>
-                        <span style={{ fontSize: 12, color: od ? "var(--red)" : "var(--text)", fontWeight: od ? 700 : 400 }}>
-                          {od && <i className="bi bi-exclamation-circle" style={{ marginRight: 4 }} />}
-                          {fmtD(t.dueDate)}
+                        <span style={{ fontSize: 12, color: od ? "#EF4444" : "var(--text)", fontWeight: od ? 700 : 400 }}>
+                          {od && <i className="bi bi-exclamation-circle-fill" style={{ marginRight: 4 }} />}
+                          {dl ? fmtD(dl) : "—"}
                         </span>
                       </td>
                     </tr>
@@ -1054,7 +1098,13 @@ function BrandCalendarView() {
   function groupByWeek(tasks) {
     const groups = {};
     tasks.forEach(t => {
-      const d = new Date(t.scheduledFor || t.dueDate || t.createdAt);
+      // Use scheduledFor → dueDate → earliest stage deadline → createdAt
+      let rawDate = t.scheduledFor || t.dueDate;
+      if (!rawDate && t.stages?.length) {
+        const dl = t.stages.map(s => s.deadline).filter(Boolean).sort();
+        if (dl.length) rawDate = dl[0];
+      }
+      const d = new Date(rawDate || t.createdAt);
       d.setHours(0, 0, 0, 0);
       const day = d.getDay();
       const monday = new Date(d);

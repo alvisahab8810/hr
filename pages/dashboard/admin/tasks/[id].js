@@ -958,11 +958,12 @@ export default function TaskDetail() {
                     </div>
                   )}
 
-                  {/* Content Review Card */}
-                  {task.status === "review" && task.taskType === "production" && (
-                    <div className="tdbg" style={{ border: "2px solid #FDE68A", background: "#FFFBEB", marginBottom: 14 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13, color: "#B45309", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                        <i className="bi bi-hourglass-split" />Content for Review
+                  {/* Content Review Card — shown for all production tasks that have content */}
+                  {task.taskType === "production" && (task.description || task.caption || task.referenceLink || task.pillar) && (
+                    <div className="tdbg" style={{ border: `2px solid ${task.status === "review" ? "#FDE68A" : task.status === "completed" ? "#BBF7D0" : "#E0E7FF"}`, background: task.status === "review" ? "#FFFBEB" : task.status === "completed" ? "#F0FDF4" : "#EEF2FF", marginBottom: 14 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: task.status === "review" ? "#B45309" : task.status === "completed" ? "#15803D" : "#4338CA", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className={`bi ${task.status === "review" ? "bi-hourglass-split" : task.status === "completed" ? "bi-check-circle-fill" : "bi-file-text-fill"}`} />
+                        {task.status === "review" ? "Content for Admin Review" : task.status === "completed" ? "Approved Content" : "Content"}
                       </div>
                       {task.submittedAt && (
                         <div style={{ fontSize: 10, color: "#92400E", marginBottom: 10 }}>
@@ -1010,16 +1011,18 @@ export default function TaskDetail() {
                           <span style={{ fontSize: 11, color: "#374151", fontWeight: 600 }}>{task.pillar}</span>
                         </div>
                       )}
-                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                        <button onClick={handleApprove}
-                          style={{ flex: 1, background: "#10B981", color: "#fff", border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                          <i className="bi bi-check2-circle me-1" />Approve
-                        </button>
-                        <button onClick={() => setShowReject(true)}
-                          style={{ flex: 1, background: "#FEE2E2", color: "#DC2626", border: "1.5px solid #FCA5A5", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                          <i className="bi bi-x-circle me-1" />Reject
-                        </button>
-                      </div>
+                      {task.status === "review" && (
+                        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                          <button onClick={handleApprove}
+                            style={{ flex: 1, background: "#10B981", color: "#fff", border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                            <i className="bi bi-check2-circle me-1" />Approve
+                          </button>
+                          <button onClick={() => setShowReject(true)}
+                            style={{ flex: 1, background: "#FEE2E2", color: "#DC2626", border: "1.5px solid #FCA5A5", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                            <i className="bi bi-x-circle me-1" />Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 

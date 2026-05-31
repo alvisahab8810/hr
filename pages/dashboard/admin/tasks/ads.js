@@ -477,30 +477,6 @@ export default function AdCampaignsPage() {
                             {/* Brand name */}
                             <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600, marginBottom: 10 }}>{brand.name || "—"}</div>
 
-                            {/* Stage chips — click to toggle done */}
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
-                              {(c.stages || []).map((s, i) => (
-                                <span
-                                  key={i}
-                                  onClick={() => toggleStage(c._id, i)}
-                                  title={s.completed ? "Click to mark incomplete" : "Click to mark done"}
-                                  style={{
-                                    display: "inline-flex", alignItems: "center", gap: 4,
-                                    padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700,
-                                    cursor: "pointer", userSelect: "none", transition: "all .12s",
-                                    background: s.completed ? "#DCFCE7" : "#F1F5F9",
-                                    color: s.completed ? "#15803D" : "#64748B",
-                                    border: `1.5px solid ${s.completed ? "#86EFAC" : "#E5E7EB"}`,
-                                  }}
-                                >
-                                  {s.completed
-                                    ? <i className="bi bi-check-circle-fill" style={{ fontSize: 9 }} />
-                                    : <span style={{ width: 9, height: 9, borderRadius: "50%", border: "1.5px solid #CBD5E1", display: "inline-block" }} />
-                                  }
-                                  {i + 1} {STAGE_LABELS[i] || s.label}
-                                </span>
-                              ))}
-                            </div>
 
                             {/* Budget bar */}
                             <div style={{ marginBottom: 10 }}>

@@ -3,6 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { toast } from "react-toastify";
+import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -320,14 +321,28 @@ export default function PipelinePage() {
                                     {t.nomenclature || t.title}
                                   </div>
 
-                                  {/* Status + due */}
-                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                  {/* Status + due + grade */}
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 4 }}>
                                     <span className="pl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
-                                    {due && (
-                                      <span style={{ fontSize: 10, color: ov ? "#DC2626" : "#94A3B8", fontWeight: ov ? 700 : 400 }}>
-                                        <i className="bi bi-calendar3" style={{ marginRight: 3 }} />{due}
-                                      </span>
-                                    )}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                      {due && (
+                                        <span style={{ fontSize: 10, color: ov ? "#DC2626" : "#94A3B8", fontWeight: ov ? 700 : 400 }}>
+                                          <i className="bi bi-calendar3" style={{ marginRight: 3 }} />{due}
+                                        </span>
+                                      )}
+                                      {(() => {
+                                        const g = gradeTask(t);
+                                        if (!g) return null;
+                                        const { label, color, bg } = pointsToGrade(g.points);
+                                        return (
+                                          <span title={`${g.points}/5 pts`} style={{
+                                            display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                            minWidth: 26, height: 18, borderRadius: 5, fontSize: 10, fontWeight: 800,
+                                            background: bg, color, padding: "0 4px",
+                                          }}>{label}</span>
+                                        );
+                                      })()}
+                                    </div>
                                   </div>
 
                                   {/* Assignee */}

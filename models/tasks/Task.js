@@ -1,16 +1,17 @@
 import mongoose from "mongoose";
 
 const StageEntrySchema = new mongoose.Schema({
-  name:         { type: String, default: "" },
-  assignedTo:   [{ type: mongoose.Schema.Types.ObjectId, ref: "Employee" }],
-  deadline:     { type: Date, default: null },
-  done:         { type: Boolean, default: false },
-  doneAt:       { type: Date, default: null },
-  approved:     { type: Boolean, default: false },
-  rejected:     { type: Boolean, default: false },
-  rejectReason: { type: String, default: "" },
-  proofUrls:    { type: [String], default: [] },
-  doneNote:     { type: String, default: "" },
+  name:          { type: String, default: "" },
+  assignedTo:    [{ type: mongoose.Schema.Types.ObjectId, ref: "Employee" }],
+  deadline:      { type: Date, default: null },
+  done:          { type: Boolean, default: false },
+  doneAt:        { type: Date, default: null },
+  approved:      { type: Boolean, default: false },
+  rejected:      { type: Boolean, default: false },
+  rejectReason:  { type: String, default: "" },
+  proofUrls:     { type: [String], default: [] },
+  doneNote:      { type: String, default: "" },
+  lateNotified:  { type: Boolean, default: false }, // true after late email sent — prevents duplicate emails
 }, { _id: false });
 
 const AttachmentSchema = new mongoose.Schema(

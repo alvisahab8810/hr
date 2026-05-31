@@ -27,7 +27,8 @@
       "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\employee\\\\dev\\\\features\")"
     ],
     "additionalDirectories": [
-      "d:\\viralon-payroll\\pages\\api\\client\\requests"
+      "d:\\viralon-payroll\\pages\\api\\client\\requests",
+      "d:\\viralon-payroll\\pages\\api\\admin\\clients"
     ]
   }
 }

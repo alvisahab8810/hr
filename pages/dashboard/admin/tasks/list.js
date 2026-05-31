@@ -6,6 +6,23 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
+
+/* ─── Grade badge component ────────────────────────────── */
+function GradeBadge({ task }) {
+  const g = gradeTask(task);
+  if (!g) return <span style={{ color: "#CBD5E1", fontSize: 11 }}>—</span>;
+  const { label, color, bg } = pointsToGrade(g.points);
+  return (
+    <span title={`${g.points}/5 pts · ${g.hoursLate <= 0 ? "On time" : `${g.hoursLate.toFixed(1)}h late`}`} style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      width: 32, height: 22, borderRadius: 6, fontSize: 11, fontWeight: 800,
+      background: bg, color,
+    }}>
+      {label}
+    </span>
+  );
+}
 
 /* ─── Constants ─────────────────────────────────────────── */
 
@@ -82,13 +99,19 @@ function nextDateForDay(dayName) {
   result.setDate(today.getDate() + diff);
   return result.toISOString().slice(0, 10);
 }
-const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot/Design","Edit/Develop","Posted/Live"];
+const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot","Design/Edit/Develop","Posted/Live"];
 const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: "" }));
 const EMPTY_PROD_FORM = { brandId: "", contentType: "reel", stages: freshStages() };
 const STAGE_COLORS = ["#F59E0B","#6366F1","#10B981","#EC4899"];
+// Each stage: { include: [...], exclude: [...] }
+// Inclusion matches department only; exclusion checks both dept + designation
+// Using longer strings (e.g. "content team") avoids false positives from designations
+// like "Content Creator" in Production dept showing up in S1.
 const STAGE_DEPT_KEYWORDS = [
-  ["content"], ["production", "design", "creative"],
-  ["edit", "post", "editing"], ["digital", "marketing"],
+  { include: ["content team"],                              exclude: [] },
+  { include: ["production"],                                exclude: ["design", "creative"] },
+  { include: ["editing team", "design team", "tech"],      exclude: [] },
+  { include: ["digital marketing"],                         exclude: [] },
 ];
 const AVATAR_COLORS_LIST = [
   ["#EEF2FF","#4F46E5"],["#FEF3C7","#B45309"],["#DCFCE7","#15803D"],
@@ -97,10 +120,14 @@ const AVATAR_COLORS_LIST = [
 
 function avatarColor(name) { return AVATAR_COLORS_LIST[(name?.charCodeAt(0) || 0) % AVATAR_COLORS_LIST.length]; }
 function getInitials(name) { return (name || "?").split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase(); }
-function filterByDept(employees, keywords) {
+function filterByDept(employees, { include, exclude }) {
   return employees.filter(emp => {
-    const dept = (emp.professional?.department || "").toLowerCase();
-    return keywords.some(kw => dept.includes(kw));
+    const dept  = (emp.professional?.department  || "").toLowerCase();
+    const desig = (emp.professional?.designation || "").toLowerCase();
+    // Exclusion: check both dept and designation (catches mixed dept like "Production/Design")
+    if (exclude.some(kw => dept.includes(kw) || desig.includes(kw))) return false;
+    // Inclusion: check department ONLY — avoids false positives from designation names
+    return include.some(kw => dept.includes(kw));
   });
 }
 function normalizeAssignedTo(v) {
@@ -132,6 +159,12 @@ function fmtDateTime(d) {
 }
 function isOverdue(t) {
   return t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
+}
+// True if any stage has an overdue deadline that isn't yet submitted
+function hasLateStage(t) {
+  if (t.status === "completed") return false;
+  const now = new Date();
+  return (t.stages || []).some(s => s.deadline && !s.done && new Date(s.deadline) < now);
 }
 function getEmpName(t) {
   const a = t.assignedTo;
@@ -424,16 +457,24 @@ export default function TasksListPage() {
         updates.stage  = "S4";
         updates.status = "completed";
       } else {
+        const nextStg      = stageTask.stages?.[stageIdx + 1] || {};
+        const nextAssigned = normalizeAssignedTo(nextStg.assignedTo);
         updates.stage = STAGE_KEYS[stageIdx + 1];
+
         if (stageIdx === 0) {
-          updates.status = "in_progress";
+          // S1 (Content/Script) approved — no client review needed for this stage.
+          // If nobody is assigned to S2 (next stage), consider the task complete.
+          if (nextAssigned.length === 0) {
+            updates.status = "completed";
+            updates.stage  = "S4";
+          } else {
+            updates.status = "in_progress";
+          }
         } else if (stageIdx === 1) {
-          const nextStg      = stageTask.stages?.[stageIdx + 1] || {};
-          const nextAssigned = normalizeAssignedTo(nextStg.assignedTo);
           updates.status = nextAssigned.length > 0 ? "in_progress" : "review";
         } else {
-          // S3 approved → always goes to client review
-          updates.status = "review";
+          // S3 approved → goes to client review only if S4 has no assignees yet
+          updates.status = nextAssigned.length > 0 ? "in_progress" : "review";
         }
       }
       const res  = await fetch(`/api/admin/tasks/${stageTask._id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) });
@@ -636,6 +677,7 @@ export default function TasksListPage() {
                             <th style={{ width: 90 }}>Type</th>
                             <th style={{ width: 110 }}>Pipeline</th>
                             <th style={{ width: 100 }}>Scheduled</th>
+                            <th style={{ width: 60 }}>Grade</th>
                             <th style={{ width: 110 }}>S1 Script</th>
                             <th style={{ width: 110 }}>S2 Shoot</th>
                             <th style={{ width: 110 }}>S3 Edit</th>
@@ -645,23 +687,25 @@ export default function TasksListPage() {
                         <tbody>
                           {tasks.map(t => {
                             const over = isOverdue(t);
+                            const late = hasLateStage(t);
                             const ct   = CONTENT_META[t.contentType];
                             return (
                               <tr key={t._id} className={over ? "overdue-row" : ""}
-                                style={{ cursor: "pointer" }}
+                                style={{ cursor: "pointer", background: late ? "#FFF5F5" : "" }}
                                 onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
                                 <td style={{ fontFamily: "monospace", fontWeight: 700, color: "#6366F1", fontSize: 12, whiteSpace: "nowrap" }}>
                                   {t.taskId || `#${String(t._id).slice(-4).toUpperCase()}`}
                                 </td>
                                 <td>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
-                                    {over && <i className="bi bi-exclamation-circle-fill text-danger me-1" style={{ fontSize: 10 }} />}
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B", display: "flex", alignItems: "center", gap: 6 }}>
+                                    {late && <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", whiteSpace: "nowrap", flexShrink: 0 }}>LATE</span>}
+                                    {over && <i className="bi bi-exclamation-circle-fill text-danger" style={{ fontSize: 10, flexShrink: 0 }} />}
                                     {t.nomenclature || t.title}
                                   </div>
                                   {t.nomenclature && <div style={{ fontSize: 10, color: "#94A3B8" }}>{t.title}</div>}
                                   {t.status === "review" && (
                                     <span style={{ display: "inline-flex", gap: 4, marginTop: 3, padding: "2px 7px", borderRadius: 20, background: "#DBEAFE", color: "#1D4ED8", fontSize: 10, fontWeight: 700 }}>
-                                      <i className="bi bi-hourglass-split" />Client Review
+                                      <i className="bi bi-hourglass-split" />Admin Review
                                     </span>
                                   )}
                                   {t.status === "todo" && t.reviewNote && (
@@ -706,6 +750,9 @@ export default function TasksListPage() {
                                 <td style={{ fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>
                                   {t.scheduledFor ? fmtDate(t.scheduledFor) : t.dueDate ? fmtDate(t.dueDate) : <span style={{ color: "#CBD5E1" }}>—</span>}
                                 </td>
+                                <td onClick={e => e.stopPropagation()}>
+                                  <GradeBadge task={t} />
+                                </td>
                                 {STAGE_KEYS.map((key, i) => {
                                   const stg  = t.stages?.[i] || {};
                                   const emps = getStageEmps(stg, employees);
@@ -742,6 +789,7 @@ export default function TasksListPage() {
                             <th style={{ width: 110 }}>Category</th>
                             <th style={{ width: 140 }}>Assignee</th>
                             <th style={{ width: 110 }}>Due Date</th>
+                            <th style={{ width: 60 }}>Grade</th>
                             <th style={{ width: 110 }}>Status</th>
                           </tr>
                         </thead>
@@ -788,6 +836,7 @@ export default function TasksListPage() {
                                   {over && <i className="bi bi-exclamation-circle me-1" style={{ fontSize: 10 }} />}
                                   {fmtDate(t.dueDate)}
                                 </td>
+                                <td onClick={e => e.stopPropagation()}><GradeBadge task={t} /></td>
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
                                 </td>
@@ -994,7 +1043,7 @@ export default function TasksListPage() {
                           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                             <div>
                               <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
-                                Assignees · {["Content","Production/Design","Editing","Digital Mktg"][i]} team
+                                Assignees · {["Content","Production","Design/Editing","Digital Mktg"][i]} team
                               </label>
                               <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, maxHeight: 120, overflowY: "auto", background: "#fff" }}>
                                 {filterByDept(employees, STAGE_DEPT_KEYWORDS[i]).map((emp, ei) => {
@@ -1226,7 +1275,7 @@ export default function TasksListPage() {
                 <input className="tl-field-input" value={stageForm.name} onChange={e => setStageForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div style={{ marginBottom: 14 }}>
-                <label className="tl-field-label">Assignees · {["Content","Production","Editing","Digital Mktg"][stageIdx]}</label>
+                <label className="tl-field-label">Assignees · {["Content","Production","Design/Editing","Digital Mktg"][stageIdx]}</label>
                 <div style={{ border: "1.5px solid #E5E7EB", borderRadius: 10, maxHeight: 130, overflowY: "auto" }}>
                   {filterByDept(employees, STAGE_DEPT_KEYWORDS[stageIdx]).map((emp, ei, arr) => {
                     const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
@@ -1273,7 +1322,32 @@ export default function TasksListPage() {
                     )}
                   </div>
                 );
-                if (stg.approved) return <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, fontWeight: 700, color: "#15803D" }}><i className="bi bi-check-circle-fill me-2" />Approved</div>;
+                if (stg.approved) return (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "#15803D", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span><i className="bi bi-check-circle-fill me-2" />Approved</span>
+                      <button
+                        onClick={async () => {
+                          if (!confirm("Reset this stage for re-review? The employee will need to re-submit.")) return;
+                          setStageSaving(true);
+                          try {
+                            const cur = stageTask.stages?.[stageIdx] || {};
+                            const stages = buildStages(stageTask, stageIdx, { ...cur, done: false, doneAt: null, approved: false, rejected: false, rejectReason: "", proofUrls: cur.proofUrls || [] });
+                            const prevStage = STAGE_KEYS[Math.max(0, stageIdx)];
+                            await fetch(`/api/admin/tasks/${stageTask._id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stages, stage: prevStage, status: "in_progress", performedByName: adminUser?.name || "Admin" }) });
+                            toast.success("Stage reset for re-review");
+                            setStageModal(false);
+                            fetchTasks();
+                          } catch { toast.error("Failed to reset"); }
+                          finally { setStageSaving(false); }
+                        }}
+                        disabled={stageSaving}
+                        style={{ fontSize: 11, fontWeight: 700, background: "#FEF3C7", color: "#B45309", border: "1.5px solid #FDE68A", borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}>
+                        <i className="bi bi-arrow-counterclockwise me-1" />Re-review
+                      </button>
+                    </div>
+                  </div>
+                );
                 if (stg.rejected) return <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}><div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626" }}><i className="bi bi-x-circle-fill me-2" />Rejected</div>{stg.rejectReason && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 3 }}>Reason: {stg.rejectReason}</div>}</div>;
                 return null;
               })()}

@@ -71,10 +71,17 @@ export default function ContentCalendarPage() {
     setSelectedDay(null);
   };
 
-  /* ── Group tasks by day (use scheduledFor or dueDate) ── */
+  /* ── Group tasks by day (scheduledFor → dueDate → earliest stage deadline) ── */
   const tasksByDay = {};
   for (const t of tasks) {
-    const d = t.scheduledFor ? new Date(t.scheduledFor) : t.dueDate ? new Date(t.dueDate) : null;
+    let d = t.scheduledFor ? new Date(t.scheduledFor)
+          : t.dueDate      ? new Date(t.dueDate)
+          : null;
+    // Fall back to the earliest stage deadline if no task-level date
+    if (!d && t.stages?.length) {
+      const deadlines = t.stages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
+      if (deadlines.length) d = deadlines.reduce((a, b) => a < b ? a : b);
+    }
     if (!d) continue;
     if (d.getFullYear() !== year || d.getMonth() !== month) continue;
     const day = d.getDate();

@@ -1,6 +1,7 @@
 // pages/employee/dashboard.js
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import Dashnav from "@/components/Dashnav";
 import Head from "next/head";
 import { getSocket } from "@/utils/socket";
@@ -88,6 +89,7 @@ const TASK_ST = {
 const PRIO_DOT = { low:"#9CA3AF", medium:"#3B82F6", high:"#F97316", urgent:"#EF4444" };
 
 export default function EmployeeDashboard() {
+  const router = useRouter();
   const [employee,           setEmployee]           = useState(null);
   const [holidays,           setHolidays]           = useState([]);
   const [loadingHolidays,    setLoadingHolidays]    = useState(true);
@@ -104,13 +106,17 @@ export default function EmployeeDashboard() {
   const [tasks,              setTasks]              = useState([]);
   const [loadingTasks,       setLoadingTasks]       = useState(true);
 
-  // ── Employee ───────────────────────────────────────────────────────────────
+  // ── Employee — redirect to login if not authenticated ─────────────────────
   useEffect(() => {
     const token = localStorage.getItem("employeeToken");
+    if (!token) { router.replace("/employee/login"); return; }
     fetch("/api/employee/me", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => { if (d.success) setEmployee(d.employee); })
-      .catch(console.error);
+      .then(d => {
+        if (d.success) setEmployee(d.employee);
+        else { localStorage.removeItem("employeeToken"); router.replace("/employee/login"); }
+      })
+      .catch(() => router.replace("/employee/login"));
   }, []);
 
   // ── Holidays ──────────────────────────────────────────────────────────────

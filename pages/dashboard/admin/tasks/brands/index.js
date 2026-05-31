@@ -334,6 +334,26 @@ export default function BrandsPage() {
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+          .brands-logobx {
+            width: 30px; height: 30px;
+            background: #fff;
+            border-radius: 50px;
+            padding: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,.10);
+            overflow: hidden;
+          }
+          .brands-logobx img { width: 100%; height: 100%; object-fit: contain; }
+          .brands-logobx--lg {
+            width: 50px; height: 50px;
+            border-radius: 12px;
+            padding: 6px;
+          }
+        `}</style>
       </Head>
 
       <div className="add-employee-area">
@@ -404,7 +424,9 @@ export default function BrandsPage() {
                         }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             {b.logo ? (
-                              <img src={b.logo} alt="" style={{ width: 30, height: 30, borderRadius: 8, objectFit: "cover" }} />
+                              <div className="brands-logobx">
+                                <img src={b.logo} alt="" />
+                              </div>
                             ) : (
                               <div style={{
                                 width: 30, height: 30, borderRadius: 8, background: b.color || "#6366F1",
@@ -508,7 +530,9 @@ function BrandDetail({ brand, activeTab, setActiveTab, onEdit, onDelete, gscSite
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {brand.logo ? (
-            <img src={brand.logo} alt="" style={{ width: 50, height: 50, borderRadius: 12, objectFit: "cover" }} />
+            <div className="brands-logobx brands-logobx--lg">
+              <img src={brand.logo} alt="" />
+            </div>
           ) : (
             <div style={{
               width: 50, height: 50, borderRadius: 12, background: brand.color || "#6366F1",

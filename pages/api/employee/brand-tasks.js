@@ -26,9 +26,14 @@ export default async function handler(req, res) {
     const query = { taskType: "production" };
     if (brandId) query.brandId = brandId;
     if (dateStart || dateEnd) {
+      const range = {
+        ...(dateStart ? { $gte: new Date(dateStart) } : {}),
+        ...(dateEnd   ? { $lte: new Date(dateEnd)   } : {}),
+      };
       query.$or = [
-        { scheduledFor: { ...(dateStart ? { $gte: new Date(dateStart) } : {}), ...(dateEnd ? { $lte: new Date(dateEnd) } : {}) } },
-        { dueDate:      { ...(dateStart ? { $gte: new Date(dateStart) } : {}), ...(dateEnd ? { $lte: new Date(dateEnd) } : {}) } },
+        { scheduledFor:       range },
+        { dueDate:            range },
+        { "stages.deadline":  range },
       ];
     }
 

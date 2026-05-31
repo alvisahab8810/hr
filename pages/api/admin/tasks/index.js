@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         if (!q.status) q.status = { $nin: ["completed"] };
       }
 
-      /* date range filter — matches scheduledFor or dueDate */
+      /* date range filter — matches scheduledFor, dueDate, or any stage deadline */
       if (dateStart || dateEnd) {
         const range = {};
         if (dateStart) range.$gte = new Date(dateStart);
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
         q.$or = [
           { scheduledFor: range },
           { dueDate: range },
+          { "stages.deadline": range },
         ];
       }
 

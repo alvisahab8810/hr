@@ -769,11 +769,6 @@ export default function Leftbar({ role = "admin" }) {
               <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
                 Creative
               </li>
-              <li className={pathname === "/dashboard/admin/tasks/branding" ? "active" : ""}>
-                <Link href="/dashboard/admin/tasks/branding">
-                  <i className="bi bi-palette-fill" style={{ marginRight: 6, fontSize: 12 }} />Branding
-                </Link>
-              </li>
 
               {/* CLIENT */}
               <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
@@ -794,14 +789,14 @@ export default function Leftbar({ role = "admin" }) {
                   <i className="bi bi-people-fill" style={{ marginRight: 6, fontSize: 12 }} />Today · My Team
                 </Link>
               </li>
+              <li className={pathname === "/dashboard/admin/tasks/approvals" ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/approvals">
+                  <i className="bi bi-check2-square" style={{ marginRight: 6, fontSize: 12 }} />Approvals
+                </Link>
+              </li>
               <li className={pathname === "/dashboard/admin/tasks/team-performance" ? "active" : ""}>
                 <Link href="/dashboard/admin/tasks/team-performance">
                   <i className="bi bi-bar-chart-fill" style={{ marginRight: 6, fontSize: 12 }} />Team Performance
-                </Link>
-              </li>
-              <li className={pathname === "/dashboard/admin/tasks/email-center" ? "active" : ""}>
-                <Link href="/dashboard/admin/tasks/email-center">
-                  <i className="bi bi-envelope-fill" style={{ marginRight: 6, fontSize: 12 }} />Email Center
                 </Link>
               </li>
 
