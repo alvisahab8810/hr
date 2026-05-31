@@ -21,14 +21,17 @@ export default async function handler(req, res) {
   const acc = (brand.metaAds?._pendingAccounts || []).find(a => a.id === accountId);
   if (!acc) return res.status(400).json({ success: false, message: "Account not found in pending list" });
 
-  await Brand.findByIdAndUpdate(id, {
-    $set: {
-      "metaAds.connected":        true,
-      "metaAds.adAccountId":      acc.id,
-      "metaAds.adAccountName":    acc.name,
-      "metaAds._pendingAccounts": null,
-    },
-  });
+  const updateFields = {
+    "metaAds.connected":        true,
+    "metaAds.adAccountId":      acc.id,
+    "metaAds.adAccountName":    acc.name,
+    "metaAds._pendingAccounts": null,
+  };
+  // Carry forward the token that was saved during the OAuth callback
+  if (brand.metaAds?.token)       updateFields["metaAds.token"]       = brand.metaAds.token;
+  if (brand.metaAds?.tokenExpiry) updateFields["metaAds.tokenExpiry"] = brand.metaAds.tokenExpiry;
+
+  await Brand.findByIdAndUpdate(id, { $set: updateFields });
 
   // Fire sync in background
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";

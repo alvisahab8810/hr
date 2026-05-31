@@ -2,7 +2,7 @@
 // POST /api/admin/campaigns — create a new campaign
 import dbConnect from "@/utils/dbConnect";
 import AdCampaign from "@/models/AdCampaign";
-import "@/models/tasks/Brand";
+import Brand from "@/models/tasks/Brand";
 import "@/models/hr/Employee";
 
 function adminGuard(req, res) {
@@ -26,11 +26,22 @@ export default async function handler(req, res) {
     if (brandId) q.brandId = brandId;
 
     const campaigns = await AdCampaign.find(q)
-      .populate("brandId", "name color slug")
+      .populate("brandId", "name color slug metaAds googleAds")
       .sort({ createdAt: -1 })
       .lean();
 
-    return res.json({ success: true, campaigns });
+    // Only show synced campaigns for brands that are currently connected.
+    // Manually created campaigns (externalSource: "manual") always show.
+    const filtered = campaigns.filter(c => {
+      if (c.externalSource === "manual" || !c.externalSource) return true;
+      const brand = c.brandId;
+      if (!brand) return false;
+      if (c.externalSource === "meta")   return brand.metaAds?.connected === true;
+      if (c.externalSource === "google") return brand.googleAds?.connected === true;
+      return true;
+    });
+
+    return res.json({ success: true, campaigns: filtered });
   }
 
   /* ── POST ── */

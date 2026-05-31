@@ -89,7 +89,11 @@ export default async function handler(req, res) {
 
     // 4b. Multiple accounts → store pending, redirect to selection UI
     await Brand.findByIdAndUpdate(brandId, {
-      $set: { "metaAds._pendingAccounts": accounts },
+      $set: {
+        "metaAds._pendingAccounts": accounts,
+        "metaAds.token":            longToken,
+        "metaAds.tokenExpiry":      tokenExpiry,
+      },
     });
     return res.redirect(`${adminPage}?adSelectFor=${brandId}&adSource=meta`);
 

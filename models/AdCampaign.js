@@ -46,4 +46,8 @@ const AdCampaignSchema = new mongoose.Schema({
   creatives: { type: [CreativeSchema], default: [] },
 }, { timestamps: true });
 
-export default mongoose.models.AdCampaign || mongoose.model("AdCampaign", AdCampaignSchema);
+// Unique per Meta/Google campaign — prevents duplicates when multiple brands share an ad account
+AdCampaignSchema.index({ externalId: 1, externalSource: 1 }, { unique: true, sparse: true });
+
+delete mongoose.models["AdCampaign"];
+export default mongoose.model("AdCampaign", AdCampaignSchema);

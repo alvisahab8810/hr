@@ -68,14 +68,15 @@ export default async function handler(req, res) {
       return res.json({ success: true, synced: 0, message: "No campaigns found in this ad account" });
     }
 
-    // 2. Fetch campaign-level insights for this month in one batch request
-    // Use batch API to avoid N+1 requests
+    // 2. Fetch campaign-level insights using batch API (last 90 days rolling window)
+    // Note: access_token is passed at top-level only — including it in relative_url
+    // causes conflicts in Facebook's batch mode
     const insightsMap = {};
     const batchSize = 50;
     for (let i = 0; i < campaigns.length; i += batchSize) {
       const batch = campaigns.slice(i, i + batchSize).map(c => ({
         method: "GET",
-        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,actions,action_values,cost_per_action_type&date_preset=this_month&access_token=${token}`,
+        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,actions,action_values,cost_per_action_type&date_preset=last_90d`,
       }));
       const batchRes = await fetch(`https://graph.facebook.com/v19.0/`, {
         method: "POST",
@@ -92,59 +93,81 @@ export default async function handler(req, res) {
         const campId = campaigns[i + j].id;
         const item   = batchData[j];
         if (!item || item.code !== 200) { insightsMap[campId] = null; continue; }
-        const parsed = JSON.parse(item.body);
-        insightsMap[campId] = parsed.data?.[0] || null;
+        try {
+          const parsed = JSON.parse(item.body);
+          insightsMap[campId] = parsed.data?.[0] || null;
+        } catch { insightsMap[campId] = null; }
       }
     }
 
     // 3. Upsert each campaign into AdCampaign collection
     let synced = 0;
     for (const c of campaigns) {
-      const ins    = insightsMap[c.id] || {};
-      const spend  = Number(ins.spend || 0);
-      const convs  = sumConversions(ins.actions);
-      const convVal= sumConvValue(ins.action_values);
-      const roas   = spend > 0 && convVal > 0 ? Math.round((convVal / spend) * 100) / 100 : null;
-      const cpa    = convs > 0 ? Math.round(spend / convs) : null;
-      const impr   = Number(ins.impressions || 0);
-      const clicks = Number(ins.clicks || 0);
-      const ctr    = impr > 0 ? Math.round((clicks / impr) * 10000) / 100 : null; // percentage
-      const reach  = Number(ins.reach || 0);
-
-      // Budget: Meta stores in smallest currency unit (paise for INR, cents for USD)
       const rawBudget = Number(c.daily_budget || c.lifetime_budget || 0);
       const budget    = Math.round(rawBudget / 100);
 
+      // Base fields always updated (campaign meta-data)
+      const setFields = {
+        name:           c.name,
+        platform:       "meta",
+        status:         mapStatus(c.status),
+        budget,
+        externalId:     c.id,
+        externalSource: "meta",
+      };
+
+      // Only update performance metrics when insights actually returned data
+      // This prevents overwriting good historical data with zeros on a failed API call
+      const ins = insightsMap[c.id];
+      if (ins !== null && ins !== undefined) {
+        const spend  = Number(ins.spend || 0);
+        const convs  = sumConversions(ins.actions);
+        const convVal= sumConvValue(ins.action_values);
+        const impr   = Number(ins.impressions || 0);
+        const clicks = Number(ins.clicks || 0);
+        const reach  = Number(ins.reach || 0);
+        const roas   = spend > 0 && convVal > 0 ? Math.round((convVal / spend) * 100) / 100 : null;
+        const cpa    = convs > 0 ? Math.round(spend / convs) : null;
+        const ctr    = impr > 0 ? Math.round((clicks / impr) * 10000) / 100 : null;
+
+        setFields["performance.spent"]       = spend;
+        setFields["performance.impressions"] = impr;
+        setFields["performance.clicks"]      = clicks;
+        setFields["performance.reach"]       = reach;
+        setFields["performance.conversions"] = Math.round(convs);
+        setFields["performance.roas"]        = roas;
+        setFields["performance.cpa"]         = cpa;
+        setFields["performance.ctr"]         = ctr;
+      }
+
+      // Key on externalId alone (no brandId) so the same Meta campaign is never
+      // duplicated when multiple brands share a Business Manager access token.
+      // brandId is always overwritten to the brand that triggered this sync.
+      setFields.brandId = brand._id;
       await AdCampaign.findOneAndUpdate(
-        { brandId: brand._id, externalId: c.id, externalSource: "meta" },
-        {
-          $set: {
-            name:           c.name,
-            platform:       "meta",
-            status:         mapStatus(c.status),
-            budget,
-            externalId:     c.id,
-            externalSource: "meta",
-            "performance.spent":       spend,
-            "performance.impressions": impr,
-            "performance.clicks":      clicks,
-            "performance.reach":       reach,
-            "performance.conversions": Math.round(convs),
-            "performance.roas":        roas,
-            "performance.cpa":         cpa,
-            "performance.ctr":         ctr,
-          },
-          $setOnInsert: { brandId: brand._id },
-        },
+        { externalId: c.id, externalSource: "meta" },
+        { $set: setFields },
         { upsert: true, new: true }
       );
       synced++;
     }
 
-    // 4. Update lastSync timestamp
+    // 4. Remove stale campaigns — ones that were previously under this brand
+    // but are NOT in the current ad account's campaign list.
+    // This cleans up campaigns from a previously mis-connected ad account.
+    const currentIds = campaigns.map(c => c.id);
+    const deleted = await AdCampaign.deleteMany({
+      brandId: brand._id,
+      externalSource: "meta",
+      externalId: { $nin: currentIds },
+    });
+
+    // 5. Update lastSync timestamp
     await Brand.findByIdAndUpdate(id, { $set: { "metaAds.lastSync": new Date() } });
 
-    return res.json({ success: true, synced, message: `Synced ${synced} campaign${synced !== 1 ? "s" : ""} from Meta Ads` });
+    const msg = `Synced ${synced} campaign${synced !== 1 ? "s" : ""} from Meta Ads` +
+      (deleted.deletedCount > 0 ? ` · removed ${deleted.deletedCount} stale` : "");
+    return res.json({ success: true, synced, message: msg });
 
   } catch (err) {
     console.error("[meta-ads/sync]", err.message);

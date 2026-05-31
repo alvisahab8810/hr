@@ -3665,9 +3665,9 @@ function AdCampaignsView({ brandSlug }) {
   const avgCpa      = totalConv > 0 ? Math.round(totalSpent / totalConv) : null;
   const ctr         = totalImpr > 0 ? ((totalClicks / totalImpr) * 100).toFixed(1) : null;
 
-  const creatives = campaigns.flatMap(c => (c.creatives || []).map(cr => ({ ...cr, campaign: c.name }))).slice(0, 3);
-
   if (loading) return <div className="cp-loading"><div className="cp-spinner" /></div>;
+
+  const totalReach  = campaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
 
   if (campaigns.length === 0) {
     return (
@@ -3690,35 +3690,29 @@ function AdCampaignsView({ brandSlug }) {
         </div>
       )}
 
-      {/* 4 stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
+      {/* 5 summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Total Spend",    value: fmtINR(totalSpent),  sub: `of ${fmtINR(totalBudget)} budget`,         color: "#F97316" },
-          { label: "Impressions",    value: fmtNum(totalImpr),   sub: totalImpr ? "this month" : "no data yet",   color: "#0EA5E9" },
-          { label: "Clicks · CTR",   value: fmtNum(totalClicks), sub: ctr ? `CTR ${ctr}%` : "no data yet",       color: "#6366F1" },
-          { label: "Conversions",    value: fmtNum(totalConv),   sub: totalConv ? "total logged" : "no data yet", color: "#10B981" },
+          { label: "Total Spend",  value: fmtINR(totalSpent),  sub: `of ${fmtINR(totalBudget)} budget`, color: "#F97316", icon: "bi-credit-card" },
+          { label: "Reach",        value: fmtNum(totalReach),  sub: totalReach ? "unique people" : "no data yet", color: "#8B5CF6", icon: "bi-eye" },
+          { label: "Impressions",  value: fmtNum(totalImpr),   sub: totalImpr  ? "this month" : "no data yet",    color: "#0EA5E9", icon: "bi-bar-chart" },
+          { label: "Leads",        value: fmtNum(totalConv),   sub: totalConv  ? "total logged" : "no data yet",  color: "#10B981", icon: "bi-person-check" },
+          { label: "Total Clicks", value: fmtNum(totalClicks), sub: ctr        ? `CTR ${ctr}%` : "no data yet",   color: "#6366F1", icon: "bi-cursor" },
         ].map(s => (
           <div key={s.label} className="cp-card" style={{ padding: "16px 18px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: s.color, lineHeight: 1.1 }}>{s.value}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: s.color + "18", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <i className={`bi ${s.icon}`} style={{ color: s.color, fontSize: 12 }} />
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5 }}>{s.label}</div>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1.1 }}>{s.value}</div>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* CPA + ROAS row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-        <div className="cp-card" style={{ padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Cost Per Acquisition</div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "#F97316" }}>{avgCpa ? fmtINR(avgCpa) : "—"}</div>
-        </div>
-        <div className="cp-card" style={{ padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Return on Ad Spend</div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "#10B981" }}>{avgRoas ? avgRoas + "x" : "—"}</div>
-        </div>
-      </div>
-
-      {/* Active campaigns table */}
+      {/* Campaign-wise details table */}
       <div className="cp-card" style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
           <i className="bi bi-broadcast" style={{ color: "#F97316" }} />
@@ -3729,29 +3723,59 @@ function AdCampaignsView({ brandSlug }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "#FAFAFA" }}>
-                {["Campaign", "Spend", "Impressions", "Conversions", "CPA", "ROAS"].map(h => (
-                  <th key={h} style={{ padding: "9px 16px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #F1F5F9" }}>{h}</th>
+                {["Campaign", "Result", "Reach", "CPR", "Budget", "Amount Spent", "Link Clicks", "CTR"].map(h => (
+                  <th key={h} style={{ padding: "9px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #F1F5F9", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {campaigns.map(c => {
-                const p = c.performance || {};
-                const campCpa = p.conversions > 0 ? Math.round((p.spent || 0) / p.conversions) : null;
+                const p       = c.performance || {};
+                const synced  = c.externalSource === "meta" || c.externalSource === "google";
+                const dash    = v => (synced ? fmtNum(v) : (v > 0 ? fmtNum(v) : "—"));
+                const cpr     = p.conversions > 0 ? Math.round((p.spent || 0) / p.conversions) : null;
+                const spentPct = c.budget ? Math.min(100, Math.round(((p.spent || 0) / c.budget) * 100)) : 0;
                 return (
                   <tr key={c._id} style={{ borderBottom: "1px solid #F8FAFC" }}>
-                    <td style={{ padding: "12px 16px" }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{c.name}</div>
-                      <div style={{ display: "flex", gap: 5, marginTop: 3 }}>
+                    {/* Campaign name + platform + status */}
+                    <td style={{ padding: "12px 14px", minWidth: 180 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{c.name}</div>
+                      <div style={{ display: "flex", gap: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "#F1F5F9", color: PLATFORM_COLOR[c.platform] || "#64748b" }}>{PLATFORM_LABEL[c.platform] || c.platform}</span>
                         <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: STATUS_BG[c.status] || "#F1F5F9", color: STATUS_COLOR[c.status] || "#64748b" }}>{STATUS_LABEL[c.status] || c.status}</span>
                       </div>
                     </td>
-                    <td style={{ padding: "12px 16px", fontWeight: 600, color: "#374151", fontSize: 13 }}>{fmtINR(p.spent)}</td>
-                    <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{fmtNum(p.impressions)}</td>
-                    <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{p.conversions || "—"}</td>
-                    <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{campCpa ? fmtINR(campCpa) : "—"}</td>
-                    <td style={{ padding: "12px 16px", fontWeight: 700, color: p.roas ? "#10B981" : "#94a3b8", fontSize: 13 }}>{p.roas ? p.roas + "x" : "—"}</td>
+                    {/* Result (conversions/leads) */}
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: p.conversions > 0 ? "#10B981" : "#94a3b8", fontSize: 14 }}>
+                      {p.conversions > 0 ? p.conversions : (synced ? 0 : "—")}
+                    </td>
+                    {/* Reach */}
+                    <td style={{ padding: "12px 14px", color: "#374151", fontSize: 13 }}>
+                      {dash(p.reach)}
+                    </td>
+                    {/* CPR - cost per result */}
+                    <td style={{ padding: "12px 14px", color: "#374151", fontSize: 13, fontWeight: 600 }}>
+                      {cpr ? fmtINR(cpr) : "—"}
+                    </td>
+                    {/* Budget with spend bar */}
+                    <td style={{ padding: "12px 14px", minWidth: 110 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>{fmtINR(c.budget || 0)}</div>
+                      <div style={{ height: 4, background: "#F1F5F9", borderRadius: 10 }}>
+                        <div style={{ height: "100%", borderRadius: 10, width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#F97316" }} />
+                      </div>
+                    </td>
+                    {/* Amount Spent */}
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: p.spent > 0 ? "#F97316" : "#94a3b8", fontSize: 13 }}>
+                      {p.spent > 0 ? fmtINR(p.spent) : (synced ? "₹0" : "—")}
+                    </td>
+                    {/* Link Clicks */}
+                    <td style={{ padding: "12px 14px", color: p.clicks > 0 ? "#6366F1" : "#94a3b8", fontSize: 13, fontWeight: 600 }}>
+                      {dash(p.clicks)}
+                    </td>
+                    {/* CTR */}
+                    <td style={{ padding: "12px 14px", color: "#64748b", fontSize: 13 }}>
+                      {p.ctr > 0 ? p.ctr.toFixed(2) + "%" : "—"}
+                    </td>
                   </tr>
                 );
               })}
@@ -3760,51 +3784,17 @@ function AdCampaignsView({ brandSlug }) {
         </div>
       </div>
 
-      {/* Top creatives + pacing */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {/* Top performing creatives */}
-        <div className="cp-card">
-          <div className="cp-card-title"><i className="bi bi-stars" style={{ color: "#F97316" }} /> Top performing creatives</div>
-          {creatives.length === 0 ? (
-            <div className="cp-empty-state"><i className="bi bi-image" />No creative data yet</div>
-          ) : creatives.map((cr, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < creatives.length - 1 ? "1px solid #F1F5F9" : "none" }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#F97316", width: 20 }}>#{i + 1}</div>
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {cr.thumbUrl ? <img src={cr.thumbUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} /> : <i className="bi bi-image" style={{ color: "#94a3b8" }} />}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{cr.name || cr.campaign}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-                  Spend {fmtINR(cr.spend)} · Conv {cr.conv || 0} · CTR {cr.ctr ? cr.ctr + "%" : "—"}
-                </div>
-              </div>
-            </div>
-          ))}
+      {/* CPA + ROAS summary row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="cp-card" style={{ padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Cost Per Acquisition</div>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#F97316" }}>{avgCpa ? fmtINR(avgCpa) : "—"}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>avg across all campaigns</div>
         </div>
-
-        {/* Spend pacing */}
-        <div className="cp-card">
-          <div className="cp-card-title"><i className="bi bi-bar-chart" style={{ color: "#F97316" }} /> Daily spend pacing</div>
-          {totalBudget === 0 ? (
-            <div className="cp-empty-state"><i className="bi bi-bar-chart" />No budget data yet</div>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80, marginBottom: 8 }}>
-                {Array.from({ length: 14 }, (_, i) => {
-                  const pct = Math.min(100, Math.round(20 + Math.random() * 60));
-                  const isToday = i === 13;
-                  return (
-                    <div key={i} style={{ flex: 1, background: isToday ? "#F97316" : "#FED7AA", borderRadius: "3px 3px 0 0", height: `${pct}%`, transition: "height .3s" }} />
-                  );
-                })}
-              </div>
-              <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "center" }}>Last 14 days</div>
-              <div style={{ marginTop: 10, padding: "8px 12px", background: "#FFF7ED", borderRadius: 8, fontSize: 12, color: "#B45309", fontWeight: 500 }}>
-                On pace to spend {fmtINR(Math.round(totalBudget * 0.85))} by month end · {Math.round((totalSpent / (totalBudget || 1)) * 100)}% budget used
-              </div>
-            </>
-          )}
+        <div className="cp-card" style={{ padding: "16px 18px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Return on Ad Spend</div>
+          <div style={{ fontSize: 30, fontWeight: 900, color: "#10B981" }}>{avgRoas ? avgRoas + "x" : "—"}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{avgRoas ? "avg ROAS this month" : "no data yet"}</div>
         </div>
       </div>
     </div>

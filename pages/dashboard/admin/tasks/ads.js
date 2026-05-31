@@ -27,7 +27,7 @@ const TABS = [
   { key: "accounts", label: "Ad Accounts",      icon: "bi-plug" },
 ];
 
-const STAGE_LABELS = ["Creative", "Setup", "Budget", "Live", "Optimize"];
+const STAGE_LABELS = ["Campaign", "Ad Set", "Ads", "Live", "Optimize"];
 
 function fmtINR(n) {
   if (!n) return "₹0";
@@ -66,6 +66,7 @@ export default function AdCampaignsPage() {
   const [editCamp,     setEditCamp]     = useState(null);
   const [syncing,      setSyncing]      = useState({});  // { brandId_meta: bool, brandId_google: bool }
   const [alert,        setAlert]        = useState(null);
+  const [brandFilter,  setBrandFilter]  = useState("");
   // Ad account selection modals
   const [metaSelect,   setMetaSelect]   = useState(null); // { brandId, brandName, accounts[] }
   const [googleSelect, setGoogleSelect] = useState(null); // { brandId, brandName, customers[] }
@@ -112,7 +113,14 @@ export default function AdCampaignsPage() {
         .then(d => {
           if (d.success && d.accounts?.length) {
             setMetaSelect({ brandId: adSelectFor, brandName: d.brandName, accounts: d.accounts });
-            setSelectedAcct(d.accounts[0].id);
+            // Auto-select the account whose name best matches the brand name
+            const lower = (d.brandName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            const match = d.accounts.find(a => {
+              const n = (a.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              const b = (a.business || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+              return n.includes(lower) || lower.includes(n) || b.includes(lower) || lower.includes(b);
+            });
+            setSelectedAcct((match || d.accounts.find(a => a.status === "active") || d.accounts[0]).id);
           } else {
             setAlert({ type: "error", msg: "Could not load Meta ad accounts." });
           }
@@ -235,6 +243,28 @@ export default function AdCampaignsPage() {
     load();
   };
 
+  const toggleStage = async (campId, stageIdx) => {
+    // Optimistically update UI first
+    setCampaigns(prev => prev.map(c => {
+      if (c._id !== campId) return c;
+      const stages = (c.stages || []).map((s, i) =>
+        i === stageIdx ? { ...s, completed: !s.completed } : s
+      );
+      return { ...c, stages };
+    }));
+    // Persist to DB
+    const camp = campaigns.find(c => c._id === campId);
+    if (!camp) return;
+    const stages = (camp.stages || []).map((s, i) =>
+      i === stageIdx ? { ...s, completed: !s.completed } : s
+    );
+    await fetch(`/api/admin/campaigns/${campId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stages }),
+    });
+  };
+
   const updateStatus = async (id, status) => {
     await fetch(`/api/admin/campaigns/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -244,16 +274,21 @@ export default function AdCampaignsPage() {
   };
 
   const displayed = campaigns.filter(c => {
-    if (tab === "meta")   return c.platform === "meta";
-    if (tab === "google") return c.platform === "google";
+    if (tab === "meta")   { if (c.platform !== "meta")   return false; }
+    if (tab === "google") { if (c.platform !== "google") return false; }
+    if (brandFilter) {
+      const bId = c.brandId?._id || c.brandId;
+      if (String(bId) !== String(brandFilter)) return false;
+    }
     return true;
   });
 
-  const active      = campaigns.filter(c => c.status === "active");
-  const totalBudget = campaigns.reduce((s, c) => s + (c.budget || 0), 0);
-  const totalSpent  = campaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
-  const totalConv   = campaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
-  const roasVals    = campaigns.filter(c => c.performance?.roas).map(c => c.performance.roas);
+  const statBase    = brandFilter ? campaigns.filter(c => String(c.brandId?._id || c.brandId) === String(brandFilter)) : campaigns;
+  const active      = statBase.filter(c => c.status === "active");
+  const totalBudget = statBase.reduce((s, c) => s + (c.budget || 0), 0);
+  const totalSpent  = statBase.reduce((s, c) => s + (c.performance?.spent || 0), 0);
+  const totalConv   = statBase.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
+  const roasVals    = statBase.filter(c => c.performance?.roas).map(c => c.performance.roas);
   const avgRoas     = roasVals.length ? (roasVals.reduce((a, b) => a + b, 0) / roasVals.length).toFixed(2) : "—";
 
   const brandMap = {};
@@ -290,8 +325,8 @@ export default function AdCampaignsPage() {
           .ad-stat{border-radius:14px;padding:16px 20px;border:1.5px solid;display:flex;align-items:center;gap:12px;}
           .coming-block{display:flex;flex-direction:column;align-items:center;padding:80px 40px;text-align:center;color:#94A3B8;}
           .camp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
-          .stage-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;background:#F1F5F9;color:#64748B;}
-          .stage-chip.done{background:#DCFCE7;color:#15803D;}
+          .stage-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;background:#F1F5F9;color:#64748B;border:1.5px solid #E5E7EB;}
+          .stage-chip.done{background:#DCFCE7;color:#15803D;border-color:#86EFAC;}
           .ad-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;}
           .ad-modal{background:#fff;border-radius:16px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.15);overflow:hidden;max-height:90vh;display:flex;flex-direction:column;}
           .ad-modal-head{padding:20px 24px 16px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
@@ -379,13 +414,32 @@ export default function AdCampaignsPage() {
                 ))}
               </div>
 
-              {/* Tabs */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+              {/* Tabs + Brand filter */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
                 {TABS.map(t => (
                   <button key={t.key} className={`ad-tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>
                     <i className={`bi ${t.icon}`} /> {t.label}
                   </button>
                 ))}
+                {tab !== "accounts" && tab !== "monthly" && (
+                  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                    <select
+                      value={brandFilter}
+                      onChange={e => setBrandFilter(e.target.value)}
+                      style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, fontWeight: 600, color: brandFilter ? "#4F46E5" : "#64748B", background: brandFilter ? "#EEF2FF" : "#fff", cursor: "pointer", fontFamily: "inherit", outline: "none" }}
+                    >
+                      <option value="">All Brands</option>
+                      {[...new Map(campaigns.filter(c => c.brandId).map(c => [c.brandId?._id || c.brandId, c.brandId])).values()].map(b => (
+                        <option key={b._id || b} value={b._id || b}>{b.name || b}</option>
+                      ))}
+                    </select>
+                    {brandFilter && (
+                      <button onClick={() => setBrandFilter("")} style={{ padding: "6px 10px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, background: "#fff", cursor: "pointer", color: "#64748B", fontFamily: "inherit" }}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Campaign cards */}
@@ -407,10 +461,11 @@ export default function AdCampaignsPage() {
                         const brand = c.brandId || {};
                         const perf  = c.performance || {};
                         const spentPct = c.budget ? Math.min(100, Math.round((perf.spent / c.budget) * 100)) : 0;
+                        const cpr = perf.conversions > 0 ? Math.round((perf.spent || 0) / perf.conversions) : null;
                         return (
                           <div key={c._id} className="ad-card">
                             {/* Header */}
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                               <div style={{ width: 10, height: 10, borderRadius: "50%", background: brand.color || "#6366F1", flexShrink: 0 }} />
                               <span style={{ fontWeight: 800, fontSize: 14, color: "#1E293B", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
                               <span className="ad-badge" style={{ background: pm.bg, color: pm.color }}>
@@ -422,10 +477,26 @@ export default function AdCampaignsPage() {
                             {/* Brand name */}
                             <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600, marginBottom: 10 }}>{brand.name || "—"}</div>
 
-                            {/* Stage chips */}
+                            {/* Stage chips — click to toggle done */}
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }}>
                               {(c.stages || []).map((s, i) => (
-                                <span key={i} className={`stage-chip ${s.completed ? "done" : ""}`}>
+                                <span
+                                  key={i}
+                                  onClick={() => toggleStage(c._id, i)}
+                                  title={s.completed ? "Click to mark incomplete" : "Click to mark done"}
+                                  style={{
+                                    display: "inline-flex", alignItems: "center", gap: 4,
+                                    padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                                    cursor: "pointer", userSelect: "none", transition: "all .12s",
+                                    background: s.completed ? "#DCFCE7" : "#F1F5F9",
+                                    color: s.completed ? "#15803D" : "#64748B",
+                                    border: `1.5px solid ${s.completed ? "#86EFAC" : "#E5E7EB"}`,
+                                  }}
+                                >
+                                  {s.completed
+                                    ? <i className="bi bi-check-circle-fill" style={{ fontSize: 9 }} />
+                                    : <span style={{ width: 9, height: 9, borderRadius: "50%", border: "1.5px solid #CBD5E1", display: "inline-block" }} />
+                                  }
                                   {i + 1} {STAGE_LABELS[i] || s.label}
                                 </span>
                               ))}
@@ -433,19 +504,28 @@ export default function AdCampaignsPage() {
 
                             {/* Budget bar */}
                             <div style={{ marginBottom: 10 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                                <span style={{ fontWeight: 600, color: "#374151" }}>Budget</span>
-                                <span style={{ color: "#64748B" }}>{fmtINR(perf.spent || 0)} / {fmtINR(c.budget || 0)}</span>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                                <span style={{ fontWeight: 700, color: "#374151" }}>Budget</span>
+                                <span style={{ color: "#64748B", fontWeight: 600 }}>{fmtINR(perf.spent || 0)} / {fmtINR(c.budget || 0)}</span>
                               </div>
                               <div style={{ height: 4, background: "#F1F5F9", borderRadius: 10 }}>
                                 <div style={{ height: "100%", borderRadius: 10, width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#6366F1", transition: "width .4s" }} />
                               </div>
                             </div>
 
-                            {/* Performance */}
-                            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 10 }}>
-                              {fmtNum(perf.reach)} reach · {perf.conversions || 0} conv
-                              {perf.roas ? <span style={{ marginLeft: 8, fontWeight: 700, color: "#7C3AED" }}>ROAS {perf.roas}x</span> : null}
+                            {/* Metrics grid: Result | Reach | CPR | Amount Spent */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+                              {[
+                                { label: "Result",  value: perf.conversions > 0 ? perf.conversions : "—",       color: "#10B981" },
+                                { label: "Reach",   value: fmtNum(perf.reach),                                   color: "#8B5CF6" },
+                                { label: "CPR",     value: cpr ? fmtINR(cpr) : "—",                             color: "#F59E0B" },
+                                { label: "Spent",   value: perf.spent > 0 ? fmtINR(perf.spent) : "₹0",          color: "#F97316" },
+                              ].map(m => (
+                                <div key={m.label} style={{ background: "#F8FAFC", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
+                                  <div style={{ fontSize: 12, fontWeight: 800, color: m.color }}>{m.value}</div>
+                                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .3, marginTop: 2 }}>{m.label}</div>
+                                </div>
+                              ))}
                             </div>
 
                             {/* Agenda */}
@@ -497,7 +577,9 @@ export default function AdCampaignsPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {Object.entries(brandMap).map(([key, b]) => {
+                            {Object.entries(brandMap)
+                              .filter(([key]) => !brandFilter || String(key) === String(brandFilter))
+                              .map(([key, b]) => {
                               const br = b.roasVals.length ? (b.roasVals.reduce((a, x) => a + x, 0) / b.roasVals.length).toFixed(2) + "x" : "—";
                               return (
                                 <tr key={key}>
@@ -758,23 +840,40 @@ export default function AdCampaignsPage() {
               <button onClick={() => setMetaSelect(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: 20 }}>×</button>
             </div>
             <div className="ad-modal-body">
-              {metaSelect.accounts.map(acc => (
-                <div key={acc.id} className={`acct-select-opt ${selectedAcct === acc.id ? "selected" : ""}`} onClick={() => setSelectedAcct(acc.id)}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: selectedAcct === acc.id ? "#1877F2" : "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <i className="bi bi-facebook" style={{ color: selectedAcct === acc.id ? "#fff" : "#1877F2", fontSize: 18 }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{acc.name}</div>
-                    <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
-                      {acc.id} · {acc.currency} · {acc.business || "Personal"}
-                      <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, background: acc.status === "active" ? "#DCFCE7" : "#F1F5F9", color: acc.status === "active" ? "#15803D" : "#64748B" }}>{acc.status}</span>
+              {(() => {
+                const brandLower = (metaSelect.brandName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                return metaSelect.accounts.map(acc => {
+                  const n = (acc.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                  const b = (acc.business || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                  const isRecommended = n.includes(brandLower) || brandLower.includes(n) || b.includes(brandLower) || brandLower.includes(b);
+                  const isSelected = selectedAcct === acc.id;
+                  return (
+                    <div key={acc.id} className={`acct-select-opt ${isSelected ? "selected" : ""}`} onClick={() => setSelectedAcct(acc.id)}
+                      style={{ opacity: acc.status === "inactive" ? 0.55 : 1 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: isSelected ? "#1877F2" : "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className="bi bi-facebook" style={{ color: isSelected ? "#fff" : "#1877F2", fontSize: 18 }} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{acc.name}</span>
+                          {isRecommended && (
+                            <span style={{ fontSize: 9, fontWeight: 800, background: "#DCFCE7", color: "#15803D", borderRadius: 20, padding: "1px 7px", letterSpacing: .3 }}>
+                              ✓ Recommended
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                          {acc.id} · {acc.currency} · {acc.business || "Personal"}
+                          <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, background: acc.status === "active" ? "#DCFCE7" : "#F1F5F9", color: acc.status === "active" ? "#15803D" : "#64748B" }}>{acc.status}</span>
+                        </div>
+                      </div>
+                      <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${isSelected ? "#1877F2" : "#E2E8F0"}`, background: isSelected ? "#1877F2" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {isSelected && <i className="bi bi-check" style={{ color: "#fff", fontSize: 11 }} />}
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${selectedAcct === acc.id ? "#1877F2" : "#E2E8F0"}`, background: selectedAcct === acc.id ? "#1877F2" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    {selectedAcct === acc.id && <i className="bi bi-check" style={{ color: "#fff", fontSize: 11 }} />}
-                  </div>
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
             <div className="ad-modal-foot">
               <button onClick={() => setMetaSelect(null)} style={{ padding: "9px 20px", background: "none", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#64748B" }}>Cancel</button>
