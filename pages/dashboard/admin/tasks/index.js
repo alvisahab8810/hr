@@ -96,17 +96,18 @@ const STAGE_COLORS = ["#F59E0B", "#6366F1", "#10B981", "#EC4899"];
 const STAGE_NAMES_DEFAULT = ["Script/Concept", "Shoot/Design", "Edit/Develop", "Posted/Live"];
 
 const STAGE_DEPT_KEYWORDS = [
-  ["content"],
-  ["production", "design", "creative"],
-  ["edit", "post", "editing"],
-  ["digital", "marketing"],
+  { include: ["content team"],                          exclude: [] },
+  { include: ["production"],                            exclude: ["design", "creative"] },
+  { include: ["editing team", "design team", "tech"],  exclude: [] },
+  { include: ["digital marketing"],                     exclude: [] },
 ];
 
-function filterByDept(employees, keywords) {
-  if (!keywords) return employees;
+function filterByDept(employees, { include, exclude }) {
   return employees.filter(emp => {
-    const dept = (emp.professional?.department || "").toLowerCase();
-    return keywords.some(kw => dept.includes(kw));
+    const dept  = (emp.professional?.department  || "").toLowerCase();
+    const desig = (emp.professional?.designation || "").toLowerCase();
+    if (exclude.some(kw => dept.includes(kw) || desig.includes(kw))) return false;
+    return include.some(kw => dept.includes(kw));
   });
 }
 

@@ -22,24 +22,24 @@ function fmtDate(d) {
 
 export default function ApprovalsPage() {
   const router = useRouter();
-  const [tasks,    setTasks]    = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState({});
   const [expanded, setExpanded] = useState({});
-  const [stageFilter, setStageFilter] = useState("all");
+  const [statusTab, setStatusTab] = useState("pending"); // pending | approved | rejected | all
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all non-completed tasks and filter client-side for pending stage approvals
       const r = await fetch("/api/admin/tasks?limit=500&hideCompleted=false", { credentials: "include" });
       const d = await r.json();
       if (d.success) {
-        // Keep only tasks that have at least one stage pending approval
-        const pending = (d.tasks || []).filter(t =>
-          (t.stages || []).some(s => s.done && !s.approved && !s.rejected)
+        // Show ALL tasks that have gone through any approval activity
+        const relevant = (d.tasks || []).filter(t =>
+          (t.stages || []).some(s => s.done || s.approved || s.rejected)
+          || ["review", "completed", "blocked", "in_progress"].includes(t.status)
         );
-        setTasks(pending);
+        setAllTasks(relevant);
       }
     } catch { toast.error("Failed to load"); }
     finally { setLoading(false); }
@@ -97,21 +97,82 @@ export default function ApprovalsPage() {
     finally { setSaving(p => ({ ...p, [key]: false })); }
   }
 
-  // Group tasks by their pending stage index
-  const byStage = { S1: [], S2: [], S3: [], S4: [] };
-  tasks.forEach(t => {
-    (t.stages || []).forEach((s, i) => {
-      if (s.done && !s.approved && !s.rejected) {
-        byStage[STAGE_KEYS[i]]?.push({ task: t, stageIdx: i, stg: s });
+  async function approveTask(task) {
+    const key = `${task._id}_task`;
+    setSaving(p => ({ ...p, [key]: true }));
+    try {
+      const res = await fetch(`/api/admin/tasks/${task._id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      const data = await res.json();
+      if (data.success) { toast.success("Task approved!"); load(); }
+      else toast.error(data.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setSaving(p => ({ ...p, [key]: false })); }
+  }
+
+  async function rejectTask(task, reason) {
+    if (!reason?.trim()) return toast.error("Rejection reason required");
+    const key = `${task._id}_task_rej`;
+    setSaving(p => ({ ...p, [key]: true }));
+    try {
+      const res = await fetch(`/api/admin/tasks/${task._id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "blocked", reviewNote: reason }),
+      });
+      const data = await res.json();
+      if (data.success) { toast.success("Rejected & returned to employee"); load(); }
+      else toast.error(data.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setSaving(p => ({ ...p, [key]: false })); }
+  }
+
+  // Build flat list of all approval items (one entry per stage, plus task-level reviews)
+  function buildItems(taskList) {
+    const items = [];
+    taskList.forEach(t => {
+      const stages = t.stages || [];
+      if (stages.length > 0) {
+        stages.forEach((s, i) => {
+          if (s.done || s.approved || s.rejected) {
+            items.push({ task: t, stageIdx: i, stg: s, type: "stage" });
+          }
+        });
+      } else {
+        // Non-production task (no stages) - show at task level
+        if (["review", "completed", "blocked", "in_progress"].includes(t.status)) {
+          items.push({ task: t, stageIdx: -1, stg: null, type: "task" });
+        }
       }
     });
-  });
+    return items;
+  }
 
-  const displayed = stageFilter === "all"
-    ? Object.entries(byStage).flatMap(([, arr]) => arr)
-    : (byStage[stageFilter] || []);
+  const allItems     = buildItems(allTasks);
+  const pendingItems = allItems.filter(({ stg, task, type }) =>
+    type === "stage"
+      ? (stg.done && !stg.approved && !stg.rejected)
+      : task.status === "review"
+  );
+  const approvedItems = allItems.filter(({ stg, task, type }) =>
+    type === "stage" ? stg.approved : task.status === "completed"
+  );
+  const rejectedItems = allItems.filter(({ stg, task, type }) =>
+    type === "stage" ? stg.rejected : task.status === "blocked"
+  );
 
-  const total = Object.values(byStage).reduce((s, a) => s + a.length, 0);
+  const displayedItems = statusTab === "pending"  ? pendingItems
+                       : statusTab === "approved" ? approvedItems
+                       : statusTab === "rejected" ? rejectedItems
+                       : allItems;
+
+  const pendingCount  = pendingItems.length;
+  const approvedCount = approvedItems.length;
+  const rejectedCount = rejectedItems.length;
+  const totalCount    = allItems.length;
 
   return (
     <div className="leaves-management-admin">
@@ -161,7 +222,7 @@ export default function ApprovalsPage() {
                 <div>
                   <h5 className="admin-main-heading">
                     Approvals
-                    {total > 0 && <span style={{ marginLeft: 10, background: "#EF4444", color: "#fff", fontSize: 12, fontWeight: 800, borderRadius: 20, padding: "2px 9px" }}>{total}</span>}
+                    {pendingCount > 0 && <span style={{ marginLeft: 10, background: "#EF4444", color: "#fff", fontSize: 12, fontWeight: 800, borderRadius: 20, padding: "2px 9px" }}>{pendingCount}</span>}
                   </h5>
                   <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>Review and approve or reject submitted stage work</p>
                 </div>
@@ -170,17 +231,25 @@ export default function ApprovalsPage() {
                 </button>
               </div>
 
-              {/* Stage filter tabs */}
+              {/* Status tabs */}
               <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-                <button className={`ap-tab ${stageFilter === "all" ? "active" : ""}`} onClick={() => setStageFilter("all")}>
-                  All ({total})
-                </button>
-                {STAGE_KEYS.map((key, i) => byStage[key].length > 0 && (
-                  <button key={key} className={`ap-tab ${stageFilter === key ? "active" : ""}`}
-                    onClick={() => setStageFilter(key)}
-                    style={stageFilter !== key ? { borderColor: STAGE_COLORS[i] + "60", color: STAGE_COLORS[i] } : {}}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: STAGE_COLORS[i] }} />
-                    {STAGE_NAMES[i]} ({byStage[key].length})
+                {[
+                  { key: "pending",  label: "Pending",  count: pendingCount,  color: "#EF4444", bg: "#FEE2E2"  },
+                  { key: "approved", label: "Approved", count: approvedCount, color: "#10B981", bg: "#DCFCE7"  },
+                  { key: "rejected", label: "Rejected", count: rejectedCount, color: "#DC2626", bg: "#FEE2E2"  },
+                  { key: "all",      label: "All",      count: totalCount,    color: "#4F46E5", bg: "#EEF2FF"  },
+                ].map(tab => (
+                  <button key={tab.key}
+                    className={`ap-tab ${statusTab === tab.key ? "active" : ""}`}
+                    onClick={() => setStatusTab(tab.key)}
+                    style={statusTab !== tab.key ? { borderColor: tab.color + "50", color: tab.color } : {}}>
+                    {tab.label}
+                    <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 800,
+                      background: statusTab === tab.key ? "rgba(255,255,255,.25)" : tab.bg,
+                      color: statusTab === tab.key ? "#fff" : tab.color,
+                      borderRadius: 20, padding: "1px 7px" }}>
+                      {tab.count}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -190,31 +259,45 @@ export default function ApprovalsPage() {
                 <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
                   <div className="spinner-border spinner-border-sm text-primary" /> Loading…
                 </div>
-              ) : displayed.length === 0 ? (
+              ) : displayedItems.length === 0 ? (
                 <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid #F1F5F9", padding: "60px 40px", textAlign: "center", color: "#94A3B8" }}>
                   <i className="bi bi-check2-all" style={{ fontSize: 48, display: "block", marginBottom: 12 }} />
-                  <div style={{ fontWeight: 700, color: "#1E293B", marginBottom: 4 }}>All caught up!</div>
-                  <div style={{ fontSize: 13 }}>No tasks are waiting for your approval</div>
+                  <div style={{ fontWeight: 700, color: "#1E293B", marginBottom: 4 }}>
+                    {statusTab === "pending" ? "All caught up!" : `No ${statusTab} items`}
+                  </div>
+                  <div style={{ fontSize: 13 }}>
+                    {statusTab === "pending" ? "No tasks are waiting for your approval" : `Nothing to show in this tab`}
+                  </div>
                 </div>
               ) : (
-                displayed.map(({ task: t, stageIdx, stg }) => {
-                  const key = `${t._id}_${stageIdx}`;
-                  const isOpen = expanded[key];
-                  const [rejectText, setRejectText] = useState ? expanded[`${key}_rej`] || "" : "";
-                  const brand = t.brandId || {};
-                  const isContent = stageIdx === 0;
-
+                displayedItems.map(({ task: t, stageIdx, stg, type }) => {
+                  const key = stageIdx >= 0 ? `${t._id}_${stageIdx}` : t._id;
+                  if (type === "stage") {
+                    return (
+                      <ApprovalCard
+                        key={key}
+                        task={t}
+                        stageIdx={stageIdx}
+                        stg={stg}
+                        isOpen={!!expanded[key]}
+                        onToggle={() => setExpanded(p => ({ ...p, [key]: !p[key] }))}
+                        saving={!!saving[key] || !!saving[`${key}_rej`]}
+                        onApprove={() => approveStage(t, stageIdx)}
+                        onReject={(reason) => rejectStage(t, stageIdx, reason)}
+                        readOnly={stg.approved || stg.rejected}
+                      />
+                    );
+                  }
                   return (
-                    <ApprovalCard
+                    <ReviewCard
                       key={key}
                       task={t}
-                      stageIdx={stageIdx}
-                      stg={stg}
                       isOpen={!!expanded[key]}
                       onToggle={() => setExpanded(p => ({ ...p, [key]: !p[key] }))}
-                      saving={!!saving[key] || !!saving[`${key}_rej`]}
-                      onApprove={() => approveStage(t, stageIdx)}
-                      onReject={(reason) => rejectStage(t, stageIdx, reason)}
+                      saving={!!saving[`${t._id}_task`] || !!saving[`${t._id}_task_rej`]}
+                      onApprove={() => approveTask(t)}
+                      onReject={(reason) => rejectTask(t, reason)}
+                      readOnly={["completed", "blocked"].includes(t.status)}
                     />
                   );
                 })
@@ -227,8 +310,120 @@ export default function ApprovalsPage() {
   );
 }
 
+/* ── Review Card (non-production tasks with status=review) ─────────────── */
+function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectText, setRejectText] = useState("");
+
+  const TYPE_LABELS = { project: "Project", sprint: "Sprint", manual: "Task", production: "Production" };
+  const TYPE_COLORS = { project: "#7C3AED", sprint: "#F59E0B", manual: "#64748B", production: "#10B981" };
+  const color = TYPE_COLORS[t.taskType] || "#64748B";
+
+  return (
+    <div className="ap-card">
+      <div className="ap-card-head" onClick={onToggle}>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: color + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="bi bi-send-check-fill" style={{ fontSize: 14, color }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#1E293B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {t.nomenclature || t.title}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 3, flexWrap: "wrap", alignItems: "center" }}>
+            {t.brandId?.name && (
+              <span style={{ fontSize: 11, fontWeight: 700, background: (t.brandId.color || "#6366F1") + "20", color: t.brandId.color || "#6366F1", borderRadius: 20, padding: "1px 8px" }}>
+                {t.brandId.name}
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontWeight: 700, background: color + "18", color, borderRadius: 20, padding: "2px 8px" }}>
+              {TYPE_LABELS[t.taskType] || t.taskType}
+            </span>
+            <span style={{ fontSize: 10, background: "#FEF3C7", color: "#B45309", borderRadius: 20, padding: "2px 8px", fontWeight: 700 }}>
+              Pending Review
+            </span>
+            {t.dueDate && (
+              <span style={{ fontSize: 10, color: "#94A3B8" }}>Due {fmtDate(t.dueDate)}</span>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <a href={`/dashboard/admin/tasks/${t._id}`} target="_blank" rel="noreferrer" className="ap-btn-view" onClick={e => e.stopPropagation()}>
+            <i className="bi bi-box-arrow-up-right" />View
+          </a>
+          <i className={`bi bi-chevron-${isOpen ? "up" : "down"}`} style={{ color: "#94A3B8" }} />
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="ap-card-body" style={{ paddingTop: 14 }}>
+          {t.description && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Work / Description</div>
+              <div className="ap-content-box">{t.description}</div>
+            </div>
+          )}
+          {t.reviewNote && (
+            <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 9, padding: "10px 12px", fontSize: 12, color: "#0369A1", marginBottom: 12 }}>
+              <i className="bi bi-chat-text me-2" /><strong>Employee note:</strong> {t.reviewNote}
+            </div>
+          )}
+          {t.proofLink && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Proof / Deliverable</div>
+              <a href={t.proofLink} target="_blank" rel="noreferrer" className="ap-proof-link">
+                <i className="bi bi-link-45deg" />{t.proofLink}
+              </a>
+            </div>
+          )}
+
+          {readOnly ? (
+            t.status === "completed" ? (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "#15803D", display: "flex", alignItems: "center", gap: 6 }}>
+                <i className="bi bi-check-circle-fill" /> Task Approved
+              </div>
+            ) : (
+              <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", marginBottom: t.reviewNote ? 6 : 0, display: "flex", alignItems: "center", gap: 6 }}>
+                  <i className="bi bi-x-circle-fill" /> Task Rejected
+                </div>
+                {t.reviewNote && <div style={{ fontSize: 12, color: "#991B1B" }}>Reason: {t.reviewNote}</div>}
+              </div>
+            )
+          ) : !rejectMode ? (
+            <div className="ap-actions">
+              <button className="ap-btn-approve" onClick={onApprove} disabled={saving}>
+                {saving ? "…" : <><i className="bi bi-check2-circle me-1" />Approve Task</>}
+              </button>
+              <button className="ap-btn-reject" onClick={() => setRejectMode(true)} disabled={saving}>
+                <i className="bi bi-x-circle me-1" />Reject
+              </button>
+            </div>
+          ) : (
+            <div>
+              <textarea
+                className="ap-reject-input"
+                placeholder="Enter rejection reason for the employee…"
+                value={rejectText}
+                onChange={e => setRejectText(e.target.value)}
+              />
+              <div className="ap-actions" style={{ marginTop: 6 }}>
+                <button className="ap-btn-reject" onClick={() => onReject(rejectText)} disabled={saving || !rejectText.trim()}>
+                  {saving ? "…" : <><i className="bi bi-send me-1" />Send Rejection</>}
+                </button>
+                <button onClick={() => { setRejectMode(false); setRejectText(""); }} style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Approval Card ─────────────────────────────────────────────────────── */
-function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onApprove, onReject }) {
+function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectText, setRejectText] = useState("");
   const brand = t.brandId || {};
@@ -313,8 +508,21 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
             </div>
           )}
 
-          {/* Action buttons */}
-          {!rejectMode ? (
+          {/* Action buttons or read-only status */}
+          {readOnly ? (
+            stg.approved ? (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, color: "#15803D", display: "flex", alignItems: "center", gap: 6 }}>
+                <i className="bi bi-check-circle-fill" /> Stage Approved
+              </div>
+            ) : (
+              <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", marginBottom: stg.rejectReason ? 6 : 0, display: "flex", alignItems: "center", gap: 6 }}>
+                  <i className="bi bi-x-circle-fill" /> Stage Rejected
+                </div>
+                {stg.rejectReason && <div style={{ fontSize: 12, color: "#991B1B" }}>Reason: {stg.rejectReason}</div>}
+              </div>
+            )
+          ) : !rejectMode ? (
             <div className="ap-actions">
               <button className="ap-btn-approve" onClick={onApprove} disabled={saving}>
                 {saving ? "…" : <><i className="bi bi-check2-circle me-1" />Approve</>}

@@ -79,6 +79,7 @@ export default async function handler(req, res) {
       [`stages.${stageIdx}.doneAt`]:    new Date(),
       [`stages.${stageIdx}.proofUrls`]: newUrls,
       [`stages.${stageIdx}.rejected`]:  false,
+      ...(notes?.trim() ? { [`stages.${stageIdx}.doneNote`]: notes.trim() } : {}),
       ...(isActiveStage ? { stage: nextStage, status: newStatus } : {}),
     };
 

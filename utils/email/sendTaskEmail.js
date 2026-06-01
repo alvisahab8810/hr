@@ -14,6 +14,19 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// Full deadline: "Monday, 2 June 2026 at 05:30 PM"
+function fmtDeadline(d) {
+  if (!d) return null;
+  const dt = new Date(d);
+  const day  = dt.toLocaleDateString("en-IN", { weekday: "long" });
+  const date = dt.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  const time = dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return `${day}, ${date} at ${time}`;
+}
+
+const STAGE_COLORS = ["#F59E0B", "#6366F1", "#10B981", "#EC4899"];
+const STAGE_NAMES  = ["Script/Concept", "Shoot/Design", "Edit/Develop", "Posted/Live"];
+
 function priorityBadge(priority) {
   const map = {
     urgent: { bg: "#FEE2E2", color: "#DC2626", label: "🔴 Urgent" },
@@ -75,10 +88,10 @@ function infoRow(label, value) {
 /* ═══════════════════════════════════════════════════════════════
    1. Task Assigned — sent to assigned employee
    ═══════════════════════════════════════════════════════════════ */
-export async function sendTaskAssignedEmail({ employeeEmail, employeeName, task, assignerName, brandName, clientName }) {
+export async function sendTaskAssignedEmail({ employeeEmail, employeeName, task, assignerName, brandName, clientName, stageName, stageDeadline }) {
   if (!employeeEmail) return;
 
-  const due = fmtDate(task.dueDate || task.scheduledFor);
+  const due = fmtDeadline(stageDeadline || task.dueDate || task.scheduledFor);
 
   const html = `
 <!DOCTYPE html>
@@ -110,7 +123,8 @@ export async function sendTaskAssignedEmail({ employeeEmail, employeeName, task,
             <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
               ${infoRow("Assigned by", assignerName || "Admin Team")}
               ${brandName  ? infoRow("Brand / Client", `${brandName}${clientName ? ` (${clientName})` : ""}`) : ""}
-              ${due        ? infoRow("Due Date", `<strong>${due}</strong>`) : ""}
+              ${stageName  ? infoRow("Stage", `<strong>${stageName}</strong>`) : ""}
+              ${due        ? infoRow("Deadline", `<strong style="color:#DC2626;">${due}</strong>`) : ""}
               ${task.description ? infoRow("Description", `<span style="color:#475569;line-height:1.7;">${task.description.slice(0, 300)}${task.description.length > 300 ? "…" : ""}</span>`) : ""}
             </table>
 
@@ -264,7 +278,184 @@ export async function sendClientRequestEmail({ clientName, clientEmail, brandNam
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   3. Task Offer / Announcement Created — sent to all managers
+   3. Stage Approved — sent to assigned employee(s)
+   ═══════════════════════════════════════════════════════════════ */
+export async function sendStageApprovedEmail({ employeeEmail, employeeName, task, stageName, stageIndex, stageDeadline, grade }) {
+  if (!employeeEmail) return;
+
+  const stageColor = STAGE_COLORS[stageIndex] ?? "#6366F1";
+  const deadline   = fmtDeadline(stageDeadline);
+
+  const gradeBlock = grade ? `
+    <div style="display:inline-flex;align-items:center;gap:12px;background:${grade.bg};border:1.5px solid ${grade.color}30;border-radius:12px;padding:12px 20px;margin-top:16px;">
+      <span style="font-size:28px;font-weight:900;color:${grade.color};">${grade.label}</span>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:${grade.color};text-transform:uppercase;letter-spacing:.5px;">Stage Grade</div>
+        <div style="font-size:12px;color:${grade.color};opacity:0.75;">${grade.hoursLate <= 0 ? "✅ Submitted on time" : `⏱ ${grade.hoursLate.toFixed(1)}h late`}</div>
+      </div>
+    </div>` : "";
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.10);">
+
+        ${emailHeader("Stage Approved ✅", `Hi ${employeeName} — your stage has been reviewed and approved!`)}
+
+        <!-- Green confirmation strip -->
+        <tr>
+          <td style="background:#DCFCE7;border-bottom:1px solid #BBF7D0;padding:12px 48px;">
+            <span style="font-size:13px;font-weight:700;color:#15803D;">🎉 Great work! Your submission was approved by the admin.</span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:36px 48px;">
+
+            <!-- Stage badge -->
+            <div style="display:inline-flex;align-items:center;gap:10px;background:${stageColor}15;border:1.5px solid ${stageColor}40;border-radius:10px;padding:10px 16px;margin-bottom:24px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:${stageColor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;">S${stageIndex + 1}</div>
+              <span style="font-size:14px;font-weight:700;color:${stageColor};">${stageName}</span>
+            </div>
+
+            <!-- Task block -->
+            <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-left:4px solid ${stageColor};border-radius:12px;padding:18px 22px;margin-bottom:24px;">
+              <div style="font-size:10.5px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Task</div>
+              <div style="font-size:18px;font-weight:800;color:#0f172a;">${task.nomenclature || task.title}</div>
+              ${task.brandId?.name ? `<div style="margin-top:4px;font-size:12px;color:#6366F1;font-weight:600;">${task.brandId.name}</div>` : ""}
+            </div>
+
+            <!-- Details -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              ${deadline ? infoRow("Deadline", `<strong style="color:#64748B;">${deadline}</strong>`) : ""}
+            </table>
+
+            <!-- Grade -->
+            ${gradeBlock}
+
+            <!-- Next step note -->
+            <div style="background:#EEF2FF;border-left:4px solid #5A57FB;border-radius:0 10px 10px 0;padding:16px 20px;margin-top:24px;">
+              <div style="font-size:13px;font-weight:700;color:#3730A3;margin-bottom:4px;">What's next?</div>
+              <div style="font-size:13px;color:#4F46E5;line-height:1.6;">The next stage team has been notified. Check the portal for any further updates on this task.</div>
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0 48px 36px;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
+              Open Portal &rarr;
+            </a>
+          </td>
+        </tr>
+
+        ${emailFooter()}
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from:    `"Viralon Team" <info@viralon.in>`,
+    to:      employeeEmail,
+    subject: `✅ Stage Approved — ${stageName} · ${task.nomenclature || task.title}`,
+    html,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. Stage Rejected — sent to assigned employee(s)
+   ═══════════════════════════════════════════════════════════════ */
+export async function sendStageRejectedEmail({ employeeEmail, employeeName, task, stageName, stageIndex, stageDeadline, rejectReason }) {
+  if (!employeeEmail) return;
+
+  const stageColor = STAGE_COLORS[stageIndex] ?? "#6366F1";
+  const deadline   = fmtDeadline(stageDeadline);
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.10);">
+
+        ${emailHeader("Stage Needs Revision ❌", `Hi ${employeeName} — your stage submission needs changes.`)}
+
+        <!-- Red strip -->
+        <tr>
+          <td style="background:#FEE2E2;border-bottom:1px solid #FCA5A5;padding:12px 48px;">
+            <span style="font-size:13px;font-weight:700;color:#DC2626;">⚠️ Please review the feedback below and resubmit.</span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:36px 48px;">
+
+            <!-- Stage badge -->
+            <div style="display:inline-flex;align-items:center;gap:10px;background:${stageColor}15;border:1.5px solid ${stageColor}40;border-radius:10px;padding:10px 16px;margin-bottom:24px;">
+              <div style="width:28px;height:28px;border-radius:8px;background:${stageColor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;">S${stageIndex + 1}</div>
+              <span style="font-size:14px;font-weight:700;color:${stageColor};">${stageName}</span>
+            </div>
+
+            <!-- Task block -->
+            <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-left:4px solid ${stageColor};border-radius:12px;padding:18px 22px;margin-bottom:24px;">
+              <div style="font-size:10.5px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Task</div>
+              <div style="font-size:18px;font-weight:800;color:#0f172a;">${task.nomenclature || task.title}</div>
+              ${task.brandId?.name ? `<div style="margin-top:4px;font-size:12px;color:#6366F1;font-weight:600;">${task.brandId.name}</div>` : ""}
+            </div>
+
+            <!-- Rejection reason -->
+            ${rejectReason ? `
+            <div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:18px 22px;margin-bottom:24px;">
+              <div style="font-size:10.5px;font-weight:700;color:#DC2626;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Admin Feedback</div>
+              <div style="font-size:14px;color:#7F1D1D;line-height:1.7;white-space:pre-wrap;">${rejectReason}</div>
+            </div>` : ""}
+
+            <!-- Details -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              ${deadline ? infoRow("Deadline", `<strong style="color:#DC2626;">${deadline}</strong>`) : ""}
+            </table>
+
+            <!-- What to do -->
+            <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:16px 20px;margin-top:24px;">
+              <div style="font-size:13px;font-weight:700;color:#C2410C;margin-bottom:4px;">Action Required</div>
+              <div style="font-size:13px;color:#EA580C;line-height:1.6;">Please make the necessary changes and resubmit before the deadline. Open the portal to update your work and mark the stage as done again.</div>
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0 48px 36px;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
+              Open Portal &rarr;
+            </a>
+          </td>
+        </tr>
+
+        ${emailFooter()}
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from:    `"Viralon Team" <info@viralon.in>`,
+    to:      employeeEmail,
+    subject: `❌ Stage Rejected — ${stageName} · ${task.nomenclature || task.title}`,
+    html,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. Task Offer / Announcement Created — sent to all managers
    ═══════════════════════════════════════════════════════════════ */
 export async function sendOfferCreatedEmail({ offerTitle, offerDescription, offerTag, adminName }) {
   // Internal notification — no need for external email, kept for future use

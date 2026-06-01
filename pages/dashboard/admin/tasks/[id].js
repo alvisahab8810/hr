@@ -51,19 +51,20 @@ const STAGE_NAMES  = ["Script/Concept", "Shoot/Design", "Edit/Develop", "Posted/
 const PRIORITIES   = ["low", "medium", "high", "urgent"];
 
 const STAGE_DEPT_KEYWORDS = [
-  ["content"],
-  ["production", "design", "creative"],
-  ["edit", "post", "editing"],
-  ["digital", "marketing"],
+  { include: ["content team"],           exclude: [] },
+  { include: ["production"],             exclude: ["design", "creative"] },
+  { include: ["editing team", "design team", "tech"], exclude: [] },
+  { include: ["digital marketing"],      exclude: [] },
 ];
 
-const STAGE_TEAM_LABELS = ["Content team", "Production/Design team", "Editing team", "Digital Marketing team"];
+const STAGE_TEAM_LABELS = ["Content team", "Production", "Editing team", "Digital Marketing team"];
 
-function filterByDept(employees, keywords) {
-  if (!keywords) return employees;
+function filterByDept(employees, { include, exclude }) {
   return employees.filter(emp => {
-    const dept = (emp.professional?.department || "").toLowerCase();
-    return keywords.some(kw => dept.includes(kw));
+    const dept  = (emp.professional?.department  || "").toLowerCase();
+    const desig = (emp.professional?.designation || "").toLowerCase();
+    if (exclude.some(kw => dept.includes(kw) || desig.includes(kw))) return false;
+    return include.some(kw => dept.includes(kw));
   });
 }
 function normalizeAssignedTo(v) {

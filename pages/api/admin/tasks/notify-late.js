@@ -149,12 +149,12 @@ export default async function handler(req, res) {
 
         for (const empId of empIds) {
           const emp = await Employee.findById(empId)
-            .select("firstName lastName personal email")
+            .select("firstName lastName personal professional email")
             .lean();
           if (!emp) continue;
 
-          const empEmail = emp.personal?.email || emp.email;
-          const empName  = emp.personal?.firstName || emp.firstName || "Team Member";
+          const empEmail = emp.professional?.officialEmail || emp.personal?.email || emp.email;
+          const empName  = `${emp.personal?.firstName || emp.firstName || "Team Member"} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
 
           if (!empEmail) continue;
 

@@ -14,11 +14,21 @@ const getToken = () => typeof window !== "undefined" ? localStorage.getItem("emp
 const authH    = () => ({ Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" });
 
 function getTMSRole(emp) {
-  const d = `${emp?.professional?.designation || ""} ${emp?.professional?.department || ""}`.toLowerCase();
-  if (d.includes("content") || d.includes("writer") || d.includes("copywriter") || d.includes("script")) return "content";
-  if (d.includes("design") || d.includes("graphic") || d.includes("ui") || d.includes("ux")) return "design";
-  if (d.includes("edit") || d.includes("video") || d.includes("motion")) return "editor";
-  if (d.includes("develop") || d.includes("engineer") || d.includes("frontend") || d.includes("backend")) return "developer";
+  const dept  = (emp?.professional?.department  || "").toLowerCase();
+  const desig = (emp?.professional?.designation || "").toLowerCase();
+
+  // Department takes priority — prevents designation keywords leaking into wrong role
+  if (dept.includes("production"))                                          return "design";   // S2 queue
+  if (dept.includes("content team") || dept.includes("content"))           return "content";  // S1 queue
+  if (dept.includes("editing") || dept.includes("design team") || dept.includes("creative")) return "editor"; // S3
+  if (dept.includes("digital marketing") || dept.includes("marketing"))    return "general";
+  if (dept.includes("tech") || dept.includes("develop") || dept.includes("engineer")) return "developer";
+
+  // Fall back to designation only if department gave no match
+  if (desig.includes("content") || desig.includes("writer") || desig.includes("copywriter") || desig.includes("script")) return "content";
+  if (desig.includes("design") || desig.includes("graphic") || desig.includes("ui") || desig.includes("ux")) return "design";
+  if (desig.includes("edit") || desig.includes("video") || desig.includes("motion")) return "editor";
+  if (desig.includes("develop") || desig.includes("engineer") || desig.includes("frontend") || desig.includes("backend")) return "developer";
   return "general";
 }
 

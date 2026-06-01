@@ -13,7 +13,8 @@ import TaskComment  from "@/models/tasks/TaskComment";
 import TaskActivity from "@/models/tasks/TaskActivity";
 import { logActivity }           from "@/utils/tasks/logActivity";
 import { sendNotification }     from "@/utils/tasks/sendNotification";
-import { sendTaskAssignedEmail } from "@/utils/email/sendTaskEmail";
+import { sendTaskAssignedEmail, sendStageApprovedEmail, sendStageRejectedEmail } from "@/utils/email/sendTaskEmail";
+import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
 import { logAdminActivity }     from "@/utils/tasks/logAdminActivity";
 import { adminGuard }           from "@/utils/admin/adminAuthGuard";
 
@@ -142,7 +143,6 @@ export default async function handler(req, res) {
           taskId:         id,
         });
 
-        // Send reassignment email
         const emp = task.assignedTo;
         if (emp) {
           const empEmail = emp.professional?.officialEmail || emp.personal?.email || "";
@@ -170,6 +170,97 @@ export default async function handler(req, res) {
           message:        `Task "${task.title}" status changed to ${updates.status}.`,
           taskId:         id,
         });
+      }
+
+      // ── Stage change emails (approve / reject / new assignee) ──────────
+      const STAGE_NAMES_LIST = ["Script/Concept", "Shoot/Design", "Edit/Develop", "Posted/Live"];
+
+      if (Array.isArray(updates.stages)) {
+        const existingStages = existing.stages || [];
+
+        // Collect all stage-assignee IDs that need emails
+        const approvalEmailJobs = [];
+        const rejectionEmailJobs = [];
+        const newAssigneeIds = new Set();
+
+        updates.stages.forEach((newStg, i) => {
+          const oldStg = existingStages[i] || {};
+          const stageName  = newStg.name || STAGE_NAMES_LIST[i] || `Stage ${i + 1}`;
+          const assigneeIds = Array.isArray(newStg.assignedTo) ? newStg.assignedTo.map(String) : [];
+          const oldAssigneeIds = Array.isArray(oldStg.assignedTo) ? oldStg.assignedTo.map(String) : [];
+
+          // Stage approved
+          if (newStg.approved && !oldStg.approved) {
+            const stgGradeData = gradeTask({ dueDate: newStg.deadline, status: "completed", submittedAt: newStg.doneAt, updatedAt: newStg.doneAt });
+            const grade = stgGradeData ? { ...pointsToGrade(stgGradeData.points), hoursLate: stgGradeData.hoursLate } : null;
+            assigneeIds.forEach(empId => approvalEmailJobs.push({ empId, stageIndex: i, stageName, deadline: newStg.deadline, grade }));
+          }
+
+          // Stage rejected
+          if (newStg.rejected && !oldStg.rejected) {
+            assigneeIds.forEach(empId => rejectionEmailJobs.push({ empId, stageIndex: i, stageName, deadline: newStg.deadline, rejectReason: newStg.rejectReason || "" }));
+          }
+
+          // Newly added stage assignees → send assignment email
+          assigneeIds.forEach(empId => {
+            if (!oldAssigneeIds.includes(empId)) newAssigneeIds.add(JSON.stringify({ empId, stageIndex: i, stageName, deadline: newStg.deadline }));
+          });
+        });
+
+        // Resolve all employee IDs needed
+        const allIds = [
+          ...approvalEmailJobs.map(j => j.empId),
+          ...rejectionEmailJobs.map(j => j.empId),
+          ...[...newAssigneeIds].map(s => JSON.parse(s).empId),
+        ].filter(Boolean);
+
+        if (allIds.length > 0) {
+          Employee.find({ _id: { $in: [...new Set(allIds)] } })
+            .select("personal professional firstName lastName")
+            .lean()
+            .then(emps => {
+              const byId = Object.fromEntries(emps.map(e => [String(e._id), e]));
+
+              // Approval emails
+              approvalEmailJobs.forEach(({ empId, stageIndex, stageName, deadline, grade }) => {
+                const emp = byId[empId];
+                if (!emp) return;
+                const empEmail = emp.professional?.officialEmail || emp.personal?.email || "";
+                const empName  = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim() || "Team Member";
+                if (!empEmail) return;
+                sendStageApprovedEmail({ employeeEmail: empEmail, employeeName: empName, task, stageName, stageIndex, stageDeadline: deadline, grade })
+                  .catch(e => console.error("[stage-approve-email] failed:", e.message));
+              });
+
+              // Rejection emails
+              rejectionEmailJobs.forEach(({ empId, stageIndex, stageName, deadline, rejectReason }) => {
+                const emp = byId[empId];
+                if (!emp) return;
+                const empEmail = emp.professional?.officialEmail || emp.personal?.email || "";
+                const empName  = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim() || "Team Member";
+                if (!empEmail) return;
+                sendStageRejectedEmail({ employeeEmail: empEmail, employeeName: empName, task, stageName, stageIndex, stageDeadline: deadline, rejectReason })
+                  .catch(e => console.error("[stage-reject-email] failed:", e.message));
+              });
+
+              // New stage assignee emails
+              newAssigneeIds.forEach(raw => {
+                const { empId, stageIndex, stageName, deadline } = JSON.parse(raw);
+                const emp = byId[empId];
+                if (!emp) return;
+                const empEmail = emp.professional?.officialEmail || emp.personal?.email || "";
+                const empName  = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim() || "Team Member";
+                if (!empEmail) return;
+                sendTaskAssignedEmail({
+                  employeeEmail: empEmail, employeeName: empName, task,
+                  assignerName: performedByName || "Admin Team",
+                  brandName: task.brandId?.name || "", clientName: task.clientId?.name || "",
+                  stageName, stageDeadline: deadline,
+                }).catch(e => console.error("[stage-assign-email] failed:", e.message));
+              });
+            })
+            .catch(e => console.error("[stage-emails] emp fetch failed:", e.message));
+        }
       }
 
       return res.json({ success: true, task });

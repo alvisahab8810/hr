@@ -25,7 +25,11 @@
       "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\dashboard\\\\admin\\\\task-requests\")",
       "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\employee\\\\dev\")",
       "PowerShell(New-Item -ItemType Directory -Force -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\employee\\\\dev\\\\features\")",
-      "Bash(grep -v \"//\")"
+      "Bash(grep -v \"//\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(grep -E \"\\\\.js$\")",
+      "Bash(xargs -I {} basename {})"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",
