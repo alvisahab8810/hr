@@ -14,6 +14,7 @@ export default function EmployeeLeftbar() {
   const [tmsOpen, setTmsOpen]         = useState(false);
   const [msgUnread, setMsgUnread]     = useState(0);
   const [isDmDept, setIsDmDept]       = useState(false);
+  const [isTechDept, setIsTechDept]   = useState(false);
   const [communityUnread, setCommunityUnread] = useState(0);
 
   useEffect(() => {
@@ -41,8 +42,10 @@ export default function EmployeeLeftbar() {
             dept,
             completion: pct,
           });
-          const dm = dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing");
+          const dm   = dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing");
+          const tech = dept.toLowerCase().includes("tech") || dept.toLowerCase().includes("development") || dept.toLowerCase().includes("developer") || dept.toLowerCase().includes("engineering");
           setIsDmDept(dm);
+          setIsTechDept(tech);
           if (dm) fetchMsgUnread(token);
           fetchCommunityUnread(token);
         }
@@ -284,19 +287,21 @@ export default function EmployeeLeftbar() {
               </Link>
             </li>
 
-            {/* ── Dev Portal ── */}
-            <li style={{ listStyle:"none" }} className={devActive ? "active" : ""}>
-              <Link
-                href="/employee/dev-portal"
-                className="waves-effect waves-block"
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
-              >
-                <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className="bi bi-kanban" style={{ fontSize:15, color: devActive ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
-                </span>
-                <span>Dev Portal</span>
-              </Link>
-            </li>
+            {/* ── Dev Portal — only for Tech & Development department ── */}
+            {isTechDept && (
+              <li style={{ listStyle:"none" }} className={devActive ? "active" : ""}>
+                <Link
+                  href="/employee/dev-portal"
+                  className="waves-effect waves-block"
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
+                >
+                  <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <i className="bi bi-kanban" style={{ fontSize:15, color: devActive ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                  </span>
+                  <span>Dev Portal</span>
+                </Link>
+              </li>
+            )}
 
             {/* ── Task Management dropdown ── */}
             <li style={{ listStyle:"none" }} className={tmsActive ? "active" : ""}>

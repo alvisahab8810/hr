@@ -1,6 +1,6 @@
 // components/AdminUserLeftbar.js — sidebar for invited admin users (permission-filtered)
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
 const ALL_MODULES = [
@@ -17,8 +17,39 @@ const ALL_MODULES = [
 export default function AdminUserLeftbar({ user }) {
   const router = useRouter();
   const permissions = user?.permissions || {};
-  const [tmsOpen, setTmsOpen] = useState(router.pathname?.startsWith("/dashboard/admin/tasks"));
+  const [tmsOpen, setTmsOpen] = useState(
+    () => typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard/admin/tasks")
+  );
   const [communityUnread, setCommunityUnread] = useState(0);
+  // ref points to <aside> — the actual scroll container (overflow-y: scroll in CSS)
+  const sidebarRef = useRef(null);
+
+  // Persist scroll position to sessionStorage on every scroll
+  useEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const onScroll = () => sessionStorage.setItem("adminSidebarScroll", String(el.scrollTop));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Restore scroll position on each navigation
+  useEffect(() => {
+    const saved = sessionStorage.getItem("adminSidebarScroll");
+    if (!saved) return;
+    const target = parseInt(saved, 10);
+    requestAnimationFrame(() => {
+      if (sidebarRef.current) sidebarRef.current.scrollTop = target;
+    });
+  }, [router.pathname]);
+
+  // Freeze sidebar scroll when toggling TMS submenu
+  const toggleTms = () => {
+    const el = sidebarRef.current;
+    const scrollTop = el ? el.scrollTop : 0;
+    setTmsOpen(v => !v);
+    if (el) requestAnimationFrame(() => { el.scrollTop = scrollTop; });
+  };
 
   useEffect(() => {
     async function fetchUnread() {
@@ -36,7 +67,7 @@ export default function AdminUserLeftbar({ user }) {
   const visibleItems = ALL_MODULES.filter(m => permissions[m.key]);
 
   return (
-    <aside id="leftsidebar" className="sidebar mobile-none" style={{ position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100 }}>
+    <aside id="leftsidebar" className="sidebar mobile-none" ref={sidebarRef} style={{ position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100 }}>
 
       {/* Brand badge */}
       <div style={{

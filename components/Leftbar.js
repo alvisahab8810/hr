@@ -359,7 +359,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -374,15 +374,54 @@ export default function Leftbar({ role = "admin" }) {
     if (res.ok) router.push("/dashboard/login");
   };
 
-  const [openMenu, setOpenMenu]     = useState(null);
-  const [communityUnread, setCommunityUnread] = useState(0);
-  const toggleMenu = (m) => setOpenMenu(openMenu === m ? null : m);
-
-  useEffect(() => {
-    if (pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests")) {
-      setOpenMenu("tms");
+  // Initialise openMenu from current URL so first render already has TMS open —
+  // avoids a state-update/re-render race with scroll restoration.
+  const [openMenu, setOpenMenu] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const p = window.location.pathname;
+    if (p.startsWith("/dashboard/admin/tasks") || p.startsWith("/dashboard/admin/task-requests")) {
+      return "tms";
     }
+    return null;
+  });
+  const [communityUnread, setCommunityUnread] = useState(0);
+  // ref points to the <aside> which is the real scroll container (CSS: overflow-y:scroll)
+  const sidebarRef = useRef(null);
+
+  // Persist scroll position to sessionStorage on every scroll
+  useEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const onScroll = () => sessionStorage.setItem("adminSidebarScroll", String(el.scrollTop));
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // On every navigation: keep TMS open and restore saved scroll position
+  useEffect(() => {
+    if (
+      pathname?.startsWith("/dashboard/admin/tasks") ||
+      pathname?.startsWith("/dashboard/admin/task-requests")
+    ) {
+      setOpenMenu(prev => (prev === "tms" ? prev : "tms"));
+    }
+
+    const saved = sessionStorage.getItem("adminSidebarScroll");
+    if (!saved) return;
+    const target = parseInt(saved, 10);
+    // Single RAF is enough — menu is already open from initial state, no layout shift pending
+    requestAnimationFrame(() => {
+      if (sidebarRef.current) sidebarRef.current.scrollTop = target;
+    });
   }, [pathname]);
+
+  // Freeze sidebar scroll position while toggling submenus
+  const toggleMenu = (m) => {
+    const el = sidebarRef.current;
+    const scrollTop = el ? el.scrollTop : 0;
+    setOpenMenu(prev => prev === m ? null : m);
+    if (el) requestAnimationFrame(() => { el.scrollTop = scrollTop; });
+  };
 
   useEffect(() => {
     async function fetchUnread() {
@@ -544,7 +583,7 @@ export default function Leftbar({ role = "admin" }) {
   return (
     <div className="left-panel-area">
 
-      <aside id="leftsidebar" className="sidebar mobile-none">
+      <aside id="leftsidebar" className="sidebar mobile-none" ref={sidebarRef}>
 
         {/* ── Admin brand badge ── */}
         <div style={{
