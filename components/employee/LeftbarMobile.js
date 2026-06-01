@@ -5,21 +5,31 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 const NAV = [
-  { href: "/employee/dashboard",          icon: "bi-house-fill",          label: "Home"          },
-  { href: "/employee/attendance-summary", icon: "bi-calendar-check-fill", label: "Attendance"    },
-  { href: "/employee/leaves-management",  icon: "bi-calendar-minus-fill", label: "Leaves"        },
-  { href: "/employee/reimbursement",      icon: "bi-receipt",             label: "Reimbursement" },
-  { href: "/employee/overtime",           icon: "bi-clock-history",       label: "Overtime"      },
-  { href: "/employee/deduction-waiver",   icon: "bi-shield-check",        label: "Deductions"        },
-  { href: "/employee/profile",            icon: "bi-person-circle",       label: "My Profile"    },
-  { href: "/employee/complete-profile",   icon: "bi-folder2-open",        label: "Documents"     },
+  // ── Main
+  { href: "/employee/dashboard",          icon: "bi-house-fill",           label: "Home",            section: null },
+  { href: "/employee/tasks",              icon: "bi-check2-square",        label: "Task Management", section: null },
+  // ── HR
+  { href: "/employee/attendance-summary", icon: "bi-calendar-check-fill",  label: "Attendance",      section: "HR" },
+  { href: "/employee/leaves-management",  icon: "bi-calendar-minus-fill",  label: "Leaves",          section: null },
+  { href: "/employee/reimbursement",      icon: "bi-receipt",              label: "Reimbursement",   section: null },
+  { href: "/employee/overtime",           icon: "bi-clock-history",        label: "Overtime",        section: null },
+  { href: "/employee/deduction-waiver",   icon: "bi-shield-check",         label: "My Deductions",   section: null },
+  { href: "/employee/assets",             icon: "bi-box-seam-fill",        label: "My Assets",       section: null },
+  { href: "/employee/salary-slips",       icon: "bi-cash-stack",           label: "Salary Slips",    section: null },
+  // ── Social
+  { href: "/employee/community",          icon: "bi-people-fill",          label: "Community",       section: "Social" },
+  { href: "/employee/messages",           icon: "bi-chat-dots-fill",       label: "Client Messages", section: null },
+  // ── Account
+  { href: "/employee/profile",            icon: "bi-person-circle",        label: "My Profile",      section: "Account" },
+  { href: "/employee/complete-profile",   icon: "bi-folder2-open",         label: "Documents",       section: null },
 ];
 
+// Bottom tab bar — 5 most-used items
 const BOTTOM_TABS = [
   { href: "/employee/dashboard",          icon: "bi-house-fill",          label: "Home"       },
-  { href: "/employee/attendance-summary", icon: "bi-calendar-check-fill", label: "Attendance" },
+  { href: "/employee/tasks",              icon: "bi-check2-square",       label: "Tasks"      },
   { href: "/employee/leaves-management",  icon: "bi-calendar-minus-fill", label: "Leaves"     },
-  { href: "/employee/overtime",           icon: "bi-clock-history",       label: "Overtime"   },
+  { href: "/employee/community",          icon: "bi-people-fill",         label: "Community"  },
   { href: "/employee/profile",            icon: "bi-person-circle",       label: "Profile"    },
 ];
 
@@ -30,6 +40,7 @@ export default function EmployeeLeftbarMobile() {
   const [open,     setOpen]     = useState(false);
   const [employee, setEmployee] = useState({ firstName:"", lastName:"", employeeId:"", dept:"" });
   const [attStatus, setAttStatus] = useState(null);
+  const [isDmDept, setIsDmDept] = useState(false);
 
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("employeeToken") : null;
@@ -38,12 +49,16 @@ export default function EmployeeLeftbarMobile() {
     fetch("/api/employee/me", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => {
-        if (d.success && d.employee) setEmployee({
-          firstName:  d.employee.firstName  || "",
-          lastName:   d.employee.lastName   || "",
-          employeeId: d.employee.employeeId || "",
-          dept:       d.employee.professional?.department || "",
-        });
+        if (d.success && d.employee) {
+          const dept = d.employee.professional?.department || "";
+          setEmployee({
+            firstName:  d.employee.firstName  || "",
+            lastName:   d.employee.lastName   || "",
+            employeeId: d.employee.employeeId || "",
+            dept,
+          });
+          setIsDmDept(dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing"));
+        }
       }).catch(() => {});
 
     fetch("/api/employee/time/summary", { headers: { Authorization: `Bearer ${token}` } })
@@ -304,31 +319,43 @@ export default function EmployeeLeftbarMobile() {
 
         {/* Navigation links */}
         <nav style={{ flex:1, padding:"10px 8px 8px" }}>
-          {NAV.map(item => {
-            const active = pathname === item.href;
+          {NAV.filter(item => item.href !== "/employee/messages" || isDmDept).map((item, idx) => {
+            const active = pathname === item.href || (item.href === "/employee/tasks" && pathname?.startsWith("/employee/tasks"));
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => { setOpen(false); document.body.classList.remove("emp-drawer-open"); }}
-                style={{
-                  display:"flex", alignItems:"center", gap:13,
-                  padding:"12px 14px", borderRadius:11, marginBottom:3,
-                  textDecoration:"none",
-                  background: active ? "rgba(255,255,255,0.1)" : "transparent",
-                  color:      active ? "#fff" : "rgba(255,255,255,0.55)",
-                  fontWeight: active ? 700 : 500,
-                  fontSize:14,
-                  transition:"all 0.15s",
-                  borderLeft: active ? "3px solid #818CF8" : "3px solid transparent",
-                }}
-              >
-                <i className={`bi ${item.icon}`} style={{
-                  fontSize:17, flexShrink:0,
-                  color: active ? "#A78BFA" : "rgba(255,255,255,0.35)",
-                }} />
-                {item.label}
-              </Link>
+              <div key={item.href}>
+                {/* Section divider */}
+                {item.section && (
+                  <div style={{
+                    fontSize:9, fontWeight:800, letterSpacing:"0.1em",
+                    textTransform:"uppercase", color:"rgba(255,255,255,0.25)",
+                    padding:"12px 14px 4px",
+                    marginTop: idx > 0 ? 4 : 0,
+                  }}>
+                    {item.section}
+                  </div>
+                )}
+                <Link
+                  href={item.href}
+                  onClick={() => { setOpen(false); document.body.classList.remove("emp-drawer-open"); }}
+                  style={{
+                    display:"flex", alignItems:"center", gap:13,
+                    padding:"11px 14px", borderRadius:11, marginBottom:2,
+                    textDecoration:"none",
+                    background: active ? "rgba(255,255,255,0.1)" : "transparent",
+                    color:      active ? "#fff" : "rgba(255,255,255,0.55)",
+                    fontWeight: active ? 700 : 500,
+                    fontSize:13.5,
+                    transition:"all 0.15s",
+                    borderLeft: active ? "3px solid #818CF8" : "3px solid transparent",
+                  }}
+                >
+                  <i className={`bi ${item.icon}`} style={{
+                    fontSize:16, flexShrink:0,
+                    color: active ? "#A78BFA" : "rgba(255,255,255,0.35)",
+                  }} />
+                  {item.label}
+                </Link>
+              </div>
             );
           })}
         </nav>

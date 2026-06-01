@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useTaskSync } from "@/utils/hooks/useTaskSync";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -173,6 +174,9 @@ export default function TaskDetail() {
 
   useEffect(() => { fetchTask(); }, [fetchTask]);
 
+  // Auto-refresh when this task changes anywhere (socket + polling + tab visibility)
+  useTaskSync(fetchTask, { room: "admin-tasks" });
+
   /* ── Stage helpers ─────────────────────────────────────────────────────── */
   const buildStages = (overrideIdx, overrideData) =>
     STAGE_NAMES.map((name, i) => {
@@ -205,6 +209,9 @@ export default function TaskDetail() {
   };
 
   const saveStage = async () => {
+    if (stageForm.assignedTo.length > 0 && !stageForm.deadline) {
+      toast.error("Deadline is required when a stage has assignees"); return;
+    }
     setStageSaving(true);
     try {
       const cur    = task?.stages?.[stageIdx] || {};
@@ -1034,7 +1041,7 @@ export default function TaskDetail() {
                     </div>
 
                     {[
-                      { label: "Task ID", value: task._id?.slice(-8).toUpperCase() },
+                      { label: "Task ID", value: task.taskId || task._id?.slice(-8).toUpperCase() },
                       { label: "Type", value: <span className="tdbadge" style={{ background: tm.bg, color: tm.color }}>{tm.label || task.taskType}</span> },
                       { label: "Status", value: <span className="tdbadge" style={{ background: sm.bg, color: sm.color }}>{sm.label || task.status}</span> },
                       task.estimatedHours && { label: "Est. Hours", value: `${task.estimatedHours}h` },
@@ -1274,8 +1281,15 @@ export default function TaskDetail() {
 
               {/* Deadline */}
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 5 }}>Deadline</label>
-                <input type="datetime-local" className="td-input" value={stageForm.deadline} onChange={(e) => setStageForm((f) => ({ ...f, deadline: e.target.value }))} />
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 5 }}>
+                  Deadline {stageForm.assignedTo.length > 0 && <span style={{ color: "#EF4444" }}>*</span>}
+                </label>
+                <input type="datetime-local" className="td-input" value={stageForm.deadline}
+                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline ? "#FCA5A5" : "" }}
+                  onChange={(e) => setStageForm((f) => ({ ...f, deadline: e.target.value }))} />
+                {stageForm.assignedTo.length > 0 && !stageForm.deadline && (
+                  <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
+                )}
               </div>
 
               {/* Status row (read-only for admin) */}

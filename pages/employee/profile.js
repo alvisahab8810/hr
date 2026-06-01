@@ -335,18 +335,22 @@ export default function EmployeeProfile() {
 
             <div className="block-header add-emp-area">
               {/* Incomplete profile banner */}
-              {completion < 100 && (
-                <div className="ep-incomplete-banner">
-                  <i className="bi bi-exclamation-triangle-fill"></i>
-                  <div style={{ flex:1 }}>
-                    <h6>Profile {completion}% Complete</h6>
-                    <p>Complete your profile to ensure accurate payroll processing and HR records.</p>
+              {completion < 100 && (() => {
+                const firstStep = !sections.personal ? 1 : !sections.professional ? 2 : !sections.bank ? 3 : 4;
+                const missingLabel = firstStep === 1 ? "Personal Info" : firstStep === 2 ? "Professional Info" : firstStep === 3 ? "Bank Details" : "Documents";
+                return (
+                  <div className="ep-incomplete-banner">
+                    <i className="bi bi-exclamation-triangle-fill"></i>
+                    <div style={{ flex:1 }}>
+                      <h6>Profile {completion}% Complete — {missingLabel} missing</h6>
+                      <p>Complete your profile to ensure accurate payroll processing and HR records.</p>
+                    </div>
+                    <Link href={`/employee/complete-profile?step=${firstStep}`} className="ep-cta" style={{ width:"auto", padding:"9px 18px" }}>
+                      <i className="bi bi-pencil-fill"></i> Complete Now
+                    </Link>
                   </div>
-                  <Link href="/employee/complete-profile" className="ep-cta" style={{ width:"auto", padding:"9px 18px" }}>
-                    <i className="bi bi-pencil-fill"></i> Complete Now
-                  </Link>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="ep-root">
                 {/* ── Sidebar ── */}
@@ -388,7 +392,7 @@ export default function EmployeeProfile() {
                     </div>
 
                     {completion < 100 && (
-                      <Link href="/employee/complete-profile" className="ep-cta">
+                      <Link href={`/employee/complete-profile?step=${!sections.personal ? 1 : !sections.professional ? 2 : !sections.bank ? 3 : 4}`} className="ep-cta">
                         <i className="bi bi-pencil-fill"></i>
                         {completion === 0 ? "Complete Profile" : "Update Profile"}
                       </Link>

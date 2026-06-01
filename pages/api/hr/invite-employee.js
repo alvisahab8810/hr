@@ -35,6 +35,34 @@ export default async function handler(req, res) {
 
   await dbConnect();
 
+  // ── Safety: free the unique email if a former (inactive) employee still holds it ──
+  // Handles both: (a) new-style: top-level email matches, (b) old-style: officialEmail matches but email wasn't suffixed yet
+  const inactiveHolder = await Employee.findOne({
+    isActive: false,
+    $or: [
+      { email: email.toLowerCase() },
+      { "professional.officialEmail": email.toLowerCase() },
+    ],
+  });
+  if (inactiveHolder) {
+    const ts = Date.now();
+    const base = inactiveHolder.email.replace(/_deactivated_\d+@deactivated\.invalid$/, "").replace(/@.*$/, "");
+    const suffixed = `${base}_deactivated_${ts}@deactivated.invalid`;
+    await Employee.findByIdAndUpdate(inactiveHolder._id, { $set: { email: suffixed } });
+  }
+
+  // Block if an ACTIVE employee already has this email
+  const activeHolder = await Employee.findOne({
+    isActive: true,
+    $or: [
+      { email: email.toLowerCase() },
+      { "professional.officialEmail": email.toLowerCase() },
+    ],
+  });
+  if (activeHolder) {
+    return res.status(409).json({ success: false, message: "Email already in use by an active employee" });
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
   // ── Step 1: Save employee ────────────────────────────────────────────────
@@ -65,7 +93,7 @@ export default async function handler(req, res) {
     console.error("Employee save failed:", err);
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern || {})[0] || "field";
-      return res.status(409).json({ success: false, message: `${field === "email" ? "Email" : "Employee ID"} already exists` });
+      return res.status(409).json({ success: false, message: `Employee ID already exists — choose a different ID` });
     }
     return res.status(500).json({ success: false, message: "Failed to create employee: " + err.message });
   }

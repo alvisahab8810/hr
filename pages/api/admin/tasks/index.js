@@ -13,6 +13,7 @@ import { sendNotification }     from "@/utils/tasks/sendNotification";
 import { sendTaskAssignedEmail } from "@/utils/email/sendTaskEmail";
 import { logAdminActivity }     from "@/utils/tasks/logAdminActivity";
 import { adminGuard }           from "@/utils/admin/adminAuthGuard";
+import { emitTaskEvent }        from "@/utils/tasks/emitTaskEvent";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -313,6 +314,10 @@ export default async function handler(req, res) {
             .catch(e => console.error("[task-email-stages] fetch failed:", e.message));
         }
       }
+
+      // Notify all connected clients about the new task
+      const stageEmpIds = stagesArr.flatMap(s => Array.isArray(s.assignedTo) ? s.assignedTo.map(String) : (s.assignedTo ? [String(s.assignedTo)] : []));
+      emitTaskEvent("task:created", { taskId: String(task._id), employeeIds: [...new Set([String(primaryAssignee || ""), ...stageEmpIds].filter(Boolean))] });
 
       return res.status(201).json({ success: true, task: populated });
     } catch (err) {

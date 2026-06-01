@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useTaskSync } from "@/utils/hooks/useTaskSync";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -220,6 +221,18 @@ export default function TaskDashboard() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
+  /* ── Auto-refresh tasks (socket + polling + tab visibility) ── */
+  const refreshTasks = useCallback(() => {
+    Promise.all([
+      fetch("/api/admin/tasks?limit=200", { credentials: "include" }).then(r => r.json()),
+      fetch("/api/admin/tasks/stats",     { credentials: "include" }).then(r => r.json()),
+    ]).then(([tk, st]) => {
+      if (tk.success) setTasks(tk.tasks || []);
+      if (st.success) setStats(st.stats);
+    }).catch(() => {});
+  }, []);
+  useTaskSync(refreshTasks, { room: "admin-tasks" });
+
   /* ── Load sprints when project selected (general form) ── */
   useEffect(() => {
     if (!genForm.projectId) { setSprints([]); return; }
@@ -390,6 +403,16 @@ export default function TaskDashboard() {
       if (createMode === "production") {
         if (!prodForm.brandId)    { toast.error("Please select a brand");         setSubmitting(false); return; }
         if (!prodForm.contentType){ toast.error("Please select creative type");   setSubmitting(false); return; }
+        const stageNames = ["S1 Script/Concept", "S2 Shoot/Design", "S3 Edit/Develop", "S4 Posted/Live"];
+        for (let i = 0; i < prodForm.stages.length; i++) {
+          const stg = prodForm.stages[i];
+          if ((stg.assignedTo || []).length > 0 && !stg.deadline) {
+            toast.error(`Deadline is required for ${stageNames[i]}`);
+            setSubmitting(false); return;
+          }
+        }
+        const anyDeadline = prodForm.stages.some(s => s.deadline);
+        if (!anyDeadline) { toast.error("At least one stage deadline is required"); setSubmitting(false); return; }
         body = {
           taskType:       "production",
           brandId:        prodForm.brandId,
@@ -406,6 +429,7 @@ export default function TaskDashboard() {
         };
       } else if (createMode === "website") {
         if (!webForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!webForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         const wType = webForm.webTaskType;
         body = {
           title:          webForm.title,
@@ -446,7 +470,8 @@ export default function TaskDashboard() {
         } else if (["offpage","technical"].includes(seoForm.seoCategory)) {
           if (!seoTitle) seoTitle = seoDesc.slice(0, 80) || (seoForm.seoCategory === "offpage" ? "Off-Page SEO Task" : "Technical SEO Task");
         }
-        if (!seoTitle) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!seoTitle)       { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!seoForm.dueDate){ toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           title:          seoTitle,
           description:    seoDesc,
@@ -463,7 +488,8 @@ export default function TaskDashboard() {
           assignedByName: adminUser?.name || "Admin",
         };
       } else if (["ads","branding"].includes(createMode)) {
-        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           ...genForm,
           taskType:       "manual",
@@ -474,7 +500,8 @@ export default function TaskDashboard() {
           assignedByName: adminUser?.name || "Admin",
         };
       } else {
-        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           ...genForm,
           taskType:       genForm.taskType || "manual",
@@ -1014,8 +1041,11 @@ export default function TaskDashboard() {
                               </div>
                             </div>
                             <div>
-                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>Deadline (date + time)</label>
-                              <input type="datetime-local" className="tmd-input" value={stg.deadline}
+                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
+                                Deadline <span style={{ color: "#EF4444" }}>*</span>
+                              </label>
+                              <input type="datetime-local" className="tmd-input" value={stg.deadline} required
+                                style={{ borderColor: (prodForm.stages[i].assignedTo?.length > 0 && !prodForm.stages[i].deadline) ? "#FCA5A5" : "" }}
                                 onChange={e => setProdForm(f => { const stages = [...f.stages]; stages[i] = { ...stages[i], deadline: e.target.value }; return { ...f, stages }; })} />
                             </div>
                           </div>

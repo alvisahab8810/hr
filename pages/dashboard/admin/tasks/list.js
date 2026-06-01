@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useTaskSync } from "@/utils/hooks/useTaskSync";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -327,11 +328,22 @@ export default function TasksListPage() {
       if (createMode === "production") {
         if (!prodForm.brandId)    { toast.error("Please select a brand"); setSubmitting(false); return; }
         if (!prodForm.contentType){ toast.error("Please select creative type"); setSubmitting(false); return; }
+        const stageNames = ["S1 Script/Concept", "S2 Shoot/Design", "S3 Edit/Develop", "S4 Posted/Live"];
+        for (let i = 0; i < prodForm.stages.length; i++) {
+          const stg = prodForm.stages[i];
+          if ((stg.assignedTo || []).length > 0 && !stg.deadline) {
+            toast.error(`Deadline is required for ${stageNames[i]}`);
+            setSubmitting(false); return;
+          }
+        }
+        const anyDeadline = prodForm.stages.some(s => s.deadline);
+        if (!anyDeadline) { toast.error("At least one stage deadline is required"); setSubmitting(false); return; }
         body = { taskType: "production", brandId: prodForm.brandId, contentType: prodForm.contentType, stage: "S1",
           stages: prodForm.stages.map(s => ({ name: s.name, assignedTo: s.assignedTo || [], deadline: s.deadline || null })),
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else if (createMode === "website") {
-        if (!webForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!webForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!webForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         const wType = webForm.webTaskType;
         body = { title: webForm.title, description: webForm.description, priority: webForm.priority,
           assignedTo: webForm.assignedTo || null,
@@ -358,17 +370,20 @@ export default function TasksListPage() {
         } else if (["offpage","technical"].includes(seoForm.seoCategory)) {
           if (!seoTitle) seoTitle = seoDesc.slice(0, 80) || (seoForm.seoCategory === "offpage" ? "Off-Page SEO Task" : "Technical SEO Task");
         }
-        if (!seoTitle) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!seoTitle)       { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!seoForm.dueDate){ toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { title: seoTitle, description: seoDesc, pillar: pillarVal, priority: seoForm.priority,
           assignedTo: seoForm.assignedTo || null, taskType: "manual", brandId: topBrandId || null,
           seoCategory: seoForm.seoCategory, tags: ["seo", seoForm.seoCategory], dueDate: seoForm.dueDate || null,
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else if (["ads","branding"].includes(createMode)) {
-        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { ...genForm, taskType: "manual", brandId: topBrandId || genForm.brandId || null, tags: [createMode],
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else {
-        if (!genForm.title.trim()) { toast.error("Title is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { ...genForm, taskType: genForm.taskType || "manual", brandId: topBrandId || genForm.brandId || null,
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       }
@@ -411,6 +426,9 @@ export default function TasksListPage() {
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
+  // Auto-refresh: socket events + tab visibility + polling
+  useTaskSync(fetchTasks, { room: "admin-tasks" });
+
   function switchTab(tab) {
     setActiveTab(tab);
     setPage(1);
@@ -434,6 +452,9 @@ export default function TasksListPage() {
 
   const saveStage = async () => {
     if (!stageTask) return;
+    if (stageForm.assignedTo.length > 0 && !stageForm.deadline) {
+      toast.error("Deadline is required when a stage has assignees"); return;
+    }
     setStageSaving(true);
     try {
       const cur    = stageTask.stages?.[stageIdx] || {};
@@ -676,8 +697,6 @@ export default function TasksListPage() {
                             <th style={{ width: 130 }}>Brand</th>
                             <th style={{ width: 90 }}>Type</th>
                             <th style={{ width: 110 }}>Pipeline</th>
-                            <th style={{ width: 100 }}>Scheduled</th>
-                            <th style={{ width: 60 }}>Grade</th>
                             <th style={{ width: 110 }}>S1 Script</th>
                             <th style={{ width: 110 }}>S2 Shoot</th>
                             <th style={{ width: 110 }}>S3 Edit</th>
@@ -747,12 +766,6 @@ export default function TasksListPage() {
                                     })}
                                   </div>
                                 </td>
-                                <td style={{ fontSize: 12, color: "#64748B", whiteSpace: "nowrap" }}>
-                                  {t.scheduledFor ? fmtDate(t.scheduledFor) : t.dueDate ? fmtDate(t.dueDate) : <span style={{ color: "#CBD5E1" }}>—</span>}
-                                </td>
-                                <td onClick={e => e.stopPropagation()}>
-                                  <GradeBadge task={t} />
-                                </td>
                                 {STAGE_KEYS.map((key, i) => {
                                   const stg  = t.stages?.[i] || {};
                                   const emps = getStageEmps(stg, employees);
@@ -789,7 +802,6 @@ export default function TasksListPage() {
                             <th style={{ width: 110 }}>Category</th>
                             <th style={{ width: 140 }}>Assignee</th>
                             <th style={{ width: 110 }}>Due Date</th>
-                            <th style={{ width: 60 }}>Grade</th>
                             <th style={{ width: 110 }}>Status</th>
                           </tr>
                         </thead>
@@ -836,7 +848,6 @@ export default function TasksListPage() {
                                   {over && <i className="bi bi-exclamation-circle me-1" style={{ fontSize: 10 }} />}
                                   {fmtDate(t.dueDate)}
                                 </td>
-                                <td onClick={e => e.stopPropagation()}><GradeBadge task={t} /></td>
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
                                 </td>
@@ -1060,8 +1071,11 @@ export default function TasksListPage() {
                               </div>
                             </div>
                             <div>
-                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>Deadline (date + time)</label>
-                              <input type="datetime-local" className="tmd-input" value={stg.deadline}
+                              <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
+                                Deadline <span style={{ color: "#EF4444" }}>*</span>
+                              </label>
+                              <input type="datetime-local" className="tmd-input" value={stg.deadline} required
+                                style={{ borderColor: (prodForm.stages[i].assignedTo?.length > 0 && !prodForm.stages[i].deadline) ? "#FCA5A5" : "" }}
                                 onChange={e => setProdForm(f => { const stages = [...f.stages]; stages[i] = { ...stages[i], deadline: e.target.value }; return { ...f, stages }; })} />
                             </div>
                           </div>
@@ -1291,8 +1305,15 @@ export default function TasksListPage() {
                 </div>
               </div>
               <div style={{ marginBottom: 14 }}>
-                <label className="tl-field-label">Deadline</label>
-                <input type="datetime-local" className="tl-field-input" value={stageForm.deadline} onChange={e => setStageForm(f => ({ ...f, deadline: e.target.value }))} />
+                <label className="tl-field-label">
+                  Deadline {stageForm.assignedTo.length > 0 && <span style={{ color: "#EF4444" }}>*</span>}
+                </label>
+                <input type="datetime-local" className="tl-field-input" value={stageForm.deadline}
+                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline ? "#FCA5A5" : "" }}
+                  onChange={e => setStageForm(f => ({ ...f, deadline: e.target.value }))} />
+                {stageForm.assignedTo.length > 0 && !stageForm.deadline && (
+                  <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
+                )}
               </div>
               {(() => {
                 const stg = stageTask?.stages?.[stageIdx] || {};

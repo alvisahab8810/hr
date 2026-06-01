@@ -5,6 +5,7 @@ import dbConnect from "@/utils/dbConnect";
 import Task from "@/models/tasks/Task";
 import "@/models/tasks/Brand";
 import "@/models/hr/Employee";
+import { emitTaskEvent } from "@/utils/tasks/emitTaskEvent";
 
 function verifyToken(req) {
   const auth = req.headers.authorization || "";
@@ -88,6 +89,7 @@ export default async function handler(req, res) {
       .populate("assignedTo", "firstName lastName personal")
       .lean();
 
+    emitTaskEvent("task:updated", { taskId: taskId, employeeIds: [String(empId)] });
     return res.json({ success: true, task: updated });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

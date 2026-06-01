@@ -15,6 +15,7 @@ import { logActivity }           from "@/utils/tasks/logActivity";
 import { sendNotification }     from "@/utils/tasks/sendNotification";
 import { sendTaskAssignedEmail, sendStageApprovedEmail, sendStageRejectedEmail } from "@/utils/email/sendTaskEmail";
 import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
+import { emitTaskEvent }            from "@/utils/tasks/emitTaskEvent";
 import { logAdminActivity }     from "@/utils/tasks/logAdminActivity";
 import { adminGuard }           from "@/utils/admin/adminAuthGuard";
 
@@ -263,6 +264,11 @@ export default async function handler(req, res) {
         }
       }
 
+      // Broadcast change to admin list + assigned employees
+      const assignedId = task.assignedTo?._id ? String(task.assignedTo._id) : null;
+      const stageEmpIds = (task.stages || []).flatMap(s => (s.assignedTo || []).map(String));
+      emitTaskEvent("task:updated", { taskId: id, employeeIds: [...new Set([assignedId, ...stageEmpIds].filter(Boolean))] });
+
       return res.json({ success: true, task });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });
@@ -275,6 +281,7 @@ export default async function handler(req, res) {
       await Task.findByIdAndDelete(id);
       await TaskComment.deleteMany({ taskId: id });
       await TaskActivity.deleteMany({ taskId: id });
+      emitTaskEvent("task:deleted", { taskId: id });
       return res.json({ success: true, message: "Task deleted" });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });

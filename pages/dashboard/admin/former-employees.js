@@ -209,7 +209,7 @@ export default function FormerEmployees() {
                                 </div>
                                 <div>
                                   <div style={{ fontWeight:700, color:"#374151" }}>{name}</div>
-                                  <div style={{ fontSize:11, color:"#9CA3AF" }}>{emp.email}</div>
+                                  <div style={{ fontSize:11, color:"#9CA3AF" }}>{emp.professional?.officialEmail || emp.personal?.email || emp.email?.replace(/_deactivated_\d+@deactivated\.invalid$/, "") || "—"}</div>
                                 </div>
                               </div>
                             </td>

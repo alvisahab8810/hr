@@ -1,6 +1,4 @@
 
-
-
 html,
 body {
   max-width: 100vw;
@@ -22,3 +20,530 @@ a {
   text-decoration: none;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   EMPLOYEE PAGES — FULL MOBILE RESPONSIVE
+   Breakpoints: 768px (tablet), 480px (phone)
+══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Layout: sidebar hidden, content full-width ── */
+@media (max-width: 768px) {
+  .mobile-none { display: none !important; }
+
+  section.content,
+  section.content.home {
+    margin-left: 0 !important;
+    padding: 12px !important;
+    width: 100% !important;
+  }
+
+  .main-nav {
+    flex-direction: column;
+  }
+
+  /* Navbar */
+  .navbar .navbar-header {
+    width: 100%;
+  }
+  .navbar-nav {
+    flex-wrap: wrap;
+  }
+
+  /* Breadcrumb */
+  .breadcrum-bx ul {
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* Block header */
+  .block-header { padding: 10px 0 !important; }
+  .block-header h2 { font-size: 18px !important; }
+}
+
+/* ── 2. Dashboard: hero, stats grid, cards ── */
+@media (max-width: 768px) {
+  .ed-hero {
+    padding: 16px !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    border-radius: 14px !important;
+  }
+  .ed-hero-right {
+    align-items: flex-start !important;
+    width: 100% !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .ed-hero-name { font-size: 16px !important; }
+  .ed-hero-role { font-size: 12px !important; }
+
+  /* Stats grids — 2 columns on tablet, 1 on phone */
+  .ed-stats-grid,
+  [class*="stats-grid"],
+  .tms-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* Generic 4-column grids → 2 */
+  .row [class*="col-md-3"] { flex: 0 0 50%; max-width: 50%; }
+  .row [class*="col-md-4"] { flex: 0 0 100%; max-width: 100%; }
+  .row [class*="col-md-6"] { flex: 0 0 100%; max-width: 100%; }
+  .row [class*="col-lg-3"] { flex: 0 0 50%; max-width: 50%; }
+  .row [class*="col-lg-4"] { flex: 0 0 100%; max-width: 100%; }
+
+  /* Quick-action buttons row */
+  .ed-quick-actions,
+  [class*="quick-action"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .ed-quick-actions a,
+  [class*="quick-action"] a {
+    flex: 1 1 calc(50% - 8px) !important;
+    min-width: 120px !important;
+    font-size: 12px !important;
+    padding: 10px 8px !important;
+    text-align: center !important;
+  }
+
+  /* Dashboard 2-col grid → 1-col */
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: repeat(2"],
+  [style*="grid-template-columns:repeat(2"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(3"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns:repeat(4"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .tms-stats,
+  .ed-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ed-quick-actions a,
+  [class*="quick-action"] a {
+    flex: 1 1 100% !important;
+  }
+  [style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(3"],
+  [style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns:repeat(4"] {
+    grid-template-columns: 1fr !important;
+  }
+  .row [class*="col-md-3"],
+  .row [class*="col-lg-3"] {
+    flex: 0 0 100%; max-width: 100%;
+  }
+}
+
+/* ── 3. Tables: horizontal scroll wrapper ── */
+@media (max-width: 768px) {
+  /* Wrap all tables in a scroll container */
+  .table-responsive,
+  .tms-card > div[style*="overflowX"],
+  .leaves-table-wrap,
+  .attendance-table,
+  .salary-table {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 500px;
+  }
+
+  /* Leave, Reimbursement, Overtime table cells */
+  table th,
+  table td {
+    font-size: 11px !important;
+    padding: 8px 8px !important;
+    white-space: nowrap;
+  }
+
+  /* Make any div-table scroll */
+  .tms-card { overflow-x: auto; }
+}
+
+/* ── 4. Leaves Management ── */
+@media (max-width: 768px) {
+  /* Leave balance cards */
+  .leave-balance-cards,
+  [class*="leave-balance"] {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  /* Leave apply form */
+  .leave-form-row {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  .leave-form-row > * { width: 100% !important; }
+
+  /* Action buttons in topbar */
+  .leave-management-topbar,
+  .attendance-topbar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .leave-management-topbar button,
+  .attendance-topbar button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Leave history cards — stack meta info */
+  .leave-history-card,
+  [class*="leave-card"] {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+}
+
+/* ── 5. Reimbursement / Overtime / Deductions ── */
+@media (max-width: 768px) {
+  /* Form rows → single column */
+  .reimbursement-form .form-row,
+  .overtime-form .form-row,
+  [class*="form-row"] {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  [class*="form-row"] > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Input groups */
+  .input-group { flex-wrap: wrap !important; }
+  .input-group > * { width: 100% !important; border-radius: 8px !important; }
+
+  /* Submit / action button rows */
+  .form-actions,
+  [class*="btn-row"] {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .form-actions button,
+  [class*="btn-row"] button {
+    width: 100% !important;
+  }
+}
+
+/* ── 6. Profile Page ── */
+@media (max-width: 768px) {
+  /* Profile root layout */
+  .ep-root {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .ep-sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .ep-main { width: 100% !important; }
+
+  /* Profile card */
+  .ep-sidebar-banner { height: 80px !important; border-radius: 12px 12px 0 0 !important; }
+  .ep-avatar-wrap { margin-top: -30px !important; }
+
+  /* Profile tabs */
+  .ep-tabs {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    overflow-x: auto !important;
+  }
+  .ep-tab-btn {
+    font-size: 12px !important;
+    padding: 7px 12px !important;
+    white-space: nowrap;
+  }
+
+  /* Profile section grids */
+  .ep-section-grid,
+  .ep-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Profile info rows */
+  .ep-info-row {
+    flex-direction: column !important;
+    gap: 2px !important;
+  }
+  .ep-info-label { font-size: 10px !important; }
+  .ep-info-value { font-size: 13px !important; }
+
+  /* Doc upload cards */
+  .ep-doc-list {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Incomplete banner */
+  .ep-incomplete-banner {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 14px !important;
+  }
+  .ep-cta { width: 100% !important; justify-content: center !important; }
+}
+
+/* ── 7. Community Page ── */
+@media (max-width: 768px) {
+  /* Community layout: sidebar + feed → stack */
+  .community-layout,
+  [class*="community-root"],
+  [class*="comm-layout"] {
+    flex-direction: column !important;
+    gap: 14px !important;
+  }
+  [class*="comm-sidebar"],
+  [class*="community-sidebar"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Post card */
+  [class*="post-card"],
+  [class*="comm-post"] {
+    padding: 12px !important;
+  }
+
+  /* Post action buttons */
+  [class*="post-actions"] {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+}
+
+/* ── 8. Task Management (employee portal) ── */
+@media (max-width: 768px) {
+  /* Tab bar — horizontal scroll */
+  .tms-tabs,
+  [class*="tab-nav"] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0 !important;
+  }
+  .tms-tabs::-webkit-scrollbar { display: none; }
+
+  /* Tab buttons */
+  .tms-tab-btn,
+  [class*="tab-btn"] {
+    white-space: nowrap !important;
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Editor layout */
+  .tms-editor-layout,
+  [class*="editor-layout"] {
+    flex-direction: column !important;
+  }
+  [class*="editor-sidebar"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid #F0F0F0;
+  }
+
+  /* Task cards grid */
+  .tms-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dark portal layout */
+  .ep-layout {
+    flex-direction: column !important;
+  }
+  .ep-side {
+    width: 100% !important;
+    position: relative !important;
+    height: auto !important;
+    top: 0 !important;
+  }
+  .ep-main {
+    margin-left: 0 !important;
+  }
+  .ep-side-nav {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    padding: 8px !important;
+    gap: 4px !important;
+  }
+  .ep-nav {
+    flex-direction: column !important;
+    padding: 8px 10px !important;
+    font-size: 10px !important;
+    min-width: 60px !important;
+    text-align: center !important;
+    gap: 4px !important;
+    border-radius: 10px !important;
+  }
+  .ep-side-footer { display: none !important; }
+  .ep-grid4 { grid-template-columns: repeat(2, 1fr) !important; }
+  .ep-grid2 { grid-template-columns: 1fr !important; }
+  .ep-content { padding: 14px !important; }
+  .ep-topbar { padding: 10px 14px !important; }
+
+  /* Weekly tracker grid → single day scroll */
+  .ep-week-grid {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stage dots in task table */
+  .tms-task-item { flex-wrap: wrap !important; }
+}
+
+@media (max-width: 480px) {
+  .ep-grid4 { grid-template-columns: 1fr 1fr !important; }
+  .ep-stats4 { grid-template-columns: 1fr 1fr !important; }
+  .ep-grade-hero { padding: 20px 16px !important; }
+  .ep-gh-title { font-size: 20px !important; }
+}
+
+/* ── 9. Messages / Chat ── */
+@media (max-width: 768px) {
+  .messages-layout,
+  [class*="chat-layout"],
+  [class*="msg-layout"] {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  [class*="chat-sidebar"],
+  [class*="msg-sidebar"] {
+    width: 100% !important;
+    max-height: 250px !important;
+    overflow-y: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid #E5E7EB !important;
+  }
+  [class*="chat-main"],
+  [class*="msg-main"] {
+    height: 60vh !important;
+  }
+  [class*="chat-input"],
+  [class*="msg-input"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
+/* ── 10. Attendance Summary ── */
+@media (max-width: 768px) {
+  .attendance-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .calendar-grid {
+    font-size: 11px !important;
+  }
+  .att-month-nav {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+}
+
+/* ── 11. Salary Slips ── */
+@media (max-width: 768px) {
+  .salary-slip-card {
+    padding: 16px !important;
+    font-size: 12px !important;
+  }
+  .salary-slip-header {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: flex-start !important;
+  }
+  .salary-slip-table th,
+  .salary-slip-table td {
+    font-size: 11px !important;
+    padding: 6px !important;
+  }
+}
+
+/* ── 12. Global card & button fixes on mobile ── */
+@media (max-width: 768px) {
+  /* All page headers (title + action button) → stack */
+  .page-header-flex,
+  [class*="topbar"][class*="leave"],
+  [class*="topbar"][class*="attendance"],
+  [class*="topbar"][class*="overtime"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  /* Modal dialogs → full screen */
+  .modal-dialog {
+    margin: 0 !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+  }
+  .modal-content {
+    border-radius: 12px 12px 0 0 !important;
+    min-height: 40vh;
+  }
+
+  /* Toast notifications */
+  .Toastify__toast-container {
+    width: 90vw !important;
+    left: 5vw !important;
+  }
+
+  /* Inline modals / overlays */
+  [class*="ep-overlay"],
+  [class*="modal-overlay"] {
+    padding: 8px !important;
+    align-items: flex-end !important;
+  }
+  [class*="ep-modal"],
+  [class*="modal-box"] {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* Select / input full width */
+  select, input[type="text"], input[type="email"],
+  input[type="number"], input[type="date"],
+  input[type="datetime-local"], textarea {
+    width: 100% !important;
+    font-size: 14px !important;
+  }
+
+  /* Admin main heading */
+  .admin-main-heading { font-size: 18px !important; }
+
+  /* Topbar refresh / action buttons */
+  .topbar-actions { flex-wrap: wrap !important; gap: 6px !important; }
+  .topbar-actions button { flex: 1 !important; min-width: 100px !important; }
+}
+
+/* ── 13. Tiny phone fixes (< 380px) ── */
+@media (max-width: 380px) {
+  section.content, section.content.home {
+    padding: 8px !important;
+  }
+  .tms-stat { padding: 10px 12px !important; }
+  .tms-stat-val { font-size: 16px !important; }
+  .admin-main-heading { font-size: 16px !important; }
+  .ep-content { padding: 10px !important; }
+}

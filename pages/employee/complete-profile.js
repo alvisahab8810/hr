@@ -54,39 +54,66 @@ export default function CompleteProfilePage() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          setPersonal((p) => ({
-            ...p,
-            firstName: data.employee.firstName,
-            lastName: data.employee.lastName,
-            email: data.employee.personal?.email || "", // ✅ personal email
-          }));
+        if (!data.success) return;
+        const emp  = data.employee;
+        const per  = emp.personal      || {};
+        const pro  = emp.professional  || {};
+        const sal  = emp.salary        || {};
 
-          setProfessional((p) => ({
-            ...p,
-            employeeId: data.employee.employeeId,
+        // Pre-fill ALL existing personal data
+        setPersonal({
+          firstName:     emp.firstName          || "",
+          lastName:      emp.lastName           || "",
+          mobile:        per.mobile             || "",
+          email:         per.email              || "",
+          fatherName:    per.fatherName         || "",
+          motherName:    per.motherName         || "",
+          dob:           per.dob ? per.dob.split("T")[0] : "",
+          maritalStatus: per.maritalStatus      || "",
+          address:       per.address            || "",
+          city:          per.city               || "",
+          state:         per.state              || "",
+          zip:           per.zip                || "",
+          avatar:        null,
+        });
 
-            officialEmail:
-              data.employee.professional?.officialEmail ||
-              data.employee.email ||
-              "", // fallback safety
+        // Pre-fill ALL existing professional data
+        setProfessional({
+          employeeId:    emp.employeeId         || "",
+          officialEmail: pro.officialEmail || emp.email || "",
+          dateOfJoining: pro.dateOfJoining ? pro.dateOfJoining.split("T")[0] : "",
+          department:    pro.department         || "",
+          designation:   pro.designation        || "",
+          employeeType:  pro.employeeType       || "",
+          status:        pro.status             || "",
+        });
 
-            dateOfJoining: data.employee.professional?.dateOfJoining
-              ? data.employee.professional.dateOfJoining.split("T")[0]
-              : "",
+        // Pre-fill ALL existing salary/bank data
+        setSalary({
+          monthlySalary:      sal.monthlySalary      || "",
+          annualSalary:       sal.annualSalary        || "",
+          accountHolderName:  sal.accountHolderName   || "",
+          bankName:           sal.bankName            || "",
+          branch:             sal.branch              || "",
+          accountNumber:      sal.accountNumber       || "",
+          ifscCode:           sal.ifscCode            || "",
+          panNumber:          sal.panNumber           || "",
+          upiId:              sal.upiId               || "",
+        });
 
-            department: data.employee.professional?.department || "",
-            designation: data.employee.professional?.designation || "",
-            employeeType: data.employee.professional?.employeeType || "",
-            status: data.employee.professional?.status || "",
-          }));
+        // Determine the first incomplete step
+        const personalDone = !!(per.mobile && per.email && per.dob && per.address && per.city && per.state && per.maritalStatus);
+        const proDone      = !!(pro.department && pro.designation && pro.dateOfJoining);
+        const bankDone     = !!(sal.bankName && sal.accountNumber && sal.ifscCode && sal.panNumber);
 
-          setSalary((s) => ({
-            ...s,
-            monthlySalary: data.employee.salary?.monthlySalary || "",
-            annualSalary: data.employee.salary?.annualSalary || "",
-          }));
-        }
+        let firstIncomplete = 4; // default: documents
+        if (!personalDone)   firstIncomplete = 1;
+        else if (!proDone)   firstIncomplete = 2;
+        else if (!bankDone)  firstIncomplete = 3;
+
+        // Honour explicit ?step= query param from the profile page
+        const stepParam = new URLSearchParams(window.location.search).get("step");
+        setStep(stepParam ? Number(stepParam) : firstIncomplete);
       });
   }, [router]);
 

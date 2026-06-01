@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Task from "@/models/tasks/Task";
+import { emitTaskEvent } from "@/utils/tasks/emitTaskEvent";
 import "@/models/tasks/Brand";
 import "@/models/hr/Employee";
 
@@ -46,6 +47,7 @@ export default async function handler(req, res) {
       .populate("assignedTo", "firstName lastName personal")
       .lean();
 
+    emitTaskEvent("task:updated", { taskId: String(id), employeeIds: [String(empId)] });
     return res.json({ success: true, task });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

@@ -1,5 +1,6 @@
 // pages/employee/tasks/index.js — Role-based TMS (light theme + full feature set)
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useTaskSync } from "@/utils/hooks/useTaskSync";
 import Link from "next/link";
 import Head from "next/head";
 import { useRouter } from "next/router";
@@ -35,6 +36,14 @@ function getTMSRole(emp) {
 function fmtD(d) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function fmtDT(d) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  const date = dt.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const time = dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return `${date}, ${time}`;
 }
 
 function isOverdue(d) {
@@ -74,7 +83,7 @@ const CTYPE_COLOR  = { reel: "#7C3AED", post: "#1D4ED8", carousel: "#B45309", st
 const PILLAR_OPTS  = ["Education", "Entertainment", "Inspiration", "Promotion", "Behind the Scenes", "Testimonial", "Product Feature"];
 
 const TABS_BY_ROLE = {
-  content:   ["dashboard", "tasks", "editor", "brandcal", "mycal", "library", "submissions", "performance"],
+  content:   ["dashboard", "tasks", "editor", "weekly", "mycal", "library", "submissions", "performance"],
   design:    ["dashboard", "tasks", "queue",  "brandcal", "performance"],
   editor:    ["dashboard", "tasks", "queue",  "brandcal", "performance"],
   developer: ["dashboard", "tasks", "board",  "performance"],
@@ -86,6 +95,7 @@ const TAB_META = {
   tasks:       { label: "My Tasks",       icon: "bi-list-task" },
   editor:      { label: "Content Editor", icon: "bi-pencil-square" },
   brandcal:    { label: "Brand Calendar", icon: "bi-calendar3" },
+  weekly:      { label: "Weekly Tracker", icon: "bi-calendar-week" },
   mycal:       { label: "My Calendar",    icon: "bi-calendar2-week" },
   library:     { label: "Script Library", icon: "bi-collection" },
   submissions: { label: "Submissions",    icon: "bi-send-check" },
@@ -367,10 +377,10 @@ function MyTasksTab({ tasks, openInEditor }) {
                       const dl  = getStageDeadline(t);
                       const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
                       return (
-                        <td style={{ padding: "13px 14px", fontSize: 11, fontFamily: "monospace", color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
+                        <td style={{ padding: "13px 14px", fontSize: 11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
                           {od && <i className="bi bi-exclamation-circle-fill me-1" />}
                           {od && <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", marginRight: 5 }}>LATE</span>}
-                          {dl ? fmtD(dl) : "—"}
+                          {dl ? fmtDT(dl) : "—"}
                         </td>
                       );
                     })()}
@@ -859,6 +869,114 @@ function TaskDetailModal({ task, onClose }) {
 }
 
 // ─── BRAND CALENDAR TAB ───────────────────────────────────────────────────────
+// ─── WEEKLY TRACKER TAB (content team) ───────────────────────────────────────
+function WeeklyTrackerTab({ tasks }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dow   = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + weekOffset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i); return d;
+  });
+  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const prodTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
+
+  function tasksForDay(day) {
+    return prodTasks.filter(t => {
+      const dl = t.stages?.[0]?.deadline || t.dueDate;
+      if (!dl) return false;
+      const d = new Date(dl); d.setHours(0, 0, 0, 0);
+      return d.getTime() === day.getTime();
+    });
+  }
+
+  const STATUS_STYLE = {
+    todo:        { label: "To Do",       bg: "#F1F5F9", color: "#64748B" },
+    in_progress: { label: "In Progress", bg: "#DBEAFE", color: "#1D4ED8" },
+    review:      { label: "Review",      bg: "#FEF3C7", color: "#B45309" },
+    completed:   { label: "Done",        bg: "#DCFCE7", color: "#15803D" },
+    blocked:     { label: "Blocked",     bg: "#FEE2E2", color: "#DC2626" },
+  };
+
+  const weekStart = days[0].toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const weekEnd   = days[6].toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const isCurrentWeek = weekOffset === 0;
+
+  return (
+    <div>
+      {/* Week nav */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <button onClick={() => setWeekOffset(w => w - 1)}
+          style={{ background: "#F1F5F9", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontSize: 14 }}>
+          ‹
+        </button>
+        <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>
+          {weekStart} — {weekEnd}
+        </span>
+        <button onClick={() => setWeekOffset(w => w + 1)} disabled={isCurrentWeek}
+          style={{ background: "#F1F5F9", border: "none", borderRadius: 8, padding: "7px 12px", cursor: isCurrentWeek ? "default" : "pointer", fontSize: 14, opacity: isCurrentWeek ? 0.4 : 1 }}>
+          ›
+        </button>
+        {weekOffset !== 0 && (
+          <button onClick={() => setWeekOffset(0)}
+            style={{ background: "#EEF2FF", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>
+            This Week
+          </button>
+        )}
+      </div>
+
+      {/* Day columns */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10 }}>
+        {days.map((day, i) => {
+          const isToday = day.getTime() === today.getTime();
+          const dt = tasksForDay(day);
+          return (
+            <div key={i}>
+              {/* Day header */}
+              <div style={{ textAlign: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#9CA3AF", letterSpacing: ".5px" }}>{DAY_NAMES[i]}</div>
+                <div style={{ width: 32, height: 32, borderRadius: "50%", margin: "4px auto 0", display: "flex", alignItems: "center", justifyContent: "center",
+                  background: isToday ? "#6366F1" : "transparent", color: isToday ? "#fff" : "#374151", fontWeight: isToday ? 800 : 500, fontSize: 14 }}>
+                  {day.getDate()}
+                </div>
+              </div>
+
+              {/* Tasks */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, minHeight: 80 }}>
+                {dt.length === 0 ? (
+                  <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 6px", textAlign: "center", color: "#D1D5DB", fontSize: 10 }}>—</div>
+                ) : dt.map(t => {
+                  const sm = STATUS_STYLE[t.status] || STATUS_STYLE.todo;
+                  const approved = (t.stages || []).some(s => s.approved);
+                  const brandColor = t.brandId?.color || "#6366F1";
+                  return (
+                    <div key={t._id} style={{ background: "#fff", border: `1.5px solid ${brandColor}30`, borderLeft: `3px solid ${brandColor}`, borderRadius: 8, padding: "8px 8px 6px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#1E293B", marginBottom: 4, lineHeight: 1.3, wordBreak: "break-word" }}>
+                        {t.nomenclature || t.title}
+                      </div>
+                      {t.brandId && (
+                        <div style={{ fontSize: 9, color: brandColor, fontWeight: 700, marginBottom: 4 }}>{t.brandId.name}</div>
+                      )}
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: sm.bg, color: sm.color }}>{sm.label}</span>
+                        {approved && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#DCFCE7", color: "#15803D" }}>✓ Approved</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── BRAND CALENDAR TAB ───────────────────────────────────────────────────────
 function BrandCalendarTab({ tasks }) {
   const [brands,      setBrands]      = useState([]);
   const [selBrand,    setSelBrand]    = useState(null);
@@ -1004,20 +1122,29 @@ function MyCalendarTab({ tasks }) {
   const today     = new Date();
   const DAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  // My tasks: production tasks assigned to me
-  const myTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
+  // My tasks: only production tasks where S1 (script) stage has been admin-approved
+  const myTasks = tasks.filter(t =>
+    (t.taskType === "production" || t.contentType) &&
+    (t.stages || []).some(s => s.approved)
+  );
 
   // All brands from my tasks
   const brands = [...new Map(myTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
   const filtered = brandFilter ? myTasks.filter(t => t.brandId?._id === brandFilter) : myTasks;
 
-  // Use stage deadline for placing tasks on calendar
+  // Place approved tasks on their S1 stage deadline (or task dueDate)
+  function getApprovedDate(t) {
+    const s1 = t.stages?.[0];
+    if (s1?.deadline) return new Date(s1.deadline);
+    if (t.dueDate) return new Date(t.dueDate);
+    return null;
+  }
+
   function dayTasks(day) {
     return filtered.filter(t => {
-      const dl = getStageDeadline(t);
+      const dl = getApprovedDate(t);
       if (!dl) return false;
-      const d = new Date(dl);
-      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+      return dl.getFullYear() === year && dl.getMonth() === month && dl.getDate() === day;
     });
   }
 
@@ -1613,14 +1740,27 @@ function calcGrade(tasks) {
 
 function getDeadlineInfo(task) {
   if (!task.dueDate) return null;
+  const raw = new Date(task.dueDate);
   const now = new Date(); now.setHours(0,0,0,0);
-  const d   = new Date(task.dueDate); d.setHours(0,0,0,0);
+  const d   = new Date(raw); d.setHours(0,0,0,0);
   const diff = Math.round((d - now) / 86400000);
-  const diffH = Math.round((new Date(task.dueDate) - new Date()) / 3600000);
-  if (diff < 0)   return { text: `${-diff}d overdue`, color: "#ef4444", urgent: true,  today: false };
-  if (diff === 0) return { text: diffH > 0 ? `${diffH}h left today` : "Due today", color: "#f5a623", urgent: false, today: true };
-  if (diff === 1) return { text: "Due tomorrow", color: "#64748b", urgent: false, today: false };
-  return { text: fmtD(task.dueDate), color: "#64748b", urgent: false, today: false };
+  const diffH = Math.round((raw - new Date()) / 3600000);
+
+  // Always include the real date + time as a subtitle
+  const dateStr = raw.toLocaleDateString("en-IN", { day:"numeric", month:"short" });
+  const timeStr = raw.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
+  const full    = `${dateStr}, ${timeStr}`;
+
+  if (diff < 0) {
+    const days = -diff;
+    return { text: days === 1 ? "1 day overdue" : `${days}d overdue`, sub: full, color:"#ef4444", urgent:true,  today:false };
+  }
+  if (diff === 0) {
+    const label = diffH > 0 ? `${diffH}h left` : "Due now";
+    return { text: label, sub: full, color:"#f5a623", urgent:false, today:true };
+  }
+  if (diff === 1) return { text:"Due tomorrow", sub: full, color:"#64748b", urgent:false, today:false };
+  return { text: full, sub: null, color:"#64748b", urgent:false, today:false };
 }
 
 function isDueToday(d) {
@@ -1749,14 +1889,83 @@ const PORTAL_CSS = `
   .ep-side-logo img {
     filter: brightness(0) invert(1);
 }
+  /* ── Mobile bottom tab nav ── */
+  .ep-mob-tabs {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
+    background: #0f1127; border-top: 1px solid rgba(90,87,251,.2);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .ep-mob-tabs-inner {
+    display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; gap: 0;
+  }
+  .ep-mob-tabs-inner::-webkit-scrollbar { display: none; }
+  .ep-mob-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 8px 12px; min-width: 62px; border: none; background: none;
+    cursor: pointer; color: rgba(255,255,255,.4); font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+    transition: color .15s; flex-shrink: 0;
+  }
+  .ep-mob-tab i { font-size: 18px; }
+  .ep-mob-tab.active { color: #818CF8; }
+  .ep-mob-tab.active i { color: #818CF8; }
+
+  /* ── Mobile topbar with back/menu button ── */
+  .ep-mob-topbar {
+    display: none;
+    position: sticky; top: 0; z-index: 200;
+    background: #0f1127; padding: 10px 14px;
+    align-items: center; gap: 10px;
+    border-bottom: 1px solid rgba(90,87,251,.15);
+  }
+  .ep-mob-topbar-title {
+    flex: 1; font-size: 15px; font-weight: 700; color: #fff;
+  }
+
   @media (max-width: 900px) {
+    /* Hide desktop sidebar */
     .ep-side { display: none; }
-    .ep-main { margin-left: 0; }
-    .ep-grid2, .ep-grid4 { grid-template-columns: 1fr; }
+    .ep-main { margin-left: 0; padding-bottom: 64px; }
+
+    /* Show mobile nav */
+    .ep-mob-tabs    { display: block; }
+    .ep-mob-topbar  { display: flex; }
+
+    /* Hide desktop topbar on mobile (replaced by mob-topbar) */
+    .ep-topbar { display: none; }
+
+    /* Content */
+    .ep-content { padding: 14px 14px; }
+
+    /* Grids */
+    .ep-grid2  { grid-template-columns: 1fr; }
+    .ep-grid4  { grid-template-columns: 1fr 1fr; }
     .ep-stats4 { grid-template-columns: 1fr 1fr; }
     .ep-perf-grid { grid-template-columns: 1fr; }
-    .ep-week-grid { grid-template-columns: repeat(4,1fr); }
+    .ep-week-grid { grid-template-columns: repeat(4,1fr); overflow-x: auto; }
     .ep-tgrid { grid-template-columns: 1fr; }
+
+    /* Grade hero */
+    .ep-grade-hero { padding: 18px 16px; border-radius: 12px; }
+    .ep-gh-title { font-size: 20px; }
+    .ep-hstat { padding: 10px 12px; }
+    .ep-hstat-val { font-size: 20px; }
+  }
+
+  @media (max-width: 480px) {
+    .ep-grid4  { grid-template-columns: 1fr; }
+    .ep-stats4 { grid-template-columns: 1fr 1fr; }
+    .ep-week-grid { grid-template-columns: repeat(3,1fr); }
+    .ep-content { padding: 10px 10px; }
+    .ep-grade-hero { padding: 14px 12px; }
+    .ep-gh-title { font-size: 18px; }
+    .ep-tgrid { grid-template-columns: 1fr; }
+
+    /* Modals full-screen on tiny phones */
+    .ep-overlay { padding: 0; align-items: flex-end; }
+    .ep-modal { border-radius: 16px 16px 0 0; max-height: 90vh; overflow-y: auto; }
   }
 `;
 
@@ -2014,7 +2223,14 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
         <span style={{ padding:"3px 10px", borderRadius:20, background:catBg, fontSize:11, fontWeight:700, color:catColor, display:"flex", alignItems:"center", gap:4 }}>
           <i className={`bi ${catIcon}`} style={{ fontSize:10 }} />{catLabel}
         </span>
-        {dl && <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:400 }}>⏰ {dl.text}</span>}
+        {dl && (
+          <span style={{ display:"inline-flex", flexDirection:"column", gap:1 }}>
+            <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:400, display:"inline-flex", alignItems:"center", gap:3 }}>
+              <i className="bi bi-clock" style={{ fontSize:10 }} />{dl.text}
+            </span>
+            {dl.sub && <span style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</span>}
+          </span>
+        )}
       </div>
 
       {/* Status / CTA */}
@@ -2105,9 +2321,25 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
         <span style={{ padding:"3px 10px", borderRadius:20, background:sbadge.bg, fontSize:11, fontWeight:600, color:sbadge.color }}>
           Stage {submitStageNum} · {STAGE_LABEL[submitStageKey]}
         </span>
-        {dl && (
-          <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?600:400 }}>⏰ {dl.text}</span>
-        )}
+
+        {/* Stage status badge — approved / pending review / deadline */}
+        {myStage?.approved ? (
+          <span style={{ fontSize:11, fontWeight:700, color:"#15803d", display:"inline-flex", alignItems:"center", gap:3 }}>
+            <i className="bi bi-check-circle-fill" style={{ fontSize:11 }} /> Approved
+          </span>
+        ) : myStage?.done && !myStage?.rejected ? (
+          <span style={{ fontSize:11, fontWeight:600, color:"#b45309", display:"inline-flex", alignItems:"center", gap:3 }}>
+            <i className="bi bi-hourglass-split" style={{ fontSize:10 }} /> Pending Review
+          </span>
+        ) : dl ? (
+          <span style={{ display:"inline-flex", flexDirection:"column", gap:1 }}>
+            <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:500, display:"inline-flex", alignItems:"center", gap:3 }}>
+              <i className="bi bi-clock" style={{ fontSize:10 }} />
+              {dl.text}
+            </span>
+            {dl.sub && <span style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</span>}
+          </span>
+        ) : null}
       </div>
       <div style={{ display:"flex", gap:4, marginBottom:14 }}>
         {stagesArr.map((s,i) => (
@@ -3113,6 +3345,15 @@ function DarkPortal() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-refresh: socket events + tab visibility + polling
+  const refreshTasks = useCallback(() => {
+    fetch("/api/employee/tasks", { headers: authH() })
+      .then(r => r.json())
+      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .catch(() => {});
+  }, []);
+  useTaskSync(refreshTasks, { empId: employee?._id || null });
+
   const NAV = [
     { key:"today",       label:"Today",            icon:"bi-house" },
     { key:"tasks",       label:"My Tasks",          icon:"bi-check2-square" },
@@ -3145,11 +3386,11 @@ function DarkPortal() {
       </Head>
       <style>{PORTAL_CSS}</style>
       <div className="ep-layout">
+
+        {/* ── Desktop sidebar ── */}
         <div className="ep-side">
           <div className="ep-side-logo">
-            {/* <span>Viralon</span> */}
           <img width="100" alt="Viralon" src="/assets/images/logo.png"/>
-            {/* <small>{RL[empRole]}</small> */}
           </div>
           <nav className="ep-side-nav">
             {NAV.map(n => (
@@ -3169,10 +3410,24 @@ function DarkPortal() {
             </button>
           </div>
         </div>
+
         <div className="ep-main">
+          {/* ── Mobile sticky topbar (replaces desktop topbar on mobile) ── */}
+          <div className="ep-mob-topbar">
+            <img src="/assets/images/logo.png" alt="Viralon"
+              style={{ height:22, filter:"brightness(0) invert(1)" }}
+              onError={e => { e.currentTarget.style.display="none"; }} />
+            <div className="ep-mob-topbar-title">{TITLES[view] || "Dashboard"}</div>
+            <div style={{ width:30, height:30, borderRadius:"50%", background:"rgba(90,87,251,.3)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:12, color:"#fff", flexShrink:0 }}>
+              {pIni(employee)}
+            </div>
+          </div>
+
+          {/* ── Desktop topbar ── */}
           <div className="ep-topbar">
             <div className="ep-topbar-title">{TITLES[view] || "Dashboard"}</div>
           </div>
+
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "tasks"       && <PortalMyTasksView       tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "week"        && <PortalThisWeekView      tasks={tasks} loading={loading} empId={employee?._id} />}
@@ -3182,6 +3437,18 @@ function DarkPortal() {
           {view === "notifs"      && <PortalNotificationsView tasks={tasks} loading={loading} />}
           {view === "performance" && <PortalPerformanceView   tasks={tasks} loading={loading} emp={employee} />}
           {view === "profile"     && <PortalProfileView       emp={employee} empRole={empRole} loading={loading} />}
+        </div>
+      </div>
+
+      {/* ── Mobile bottom tab bar (only visible < 900px) ── */}
+      <div className="ep-mob-tabs">
+        <div className="ep-mob-tabs-inner">
+          {NAV.map(n => (
+            <button key={n.key} className={`ep-mob-tab ${view===n.key?"active":""}`} onClick={() => setView(n.key)}>
+              <i className={`bi ${n.icon}`} />
+              {n.label}
+            </button>
+          ))}
         </div>
       </div>
       <ToastContainer position="bottom-right" autoClose={2500} />
@@ -3211,6 +3478,17 @@ export default function EmployeeTasksDashboard() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Auto-refresh for light-theme TMS (content team)
+  const refreshLightTasks = useCallback(() => {
+    const token   = localStorage.getItem("employeeToken");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch("/api/employee/tasks", { headers })
+      .then(r => r.json())
+      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .catch(() => {});
+  }, []);
+  useTaskSync(refreshLightTasks, { empId: employee?._id || null });
 
   function openInEditor(task) {
     setEditorTask(task);
@@ -3300,6 +3578,7 @@ export default function EmployeeTasksDashboard() {
             {activeTab === "editor"      && <ContentEditorTab tasks={tasks} initialTask={editorTask} />}
             {activeTab === "brandcal"    && <BrandCalendarTab tasks={tasks} />}
             {activeTab === "calendar"    && <BrandCalendarTab tasks={tasks} />}
+            {activeTab === "weekly"      && <WeeklyTrackerTab tasks={tasks} />}
             {activeTab === "mycal"       && <MyCalendarTab    tasks={tasks} />}
             {activeTab === "library"     && <ScriptLibraryTab tasks={tasks} />}
             {activeTab === "submissions" && <SubmissionsTab   tasks={tasks} />}

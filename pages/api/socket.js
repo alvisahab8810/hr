@@ -77,6 +77,11 @@ export default async function handler(req, res) {
         socket.emit("employeeStatusSnapshot", [...employeeStatus.values()]);
       });
 
+      // Join rooms for targeted task broadcasts
+      socket.on("task:joinRoom", (room) => {
+        socket.join(room); // e.g. "admin-tasks", "employee-<id>"
+      });
+
       // When socket disconnects, mark user offline *if* we know who they are
       socket.on("disconnect", () => {
         console.log("❌ Client disconnected:", socket.id);
@@ -87,6 +92,7 @@ export default async function handler(req, res) {
 
     res.socket.server.io = io;
     ioInstance = io;
+    global._io = io; // accessible from any API route
   } else {
     // already initialized
   }
