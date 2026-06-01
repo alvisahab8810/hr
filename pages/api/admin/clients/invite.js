@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     }
 
     // Send invite email
-    const baseUrl  = process.env.NEXT_PUBLIC_APP_URL || "https://viralon.in";
+    const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
     const loginUrl = brand.slug ? `${baseUrl}/${brand.slug}/login` : null;
 
     if (!loginUrl) {
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     }
 
     const year = new Date().getFullYear();
-    const logoUrl = `${baseUrl}/asets/images/logo.png`;
+    const logoUrl = `${baseUrl}/assets/images/logo.png`;
 
     let emailSent = false;
     if (sendEmail) {
