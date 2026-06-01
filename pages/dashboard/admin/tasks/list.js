@@ -332,12 +332,10 @@ export default function TasksListPage() {
         for (let i = 0; i < prodForm.stages.length; i++) {
           const stg = prodForm.stages[i];
           if ((stg.assignedTo || []).length > 0 && !stg.deadline) {
-            toast.error(`Deadline is required for ${stageNames[i]}`);
+            toast.error(`Deadline is required for ${stageNames[i]} (has assignees)`);
             setSubmitting(false); return;
           }
         }
-        const anyDeadline = prodForm.stages.some(s => s.deadline);
-        if (!anyDeadline) { toast.error("At least one stage deadline is required"); setSubmitting(false); return; }
         body = { taskType: "production", brandId: prodForm.brandId, contentType: prodForm.contentType, stage: "S1",
           stages: prodForm.stages.map(s => ({ name: s.name, assignedTo: s.assignedTo || [], deadline: s.deadline || null })),
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
@@ -1072,10 +1070,10 @@ export default function TasksListPage() {
                             </div>
                             <div>
                               <label style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>
-                                Deadline <span style={{ color: "#EF4444" }}>*</span>
+                                Deadline {(stg.assignedTo || []).length > 0 && <span style={{ color: "#EF4444" }}>*</span>}
                               </label>
-                              <input type="datetime-local" className="tmd-input" value={stg.deadline} required
-                                style={{ borderColor: (prodForm.stages[i].assignedTo?.length > 0 && !prodForm.stages[i].deadline) ? "#FCA5A5" : "" }}
+                              <input type="datetime-local" className="tmd-input" value={stg.deadline}
+                                style={{ borderColor: ((stg.assignedTo || []).length > 0 && !stg.deadline) ? "#FCA5A5" : "" }}
                                 onChange={e => setProdForm(f => { const stages = [...f.stages]; stages[i] = { ...stages[i], deadline: e.target.value }; return { ...f, stages }; })} />
                             </div>
                           </div>
