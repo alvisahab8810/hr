@@ -33,7 +33,13 @@
       "Bash(xargs wc -l)",
       "Bash(xargs ls -lh)",
       "Bash(dir \"d:\\\\viralon-payroll\\\\pages\" /b /s)",
-      "Bash(findstr -i \"client\\\\|tourwatchout\\\\|portal\")"
+      "Bash(findstr -i \"client\\\\|tourwatchout\\\\|portal\")",
+      "PowerShell(head -50)",
+      "Bash(Select-Object -First 20)",
+      "Read(//d/viralon-payroll/pages/**)",
+      "Read(//d/viralon-payroll/pages/client/**)",
+      "Bash(Get-ChildItem -Path . -Directory)",
+      "Bash(Select-Object Name)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

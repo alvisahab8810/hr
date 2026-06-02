@@ -3240,18 +3240,34 @@ function MessagesView({ brandSlug, client }) {
   const [callNote, setCallNote]           = useState("");
   const [sending, setSending]             = useState(false);
   const [error, setError]                 = useState("");
-  const bottomRef  = useRef(null);
-  const pollRef    = useRef(null);
+  const [callRequests, setCallRequests]   = useState([]);
+  const [replyTo, setReplyTo]             = useState(null);
+  const [editingId, setEditingId]         = useState(null);
+  const bottomRef    = useRef(null);
+  const pollRef      = useRef(null);
+  const crPollRef    = useRef(null);
+  const isNearBottom = useRef(true);
+  const textareaRef  = useRef(null);
+
+  function handleThreadScroll(e) {
+    const el = e.currentTarget;
+    isNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
 
   useEffect(() => {
     if (!brandSlug) return;
+    isNearBottom.current = true;
     loadMessages();
-    pollRef.current = setInterval(loadMessages, 8000);
-    return () => clearInterval(pollRef.current);
+    loadCallRequests();
+    pollRef.current   = setInterval(loadMessages, 8000);
+    crPollRef.current = setInterval(loadCallRequests, 10000);
+    return () => { clearInterval(pollRef.current); clearInterval(crPollRef.current); };
   }, [brandSlug]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isNearBottom.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   async function loadMessages() {
@@ -3262,25 +3278,71 @@ function MessagesView({ brandSlug, client }) {
     } catch {}
   }
 
+  async function loadCallRequests() {
+    try {
+      const r = await fetch(`/api/client/call-requests?brand=${brandSlug}`);
+      const d = await r.json();
+      if (d.success) setCallRequests(d.requests || []);
+    } catch {}
+  }
+
   async function send() {
     if (!text.trim() && attachments.length === 0) return;
+    isNearBottom.current = true;
     setSending(true);
     setError("");
     try {
-      const r = await fetch(`/api/client/messages?brand=${brandSlug}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, attachments }),
-      });
-      const d = await r.json();
-      if (d.success) {
-        setMessages(prev => [...prev, d.message]);
-        setText(""); setAttachments([]);
+      if (editingId) {
+        const r = await fetch(`/api/client/messages?brand=${brandSlug}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messageId: editingId, action: "edit", text }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          setMessages(prev => prev.map(m => m._id === editingId ? d.message : m));
+          setText(""); setEditingId(null);
+        } else setError(d.message || "Failed to edit");
       } else {
-        setError(d.message || "Failed to send");
+        const r = await fetch(`/api/client/messages?brand=${brandSlug}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, attachments, replyTo }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          setMessages(prev => [...prev, d.message]);
+          setText(""); setAttachments([]); setReplyTo(null);
+        } else setError(d.message || "Failed to send");
       }
     } catch { setError("Network error"); }
     setSending(false);
+  }
+
+  function startReply(m) {
+    setReplyTo({ msgId: m._id, senderName: m.senderName, text: m.text || m.attachments?.[0]?.name || "" });
+    setEditingId(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  function startEdit(m) {
+    setEditingId(m._id);
+    setText(m.text || "");
+    setReplyTo(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function deleteMsg(m, action) {
+    const r = await fetch(`/api/client/messages?brand=${brandSlug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: m._id, action }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (!d.success) return;
+    if (action === "deleteForMe") setMessages(prev => prev.filter(msg => msg._id !== m._id));
+    else setMessages(prev => prev.map(msg => msg._id === m._id ? d.message : msg));
   }
 
   function addLink() {
@@ -3290,22 +3352,22 @@ function MessagesView({ brandSlug, client }) {
   }
 
   function handleKeyDown(e) {
+    if (e.key === "Escape") { setEditingId(null); setReplyTo(null); setText(""); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
   async function submitCallRequest() {
     if (!callDate || !callTime) return;
-    const msg = `Call request — Preferred date: ${callDate}, Time: ${callTime}${callNote ? `. Note: ${callNote}` : ""}`;
     setSending(true);
     try {
-      const r = await fetch(`/api/client/messages?brand=${brandSlug}`, {
+      const r = await fetch(`/api/client/call-requests?brand=${brandSlug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: msg }),
+        body: JSON.stringify({ preferredDate: callDate, preferredTime: callTime, note: callNote }),
       });
       const d = await r.json();
       if (d.success) {
-        setMessages(prev => [...prev, d.message]);
+        setCallRequests(prev => [d.request, ...prev]);
         setShowCallReq(false); setCallDate(""); setCallTime(""); setCallNote("");
       }
     } catch {}
@@ -3400,6 +3462,44 @@ function MessagesView({ brandSlug, client }) {
         .msg-btn-sec { padding: 9px 18px; background: #F1F5F9; color: #475569; border: 1.5px solid #E2E8F0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
         .msg-schedule-form { display: flex; flex-direction: column; gap: 12px; }
         .msg-empty-thread { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 8px; }
+        /* Reply preview inside bubble */
+        .msg-reply-preview { border-radius: 7px; padding: 5px 9px; margin-bottom: 7px; }
+        .msg-b.client .msg-reply-preview { background: rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.5); }
+        .msg-b.team   .msg-reply-preview { background: #EEF2FF; border-left: 3px solid #4F46E5; }
+        .msg-reply-pname { font-size: 10.5px; font-weight: 700; margin-bottom: 1px; }
+        .msg-b.client .msg-reply-pname { color: rgba(255,255,255,.9); }
+        .msg-b.team   .msg-reply-pname { color: #4F46E5; }
+        .msg-reply-ptext { font-size: 11.5px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Deleted / edited */
+        .msg-deleted { font-style: italic; opacity: .55; font-size: 13px; display: flex; align-items: center; gap: 5px; }
+        .msg-edited  { font-size: 9.5px; opacity: .55; margin-left: 4px; }
+        /* Inline action buttons */
+        .msg-brow { position: relative; }
+        .msg-msg-actions { display: none; flex-direction: row; gap: 1px; align-self: flex-end; flex-shrink: 0; padding-bottom: 5px; }
+        .msg-brow:hover .msg-msg-actions { display: flex; }
+        .msg-act-btn { background: #fff; border: 1px solid #E2E8F0; cursor: pointer; padding: 5px 7px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: background .1s; }
+        .msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
+        .msg-act-btn.danger { color: #EF4444; }
+        .msg-act-btn.danger:hover { background: #FEE2E2; }
+        /* Reply / edit bars above input */
+        .msg-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .msg-edit-bar  { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .msg-bar-body  { flex: 1; min-width: 0; }
+        .msg-bar-cancel { background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 6px; font-family: inherit; }
+        .msg-bar-cancel:hover { background: rgba(0,0,0,.06); }
+        .cr-card { background: #fff; border: 1.5px solid #E2E8F0; border-radius: 14px; padding: 16px; }
+        .cr-card-title { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+        .cr-item { border: 1px solid #E2E8F0; border-radius: 10px; padding: 11px 13px; margin-bottom: 8px; background: #F8FAFC; }
+        .cr-item:last-child { margin-bottom: 0; }
+        .cr-badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+        .cr-badge.pending   { background: #FEF9C3; color: #A16207; }
+        .cr-badge.approved  { background: #DCFCE7; color: #15803D; }
+        .cr-badge.scheduled { background: #DCFCE7; color: #15803D; }
+        .cr-badge.rejected  { background: #FEE2E2; color: #DC2626; }
+        .cr-dt   { font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 5px; }
+        .cr-note { font-size: 11.5px; color: #64748b; margin-top: 3px; }
+        .cr-conf { font-size: 11.5px; color: #059669; font-weight: 600; margin-top: 4px; }
+        .cr-empty { font-size: 12px; color: #94a3b8; text-align: center; padding: 10px 0; }
       `}</style>
 
       <div className="msg-view">
@@ -3410,7 +3510,7 @@ function MessagesView({ brandSlug, client }) {
             <div className="msg-panel-sub">Messages between you and your Viralon team</div>
           </div>
 
-          <div className="msg-thread-scroll">
+          <div className="msg-thread-scroll" onScroll={handleThreadScroll}>
             {messages.length === 0 ? (
               <div className="msg-empty-thread">
                 <i className="bi bi-chat" style={{ fontSize: 36, color: "#CBD5E1" }} />
@@ -3435,19 +3535,59 @@ function MessagesView({ brandSlug, client }) {
                         {(m.senderName || "V").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                       </div>
                     )}
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       {!isClient && <div className="msg-b-name">{m.senderName}</div>}
                       <div className={`msg-b ${isClient ? "client" : "team"}`}>
-                        {m.text && <div>{m.text}</div>}
-                        {(m.attachments || []).map((a, i) => (
-                          <a key={i} href={a.url} target="_blank" rel="noreferrer" className="msg-b-link">
-                            <i className="bi bi-link-45deg" />
-                            {a.name}
-                          </a>
-                        ))}
+                        {/* Reply preview */}
+                        {m.replyTo?.msgId && !m.deleted && (
+                          <div className="msg-reply-preview">
+                            <div className="msg-reply-pname">{m.replyTo.senderName}</div>
+                            <div className="msg-reply-ptext">{(m.replyTo.text || "").slice(0, 80)}</div>
+                          </div>
+                        )}
+                        {m.deleted ? (
+                          <div className="msg-deleted">
+                            <i className="bi bi-slash-circle" /> This message was deleted
+                          </div>
+                        ) : (
+                          <>
+                            {m.text && (
+                              <div>
+                                {m.text}
+                                {m.edited && <span className="msg-edited">(edited)</span>}
+                              </div>
+                            )}
+                            {(m.attachments || []).map((a, i) => (
+                              <a key={i} href={a.url} target="_blank" rel="noreferrer" className="msg-b-link">
+                                <i className="bi bi-link-45deg" />{a.name}
+                              </a>
+                            ))}
+                          </>
+                        )}
                         <div className="msg-b-time">{fmtTime(m.createdAt)}</div>
                       </div>
                     </div>
+                    {/* Inline action buttons */}
+                    {!m.deleted && (
+                      <div className="msg-msg-actions">
+                        <button className="msg-act-btn" title="Reply" onClick={() => startReply(m)}>
+                          <i className="bi bi-reply" />
+                        </button>
+                        {isClient && (
+                          <button className="msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
+                            <i className="bi bi-pencil" />
+                          </button>
+                        )}
+                        {isClient && (
+                          <button className="msg-act-btn danger" title="Delete for everyone" onClick={() => deleteMsg(m, "deleteForAll")}>
+                            <i className="bi bi-trash" />
+                          </button>
+                        )}
+                        <button className="msg-act-btn" title="Delete for me" onClick={() => deleteMsg(m, "deleteForMe")}>
+                          <i className="bi bi-eye-slash" />
+                        </button>
+                      </div>
+                    )}
                     {isClient && (
                       <div className="msg-av-xs" style={{ background: "#4F46E5" }}>
                         {(client?.name || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -3466,6 +3606,25 @@ function MessagesView({ brandSlug, client }) {
                 {error}
               </div>
             )}
+            {replyTo && (
+              <div className="msg-reply-bar">
+                <i className="bi bi-reply-fill" style={{ color: "#4F46E5", flexShrink: 0 }} />
+                <div className="msg-bar-body">
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5" }}>Replying to {replyTo.senderName}</div>
+                  <div style={{ fontSize: 12, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(replyTo.text || "").slice(0, 60)}</div>
+                </div>
+                <button className="msg-bar-cancel" style={{ color: "#64748b" }} onClick={() => setReplyTo(null)}><i className="bi bi-x" /></button>
+              </div>
+            )}
+            {editingId && (
+              <div className="msg-edit-bar">
+                <i className="bi bi-pencil-fill" style={{ color: "#92400E", flexShrink: 0 }} />
+                <div className="msg-bar-body" style={{ fontSize: 12, fontWeight: 600, color: "#92400E" }}>Editing message</div>
+                <button className="msg-bar-cancel" style={{ color: "#92400E" }} onClick={() => { setEditingId(null); setText(""); }}>
+                  <i className="bi bi-x" /> Cancel
+                </button>
+              </div>
+            )}
             {attachments.length > 0 && (
               <div className="msg-chips">
                 {attachments.map((a, i) => (
@@ -3480,20 +3639,23 @@ function MessagesView({ brandSlug, client }) {
               </div>
             )}
             <div className="msg-input-row">
-              <button className="msg-link-action" onClick={() => setShowLink(true)}>
-                <i className="bi bi-link-45deg" /> Attach Link
-              </button>
+              {!editingId && (
+                <button className="msg-link-action" onClick={() => setShowLink(true)}>
+                  <i className="bi bi-link-45deg" /> Attach Link
+                </button>
+              )}
               <textarea
+                ref={textareaRef}
                 className="msg-ta"
                 rows={1}
-                placeholder="Type a message..."
+                placeholder={editingId ? "Edit your message..." : "Type a message..."}
                 value={text}
                 onChange={e => setText(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
               <button className="msg-send" onClick={send} disabled={sending || (!text.trim() && attachments.length === 0)}>
-                <i className={`bi ${sending ? "bi-hourglass" : "bi-send"}`} />
-                Send
+                <i className={`bi ${sending ? "bi-hourglass" : editingId ? "bi-check-lg" : "bi-send"}`} />
+                {editingId ? "Update" : "Send"}
               </button>
             </div>
           </div>
@@ -3524,6 +3686,34 @@ function MessagesView({ brandSlug, client }) {
               </a>
             </div>
             <div className="msg-am-info">Response within 4 business hours</div>
+          </div>
+
+          {/* Call / Meeting Requests — above Quick Tips */}
+          <div className="cr-card">
+            <div className="cr-card-title">
+              <i className="bi bi-telephone-fill" style={{ marginRight: 5, color: "#4F46E5" }} />
+              Call / Meeting Requests
+            </div>
+            {callRequests.length === 0 ? (
+              <div className="cr-empty">No requests yet</div>
+            ) : (
+              callRequests.map(cr => (
+                <div key={cr._id} className="cr-item">
+                  <span className={`cr-badge ${cr.status}`}>
+                    {cr.status === "scheduled" ? "Scheduled" : cr.status.charAt(0).toUpperCase() + cr.status.slice(1)}
+                  </span>
+                  <div className="cr-dt">{cr.preferredDate} · {cr.preferredTime}</div>
+                  {cr.note ? <div className="cr-note">{cr.note}</div> : null}
+                  {(cr.status === "approved" || cr.status === "scheduled") ? (
+                    <div className="cr-conf">
+                      <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }} />
+                      {cr.scheduledDate || cr.preferredDate} at {cr.scheduledTime || cr.preferredTime}
+                    </div>
+                  ) : null}
+                  {cr.adminNote ? <div className="cr-note" style={{ fontStyle: "italic" }}>"{cr.adminNote}"</div> : null}
+                </div>
+              ))
+            )}
           </div>
 
           <div className="msg-am-card" style={{ padding: 16 }}>
@@ -4017,7 +4207,7 @@ export default function ClientDashboard() {
 
           {/* Inbox */}
           <div className="cp-nav-section">
-            <div className="cp-nav-label">Inbox</div>
+            <div className="cp-nav-label">Communication</div>
             {NAV.inbox.map(item => (
               <button key={item.key} className={`cp-nav-item ${view === item.key ? "active" : ""}`}
                 onClick={() => setView(item.key)}>

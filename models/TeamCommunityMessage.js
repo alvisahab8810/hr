@@ -12,6 +12,12 @@ const MentionSchema = new mongoose.Schema({
   userType: { type: String, enum: ["employee", "admin"] },
 }, { _id: false });
 
+const ReplyToSchema = new mongoose.Schema({
+  msgId:      { type: String },
+  senderName: { type: String },
+  text:       { type: String },
+}, { _id: false });
+
 const TeamCommunityMessageSchema = new mongoose.Schema({
   senderId:   { type: mongoose.Schema.Types.ObjectId, required: true },
   senderType: { type: String, enum: ["employee", "admin"], required: true },
@@ -20,6 +26,10 @@ const TeamCommunityMessageSchema = new mongoose.Schema({
   text:        { type: String, default: "" },
   mentions:    { type: [MentionSchema], default: [] },
   attachments: { type: [AttachmentSchema], default: [] },
+  replyTo:     { type: ReplyToSchema, default: null },
+  edited:      { type: Boolean, default: false },
+  deleted:     { type: Boolean, default: false },
+  deletedFor:  { type: [String], default: [] },
 }, { timestamps: true });
 
 TeamCommunityMessageSchema.index({ createdAt: -1 });

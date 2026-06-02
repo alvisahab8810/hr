@@ -1,6 +1,7 @@
-// GET  /api/team/community?limit=50&before=<isoDate>  — load messages
-// POST /api/team/community                             — send a message
-// PUT  /api/team/community                             — mark seen (updates lastSeenAt)
+// GET   /api/team/community?limit=50&before=<isoDate>  — load messages
+// POST  /api/team/community                             — send a message
+// PATCH /api/team/community                             — edit / delete
+// PUT   /api/team/community                             — mark seen
 import jwt from "jsonwebtoken";
 import dbConnect from "@/utils/dbConnect";
 import Employee from "@/models/hr/Employee";
@@ -8,7 +9,6 @@ import TeamCommunityMessage from "@/models/TeamCommunityMessage";
 import TeamChatSeen from "@/models/TeamChatSeen";
 
 function resolveActor(req) {
-  // Employee: Bearer token
   const auth = req.headers.authorization || "";
   if (auth.startsWith("Bearer ")) {
     try {
@@ -16,16 +16,9 @@ function resolveActor(req) {
       if (p?.id) return { id: p.id, type: "employee" };
     } catch {}
   }
-  // Admin: cookie
   if ((req.headers.cookie || "").includes("admin_auth=true")) {
     return { id: "admin", type: "admin" };
   }
-  return null;
-}
-
-function getAdminId(req) {
-  // Try to find a real admin ObjectId from cookie session if available
-  // For now we use a fixed sentinel; real admin identity resolved by /api/admin-users/me separately
   return null;
 }
 
@@ -34,7 +27,6 @@ export default async function handler(req, res) {
   const actor = resolveActor(req);
   if (!actor) return res.status(401).json({ success: false });
 
-  // Resolve real employee doc for name/dept
   let senderName = "Admin";
   let senderDept = "";
   let actorObjectId = null;
@@ -46,22 +38,24 @@ export default async function handler(req, res) {
     senderDept = emp.professional?.department || "";
     actorObjectId = emp._id;
   } else {
-    // Admin: try to get admin user info via separate lookup (best effort)
     const { default: AdminUser } = await import("@/models/AdminUser");
-    const cookies = req.headers.cookie || "";
-    // Admin sessions don't carry an id in cookie by default — attempt token lookup
-    // For community, use "Admin" as fallback name
     senderName = "Admin";
     senderDept = "Management";
-    // We'll store adminId as a placeholder ObjectId derived from env or just leave null
     const mongoose = (await import("mongoose")).default;
     actorObjectId = new mongoose.Types.ObjectId("000000000000000000000000");
   }
 
+  // Actor key used for deletedFor filtering
+  const actorKey = actor.type === "admin" ? "admin" : `emp_${actorObjectId}`;
+
+  /* ── GET ── */
   if (req.method === "GET") {
     const limit  = Math.min(Number(req.query.limit) || 50, 100);
     const before = req.query.before ? new Date(req.query.before) : null;
-    const filter = before ? { createdAt: { $lt: before } } : {};
+    const filter = {
+      ...(before ? { createdAt: { $lt: before } } : {}),
+      deletedFor: { $ne: actorKey },
+    };
     const msgs = await TeamCommunityMessage.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -69,12 +63,13 @@ export default async function handler(req, res) {
     return res.json({ success: true, messages: msgs.reverse() });
   }
 
+  /* ── POST ── */
   if (req.method === "POST") {
-    const { text, mentions, attachments } = req.body || {};
+    const { text, mentions, attachments, replyTo } = req.body || {};
     if (!text?.trim() && (!attachments || attachments.length === 0))
       return res.status(400).json({ success: false, message: "Message cannot be empty" });
 
-    const msg = await TeamCommunityMessage.create({
+    const msgData = {
       senderId:   actorObjectId,
       senderType: actor.type,
       senderName,
@@ -82,12 +77,62 @@ export default async function handler(req, res) {
       text:        (text || "").trim(),
       mentions:    (mentions || []).filter(m => m.name),
       attachments: (attachments || []).filter(a => a.url && a.name),
-    });
+    };
+    if (replyTo?.msgId) {
+      msgData.replyTo = {
+        msgId:      replyTo.msgId,
+        senderName: replyTo.senderName || "",
+        text:       (replyTo.text || "").slice(0, 120),
+      };
+    }
+    const msg = await TeamCommunityMessage.create(msgData);
     return res.status(201).json({ success: true, message: msg });
   }
 
+  /* ── PATCH — edit / delete ── */
+  if (req.method === "PATCH") {
+    const { messageId, action, text } = req.body || {};
+    if (!messageId) return res.status(400).json({ success: false, message: "messageId required" });
+
+    const msg = await TeamCommunityMessage.findById(messageId);
+    if (!msg) return res.status(404).json({ success: false, message: "Message not found" });
+
+    const isOwner = actor.type === "admin"
+      ? msg.senderType === "admin"
+      : String(msg.senderId) === String(actorObjectId);
+
+    if (action === "edit") {
+      if (!isOwner) return res.status(403).json({ success: false, message: "Cannot edit others' messages" });
+      if (!text?.trim()) return res.status(400).json({ success: false, message: "Text required" });
+      msg.text   = text.trim();
+      msg.edited = true;
+      await msg.save();
+      return res.json({ success: true, message: msg.toObject() });
+    }
+
+    if (action === "deleteForAll") {
+      if (!isOwner) return res.status(403).json({ success: false, message: "Cannot delete others' messages" });
+      msg.deleted     = true;
+      msg.text        = "";
+      msg.attachments = [];
+      msg.replyTo     = null;
+      await msg.save();
+      return res.json({ success: true, message: msg.toObject() });
+    }
+
+    if (action === "deleteForMe") {
+      if (!msg.deletedFor.includes(actorKey)) {
+        msg.deletedFor.push(actorKey);
+        await msg.save();
+      }
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ success: false, message: "Invalid action" });
+  }
+
+  /* ── PUT — mark seen ── */
   if (req.method === "PUT") {
-    // Mark seen
     const filter = actor.type === "employee"
       ? { userId: actorObjectId, userType: "employee" }
       : { userId: actorObjectId, userType: "admin" };

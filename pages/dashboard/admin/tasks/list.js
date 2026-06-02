@@ -35,10 +35,10 @@ const TABS = [
 ];
 
 const STAGE_META = {
-  S1: { label: "Script/Concept", color: "#F59E0B", bg: "#FEF3C7", border: "#FDE68A" },
-  S2: { label: "Shoot/Design",   color: "#6366F1", bg: "#EEF2FF", border: "#C7D2FE" },
-  S3: { label: "Edit/Develop",   color: "#10B981", bg: "#DCFCE7", border: "#BBF7D0" },
-  S4: { label: "Posted/Live",    color: "#EC4899", bg: "#FCE7F3", border: "#FBCFE8" },
+  S1: { label: "Script/Concept", color: "#ffff00", bg: "#fffde0", border: "#ffff00" },
+  S2: { label: "Shoot/Design",   color: "#ff9900", bg: "#fff3e0", border: "#ff9900" },
+  S3: { label: "Edit/Develop",   color: "#00ffff", bg: "#e0fffe", border: "#00ffff" },
+  S4: { label: "Posted/Live",    color: "#00ff00", bg: "#e0ffe0", border: "#00ff00" },
 };
 
 const STATUS_META = {
@@ -103,7 +103,7 @@ function nextDateForDay(dayName) {
 const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot","Design/Edit/Develop","Posted/Live"];
 const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: "" }));
 const EMPTY_PROD_FORM = { brandId: "", contentType: "reel", stages: freshStages() };
-const STAGE_COLORS = ["#F59E0B","#6366F1","#10B981","#EC4899"];
+const STAGE_COLORS = ["#ffff00","#ff9900","#00ffff","#00ff00"];
 // Each stage: { include: [...], exclude: [...] }
 // Inclusion matches department only; exclusion checks both dept + designation
 // Using longer strings (e.g. "content team") avoids false positives from designations
@@ -758,13 +758,17 @@ export default function TasksListPage() {
                                       const stg  = t.stages?.[i] || {};
                                       const done = stg.done; const approved = stg.approved; const rejected = stg.rejected;
                                       const pending = done && !approved && !rejected;
-                                      const bg = rejected ? "#DC2626" : pending ? "#F59E0B" : approved ? "#10B981" : done ? meta.color : t.stage === key ? meta.color : "transparent";
-                                      const border = rejected ? "#DC2626" : pending ? "#F59E0B" : approved ? "#10B981" : done ? meta.color : t.stage === key ? meta.color : "#E5E7EB";
+                                      const isActive = !done && t.stage === key;
+                                      // Gray = not started, stage-color = active/done/pending, red = rejected
+                                      const bg     = rejected ? "#DC2626" : (done || isActive) ? meta.color : "#E2E8F0";
+                                      const border = rejected ? "#DC2626" : (done || isActive) ? meta.color : "#D1D5DB";
+                                      // Dark text on bright yellow/cyan/green/orange, white on red/gray
+                                      const txtCol = rejected ? "#fff" : (done || isActive) ? "#000" : "#9CA3AF";
                                       return (
                                         <div key={key} className="stage-dot"
-                                          style={{ background: bg, borderColor: border, color: (done || t.stage === key) ? "#fff" : "#CBD5E1" }}
+                                          style={{ background: bg, borderColor: border, color: txtCol }}
                                           onClick={() => openStageEditor(t, i)}>
-                                          {rejected ? "✗" : pending ? "?" : done ? "✓" : i + 1}
+                                          {rejected ? "✗" : pending ? "⏳" : done ? "✓" : i + 1}
                                         </div>
                                       );
                                     })}

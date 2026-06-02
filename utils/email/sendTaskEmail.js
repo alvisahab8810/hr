@@ -286,12 +286,15 @@ export async function sendStageApprovedEmail({ employeeEmail, employeeName, task
   const stageColor = STAGE_COLORS[stageIndex] ?? "#6366F1";
   const deadline   = fmtDeadline(stageDeadline);
 
+  const lateMin = grade ? Math.round(grade.hoursLate * 60) : 0;
+  const lateStr = lateMin < 60 ? `${lateMin} min late` : `${grade.hoursLate.toFixed(1)}h late`;
+
   const gradeBlock = grade ? `
     <div style="display:inline-flex;align-items:center;gap:12px;background:${grade.bg};border:1.5px solid ${grade.color}30;border-radius:12px;padding:12px 20px;margin-top:16px;">
       <span style="font-size:28px;font-weight:900;color:${grade.color};">${grade.label}</span>
       <div>
         <div style="font-size:12px;font-weight:700;color:${grade.color};text-transform:uppercase;letter-spacing:.5px;">Stage Grade</div>
-        <div style="font-size:12px;color:${grade.color};opacity:0.75;">${grade.hoursLate <= 0 ? "✅ Submitted on time" : `⏱ ${grade.hoursLate.toFixed(1)}h late`}</div>
+        <div style="font-size:12px;color:${grade.color};opacity:0.75;">${grade.hoursLate <= 0 ? "✅ Submitted on time" : `⏱ ${lateStr}`}</div>
       </div>
     </div>` : "";
 

@@ -82,6 +82,8 @@ export default function AdminCommunity() {
   const [dmLinkName, setDmLinkName]     = useState("");
   const [dmLinkUrl, setDmLinkUrl]       = useState("");
   const [dmSearch, setDmSearch]         = useState("");
+  const [replyTo, setReplyTo]           = useState(null);
+  const [editingId, setEditingId]       = useState(null);
 
   const bottomRef   = useRef(null);
   const dmBottomRef = useRef(null);
@@ -207,19 +209,69 @@ export default function AdminCommunity() {
   async function sendMessage() {
     if (!text.trim() && attachments.length === 0) return;
     setSending(true); setError("");
-    const r = await fetch("/api/team/community", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, mentions: pendingMentions, attachments }),
-    }).catch(() => null);
-    if (!r) { setError("Network error"); setSending(false); return; }
-    const d = await r.json();
-    if (d.success) {
-      setMessages(prev => [...prev, d.message]);
-      setText(""); setAttachments([]); setPendingMentions([]);
-      fetch("/api/team/community", { method: "PUT", credentials: "include" }).catch(() => {});
-    } else setError(d.message || "Failed to send");
+
+    if (editingId) {
+      const r = await fetch("/api/team/community", {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: editingId, action: "edit", text }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => prev.map(m => m._id === editingId ? d.message : m));
+        setText(""); setEditingId(null); setAttachments([]);
+      } else setError(d.message || "Failed to edit");
+    } else {
+      const r = await fetch("/api/team/community", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, mentions: pendingMentions, attachments, replyTo }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => [...prev, d.message]);
+        setText(""); setAttachments([]); setPendingMentions([]); setReplyTo(null);
+        fetch("/api/team/community", { method: "PUT", credentials: "include" }).catch(() => {});
+      } else setError(d.message || "Failed to send");
+    }
     setSending(false);
+  }
+
+  function startReply(m) {
+    setReplyTo({ msgId: m._id, senderName: m.senderName, text: m.text || m.attachments?.[0]?.name || "" });
+    setEditingId(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  function startEdit(m) {
+    setEditingId(m._id);
+    setText(m.text || "");
+    setReplyTo(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function deleteForAll(m) {
+    const r = await fetch("/api/team/community", {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: m._id, action: "deleteForAll" }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (d.success) setMessages(prev => prev.map(msg => msg._id === m._id ? d.message : msg));
+  }
+
+  async function deleteForMe(m) {
+    const r = await fetch("/api/team/community", {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: m._id, action: "deleteForMe" }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (d.success) setMessages(prev => prev.filter(msg => msg._id !== m._id));
   }
 
   async function sendDm() {
@@ -402,6 +454,27 @@ export default function AdminCommunity() {
         .ac-modal-actions { display: flex; gap: 8px; margin-top: 4px; }
         .ac-btn-pri { padding: 9px 18px; background: #4F46E5; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
         .ac-btn-sec { padding: 9px 18px; background: #F1F5F9; color: #475569; border: 1.5px solid #E2E8F0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+        /* Message actions */
+        .ac-msg { position: relative; }
+        .ac-msg-actions { display: none; position: absolute; right: 8px; top: 6px; gap: 2px; background: #fff; border: 1.5px solid #E2E8F0; border-radius: 10px; padding: 3px 5px; box-shadow: 0 2px 10px rgba(0,0,0,.12); z-index: 20; }
+        .ac-msg:hover .ac-msg-actions { display: flex; }
+        .ac-msg-act-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 13px; color: #64748b; line-height: 1; transition: background .1s; }
+        .ac-msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
+        .ac-msg-act-btn.danger { color: #DC2626; }
+        .ac-msg-act-btn.danger:hover { background: #FEE2E2; }
+        /* Reply preview inside message */
+        .ac-reply-preview { border-left: 3px solid #4F46E5; padding: 4px 10px; background: #EEF2FF; border-radius: 0 6px 6px 0; margin-bottom: 6px; }
+        .ac-reply-pname { font-size: 10.5px; font-weight: 700; color: #4F46E5; margin-bottom: 1px; }
+        .ac-reply-ptext { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Deleted */
+        .ac-msg-deleted { font-style: italic; color: #94a3b8; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+        .ac-msg-edited  { font-size: 9.5px; color: #94a3b8; margin-left: 5px; }
+        /* Input bars */
+        .ac-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .ac-edit-bar  { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .ac-bar-text  { flex: 1; min-width: 0; }
+        .ac-bar-cancel { background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 600; color: inherit; display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; font-family: inherit; }
+        .ac-bar-cancel:hover { background: rgba(0,0,0,.06); }
       `}</style>
 
       <div className="add-employee-area">
@@ -455,6 +528,7 @@ export default function AdminCommunity() {
                           grouped.map((item, idx) => {
                             if (item.type === "date") return <div key={`d${idx}`} className="ac-date-sep"><span>{item.label}</span></div>;
                             const m = item.data;
+                            const isOwn = m.senderType === "admin";
                             return (
                               <div key={m._id} className="ac-msg">
                                 <div className="ac-av" style={{ background: avColor(m.senderName) }}>{nameInitials(m.senderName)}</div>
@@ -464,17 +538,56 @@ export default function AdminCommunity() {
                                     {m.senderDept && <span className="ac-msg-dept">{m.senderDept}</span>}
                                     <span className="ac-msg-time">{fmtTime(m.createdAt)}</span>
                                   </div>
-                                  {m.text && <div className="ac-msg-text">{renderText(m.text, m.mentions)}</div>}
-                                  {(m.attachments || []).length > 0 && (
-                                    <div className="ac-attach-row">
-                                      {m.attachments.map((a, i) => (
-                                        a.type === "image"
-                                          ? <img key={i} src={a.url} alt={a.name} className="ac-img-thumb" onClick={() => window.open(a.url, "_blank")} />
-                                          : <a key={i} href={a.url} target="_blank" rel="noreferrer" className="ac-link-chip"><i className="bi bi-link-45deg" style={{ fontSize: 13 }} />{a.name}</a>
-                                      ))}
+                                  {m.replyTo?.msgId && !m.deleted && (
+                                    <div className="ac-reply-preview">
+                                      <div className="ac-reply-pname">{m.replyTo.senderName}</div>
+                                      <div className="ac-reply-ptext">{(m.replyTo.text || "").slice(0, 80)}</div>
                                     </div>
                                   )}
+                                  {m.deleted ? (
+                                    <div className="ac-msg-deleted">
+                                      <i className="bi bi-slash-circle" /> This message was deleted
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {m.text && (
+                                        <div className="ac-msg-text">
+                                          {renderText(m.text, m.mentions)}
+                                          {m.edited && <span className="ac-msg-edited">(edited)</span>}
+                                        </div>
+                                      )}
+                                      {(m.attachments || []).length > 0 && (
+                                        <div className="ac-attach-row">
+                                          {m.attachments.map((a, i) => (
+                                            a.type === "image"
+                                              ? <img key={i} src={a.url} alt={a.name} className="ac-img-thumb" onClick={() => window.open(a.url, "_blank")} />
+                                              : <a key={i} href={a.url} target="_blank" rel="noreferrer" className="ac-link-chip"><i className="bi bi-link-45deg" style={{ fontSize: 13 }} />{a.name}</a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
+                                {!m.deleted && (
+                                  <div className="ac-msg-actions">
+                                    <button className="ac-msg-act-btn" title="Reply" onClick={() => startReply(m)}>
+                                      <i className="bi bi-reply" />
+                                    </button>
+                                    {isOwn && (
+                                      <button className="ac-msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
+                                        <i className="bi bi-pencil" />
+                                      </button>
+                                    )}
+                                    {isOwn && (
+                                      <button className="ac-msg-act-btn danger" title="Delete for everyone" onClick={() => deleteForAll(m)}>
+                                        <i className="bi bi-trash" />
+                                      </button>
+                                    )}
+                                    <button className="ac-msg-act-btn" title="Delete for me" onClick={() => deleteForMe(m)}>
+                                      <i className="bi bi-eye-slash" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })
@@ -484,6 +597,27 @@ export default function AdminCommunity() {
 
                       <div className="ac-input">
                         {error && <div className="ac-error">{error}<button onClick={() => setError("")}><i className="bi bi-x" /></button></div>}
+                        {replyTo && (
+                          <div className="ac-reply-bar">
+                            <i className="bi bi-reply-fill" style={{ color: "#4F46E5", flexShrink: 0 }} />
+                            <div className="ac-bar-text">
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5" }}>Replying to {replyTo.senderName}</div>
+                              <div style={{ fontSize: 12, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(replyTo.text || "").slice(0, 70)}</div>
+                            </div>
+                            <button className="ac-bar-cancel" style={{ color: "#64748b" }} onClick={() => setReplyTo(null)}>
+                              <i className="bi bi-x" />
+                            </button>
+                          </div>
+                        )}
+                        {editingId && (
+                          <div className="ac-edit-bar">
+                            <i className="bi bi-pencil-fill" style={{ color: "#92400E", flexShrink: 0 }} />
+                            <div className="ac-bar-text" style={{ fontSize: 12, fontWeight: 600, color: "#92400E" }}>Editing message</div>
+                            <button className="ac-bar-cancel" style={{ color: "#92400E" }} onClick={() => { setEditingId(null); setText(""); }}>
+                              <i className="bi bi-x" /> Cancel
+                            </button>
+                          </div>
+                        )}
                         {attachments.length > 0 && (
                           <div className="ac-chips">
                             {attachments.map((a, i) => (
@@ -518,7 +652,7 @@ export default function AdminCommunity() {
                           <textarea ref={textareaRef} className="ac-ta" rows={1} placeholder="Message the team... Type @ to mention someone"
                             value={text} onChange={handleTextChange} onKeyDown={handleKeyDown} />
                           <button className="ac-send-btn" onClick={sendMessage} disabled={sending || (!text.trim() && attachments.length === 0)}>
-                            <i className={`bi ${sending ? "bi-hourglass-split" : "bi-send-fill"}`} />
+                            <i className={`bi ${sending ? "bi-hourglass-split" : editingId ? "bi-check-lg" : "bi-send-fill"}`} />
                           </button>
                         </div>
                       </div>

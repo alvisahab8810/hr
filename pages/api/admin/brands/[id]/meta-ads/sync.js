@@ -23,15 +23,25 @@ function mapStatus(fbStatus) {
   }
 }
 
-// Extract total conversions from actions array
+// Exact conversion types to count — top-level aggregates only.
+// Using a Set + exact match prevents double-counting because Meta also returns
+// sub-type actions like "onsite_conversion.lead_grouped" that overlap with "lead".
+const CONV_TYPES = new Set([
+  "purchase", "lead", "complete_registration", "subscribe",
+  "contact", "find_location", "schedule", "start_trial", "submit_application",
+]);
+
 function sumConversions(actions = []) {
-  const convTypes = ["purchase", "lead", "complete_registration", "subscribe", "contact", "find_location", "schedule", "start_trial", "submit_application"];
-  return actions.filter(a => convTypes.some(t => a.action_type?.includes(t))).reduce((s, a) => s + Number(a.value || 0), 0);
+  return actions
+    .filter(a => CONV_TYPES.has(a.action_type))
+    .reduce((s, a) => s + Number(a.value || 0), 0);
 }
 
 // Extract total conversion value from action_values (for ROAS)
 function sumConvValue(actionValues = []) {
-  return actionValues.filter(a => a.action_type?.includes("purchase") || a.action_type?.includes("omni_purchase")).reduce((s, a) => s + Number(a.value || 0), 0);
+  return actionValues
+    .filter(a => a.action_type === "purchase" || a.action_type === "omni_purchase")
+    .reduce((s, a) => s + Number(a.value || 0), 0);
 }
 
 export default async function handler(req, res) {
@@ -55,7 +65,7 @@ export default async function handler(req, res) {
     // 1. Fetch all campaigns in the ad account
     const campaigns = [];
     let campsUrl = `https://graph.facebook.com/v19.0/${accountId}/campaigns` +
-      `?fields=id,name,status,objective,daily_budget,lifetime_budget` +
+      `?fields=id,name,status,objective,daily_budget,lifetime_budget,adsets{daily_budget,lifetime_budget}` +
       `&limit=100&access_token=${token}`;
     while (campsUrl) {
       const d = await fbFetch(campsUrl);
@@ -68,7 +78,7 @@ export default async function handler(req, res) {
       return res.json({ success: true, synced: 0, message: "No campaigns found in this ad account" });
     }
 
-    // 2. Fetch campaign-level insights using batch API (last 90 days rolling window)
+    // 2. Fetch campaign-level insights using batch API (maximum date range = all-time data)
     // Note: access_token is passed at top-level only — including it in relative_url
     // causes conflicts in Facebook's batch mode
     const insightsMap = {};
@@ -76,7 +86,7 @@ export default async function handler(req, res) {
     for (let i = 0; i < campaigns.length; i += batchSize) {
       const batch = campaigns.slice(i, i + batchSize).map(c => ({
         method: "GET",
-        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,actions,action_values,cost_per_action_type&date_preset=last_90d`,
+        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,link_clicks,landing_page_views,actions,action_values&date_preset=maximum`,
       }));
       const batchRes = await fetch(`https://graph.facebook.com/v19.0/`, {
         method: "POST",
@@ -103,8 +113,12 @@ export default async function handler(req, res) {
     // 3. Upsert each campaign into AdCampaign collection
     let synced = 0;
     for (const c of campaigns) {
-      const rawBudget = Number(c.daily_budget || c.lifetime_budget || 0);
-      const budget    = Math.round(rawBudget / 100);
+      let rawBudget = Number(c.daily_budget || c.lifetime_budget || 0);
+      if (!rawBudget && c.adsets?.data?.length) {
+        // Budget is set at ad-set level — sum all ad-set daily/lifetime budgets
+        rawBudget = c.adsets.data.reduce((s, as) => s + Number(as.daily_budget || as.lifetime_budget || 0), 0);
+      }
+      const budget = Math.round(rawBudget / 100);
 
       // Base fields always updated (campaign meta-data)
       const setFields = {
@@ -130,14 +144,19 @@ export default async function handler(req, res) {
         const cpa    = convs > 0 ? Math.round(spend / convs) : null;
         const ctr    = impr > 0 ? Math.round((clicks / impr) * 10000) / 100 : null;
 
-        setFields["performance.spent"]       = spend;
-        setFields["performance.impressions"] = impr;
-        setFields["performance.clicks"]      = clicks;
-        setFields["performance.reach"]       = reach;
-        setFields["performance.conversions"] = Math.round(convs);
-        setFields["performance.roas"]        = roas;
-        setFields["performance.cpa"]         = cpa;
-        setFields["performance.ctr"]         = ctr;
+        const linkClicks  = Number(ins.link_clicks || 0);
+        const lpViews     = Number(ins.landing_page_views || 0);
+
+        setFields["performance.spent"]            = spend;
+        setFields["performance.impressions"]      = impr;
+        setFields["performance.clicks"]           = clicks;
+        setFields["performance.linkClicks"]       = linkClicks;
+        setFields["performance.landingPageViews"] = lpViews;
+        setFields["performance.reach"]            = reach;
+        setFields["performance.conversions"]      = Math.round(convs);
+        setFields["performance.roas"]             = roas;
+        setFields["performance.cpa"]              = cpa;
+        setFields["performance.ctr"]              = ctr;
       }
 
       // Key on externalId alone (no brandId) so the same Meta campaign is never

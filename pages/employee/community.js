@@ -54,36 +54,40 @@ function renderText(text, mentions, isOutgoing = false) {
 
 export default function EmployeeCommunity() {
   const router = useRouter();
-  const [me, setMe]                       = useState(null);
-  const [messages, setMessages]           = useState([]);
-  const [text, setText]                   = useState("");
-  const [attachments, setAttachments]     = useState([]);
-  const [members, setMembers]             = useState([]);
-  const [mentionQuery, setMentionQuery]   = useState("");
-  const [showMention, setShowMention]     = useState(false);
-  const [mentionIdx, setMentionIdx]       = useState(0);
+  const [me, setMe]                           = useState(null);
+  const [messages, setMessages]               = useState([]);
+  const [text, setText]                       = useState("");
+  const [attachments, setAttachments]         = useState([]);
+  const [members, setMembers]                 = useState([]);
+  const [mentionQuery, setMentionQuery]       = useState("");
+  const [showMention, setShowMention]         = useState(false);
+  const [mentionIdx, setMentionIdx]           = useState(0);
   const [pendingMentions, setPendingMentions] = useState([]);
-  const [showLink, setShowLink]           = useState(false);
-  const [linkName, setLinkName]           = useState("");
-  const [linkUrl, setLinkUrl]             = useState("");
-  const [sending, setSending]             = useState(false);
-  const [uploading, setUploading]         = useState(false);
-  const [loadingMore, setLoadingMore]     = useState(false);
-  const [hasMore, setHasMore]             = useState(true);
-  const [error, setError]                 = useState("");
-  const [activeTab, setActiveTab]         = useState("community"); // community | dm
-  const [dmMessages, setDmMessages]       = useState([]);
-  const [dmText, setDmText]               = useState("");
-  const [dmSending, setDmSending]         = useState(false);
-  const [hasDm, setHasDm]                 = useState(false);
+  const [showLink, setShowLink]               = useState(false);
+  const [linkName, setLinkName]               = useState("");
+  const [linkUrl, setLinkUrl]                 = useState("");
+  const [sending, setSending]                 = useState(false);
+  const [uploading, setUploading]             = useState(false);
+  const [loadingMore, setLoadingMore]         = useState(false);
+  const [hasMore, setHasMore]                 = useState(true);
+  const [error, setError]                     = useState("");
+  const [activeTab, setActiveTab]             = useState("community");
+  const [dmMessages, setDmMessages]           = useState([]);
+  const [dmText, setDmText]                   = useState("");
+  const [dmSending, setDmSending]             = useState(false);
+  const [hasDm, setHasDm]                     = useState(false);
 
-  const bottomRef    = useRef(null);
-  const dmBottomRef  = useRef(null);
-  const textareaRef  = useRef(null);
-  const pollRef      = useRef(null);
-  const fileRef      = useRef(null);
+  // Reply / Edit state
+  const [replyTo, setReplyTo]     = useState(null);  // {msgId, senderName, text}
+  const [editingId, setEditingId] = useState(null);
+  const [hoverMsgId, setHoverMsgId] = useState(null);
 
-  // Load self
+  const bottomRef   = useRef(null);
+  const dmBottomRef = useRef(null);
+  const textareaRef = useRef(null);
+  const pollRef     = useRef(null);
+  const fileRef     = useRef(null);
+
   useEffect(() => {
     const token = getToken();
     if (!token) { router.push("/employee/login"); return; }
@@ -93,13 +97,11 @@ export default function EmployeeCommunity() {
       .catch(() => router.push("/employee/login"));
   }, []);
 
-  // Load members for @mention
   useEffect(() => {
     fetch("/api/team/members", { headers: authH() })
       .then(r => r.json()).then(d => { if (d.success) setMembers(d.members || []); });
   }, []);
 
-  // Load community messages
   const loadMessages = useCallback(async (prepend = false, before = null) => {
     const url = before ? `/api/team/community?limit=40&before=${before}` : "/api/team/community?limit=40";
     const r = await fetch(url, { headers: authH() }).catch(() => null);
@@ -118,45 +120,31 @@ export default function EmployeeCommunity() {
 
   useEffect(() => {
     loadMessages();
-    // Mark seen
     fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
-    // Poll for new messages
     pollRef.current = setInterval(() => loadMessages(), 10000);
     return () => clearInterval(pollRef.current);
   }, [loadMessages]);
 
-  // Scroll to bottom on new messages
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
-  // Load DM thread
   const loadDm = useCallback(async () => {
     const r = await fetch("/api/employee/team-dm", { headers: authH() }).catch(() => null);
     if (!r) return;
     const d = await r.json();
-    if (d.success) {
-      setDmMessages(d.messages || []);
-      setHasDm(d.messages.length > 0);
-    }
+    if (d.success) { setDmMessages(d.messages || []); setHasDm(d.messages.length > 0); }
   }, []);
 
   useEffect(() => { loadDm(); }, [loadDm]);
   useEffect(() => { dmBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [dmMessages.length]);
 
-  // @mention input handling
   function handleTextChange(e) {
     const val = e.target.value;
     setText(val);
     const caret = e.target.selectionStart;
     const before = val.slice(0, caret);
     const atMatch = before.match(/@(\w[\w\s]*)$/);
-    if (atMatch) {
-      setMentionQuery(atMatch[1]);
-      setShowMention(true);
-      setMentionIdx(0);
-    } else {
-      setShowMention(false);
-      setMentionQuery("");
-    }
+    if (atMatch) { setMentionQuery(atMatch[1]); setShowMention(true); setMentionIdx(0); }
+    else { setShowMention(false); setMentionQuery(""); }
   }
 
   const filteredMembers = mentionQuery
@@ -164,10 +152,10 @@ export default function EmployeeCommunity() {
     : members.slice(0, 6);
 
   function insertMention(member) {
-    const caret   = textareaRef.current?.selectionStart || text.length;
-    const before  = text.slice(0, caret);
-    const after   = text.slice(caret);
-    const atIdx   = before.lastIndexOf("@");
+    const caret  = textareaRef.current?.selectionStart || text.length;
+    const before = text.slice(0, caret);
+    const after  = text.slice(caret);
+    const atIdx  = before.lastIndexOf("@");
     const newText = before.slice(0, atIdx) + `@${member.name} ` + after;
     setText(newText);
     setPendingMentions(prev => [...prev.filter(p => p._id !== member._id), {
@@ -191,7 +179,6 @@ export default function EmployeeCommunity() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
-  // Image upload — sends to Cloudinary via API, stores URL (not base64)
   async function handleImageSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -207,14 +194,9 @@ export default function EmployeeCommunity() {
         body: fd,
       });
       const d = await r.json();
-      if (d.success) {
-        setAttachments(prev => [...prev, { type: "image", name: file.name, url: d.url }]);
-      } else {
-        setError(d.error || "Image upload failed");
-      }
-    } catch {
-      setError("Image upload failed — please try again");
-    }
+      if (d.success) setAttachments(prev => [...prev, { type: "image", name: file.name, url: d.url }]);
+      else setError(d.error || "Image upload failed");
+    } catch { setError("Image upload failed — please try again"); }
     setUploading(false);
     e.target.value = "";
   }
@@ -228,19 +210,65 @@ export default function EmployeeCommunity() {
   async function sendMessage() {
     if (!text.trim() && attachments.length === 0) return;
     setSending(true); setError("");
-    const r = await fetch("/api/team/community", {
-      method: "POST", headers: authH(),
-      body: JSON.stringify({ text, mentions: pendingMentions, attachments }),
-    }).catch(() => null);
-    if (!r) { setError("Network error"); setSending(false); return; }
-    const d = await r.json();
-    if (d.success) {
-      setMessages(prev => [...prev, d.message]);
-      setText(""); setAttachments([]); setPendingMentions([]);
-      // Mark seen
-      fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
-    } else setError(d.message || "Failed to send");
+
+    if (editingId) {
+      const r = await fetch("/api/team/community", {
+        method: "PATCH", headers: authH(),
+        body: JSON.stringify({ messageId: editingId, action: "edit", text }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => prev.map(m => m._id === editingId ? d.message : m));
+        setText(""); setEditingId(null); setAttachments([]);
+      } else setError(d.message || "Failed to edit");
+    } else {
+      const r = await fetch("/api/team/community", {
+        method: "POST", headers: authH(),
+        body: JSON.stringify({ text, mentions: pendingMentions, attachments, replyTo }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => [...prev, d.message]);
+        setText(""); setAttachments([]); setPendingMentions([]); setReplyTo(null);
+        fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
+      } else setError(d.message || "Failed to send");
+    }
     setSending(false);
+  }
+
+  function startReply(m) {
+    setReplyTo({ msgId: m._id, senderName: m.senderName, text: m.text || m.attachments?.[0]?.name || "" });
+    setEditingId(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  function startEdit(m) {
+    setEditingId(m._id);
+    setText(m.text || "");
+    setReplyTo(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function deleteForAll(m) {
+    const r = await fetch("/api/team/community", {
+      method: "PATCH", headers: authH(),
+      body: JSON.stringify({ messageId: m._id, action: "deleteForAll" }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (d.success) setMessages(prev => prev.map(msg => msg._id === m._id ? d.message : msg));
+  }
+
+  async function deleteForMe(m) {
+    const r = await fetch("/api/team/community", {
+      method: "PATCH", headers: authH(),
+      body: JSON.stringify({ messageId: m._id, action: "deleteForMe" }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (d.success) setMessages(prev => prev.filter(msg => msg._id !== m._id));
   }
 
   async function sendDmReply() {
@@ -263,9 +291,9 @@ export default function EmployeeCommunity() {
     setLoadingMore(false);
   }
 
-  const grouped = groupByDate(messages);
+  const grouped   = groupByDate(messages);
   const dmGrouped = groupByDate(dmMessages);
-  const myName = me ? `${me.firstName || ""} ${me.lastName || ""}`.trim() : "";
+  const myName    = me ? `${me.firstName || ""} ${me.lastName || ""}`.trim() : "";
 
   return (
     <div>
@@ -278,10 +306,7 @@ export default function EmployeeCommunity() {
       </Head>
 
       <style>{`
-        /* Strip theme card styling without touching sidebar margin */
         .content.home { background: transparent !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
-
-        /* Layout */
         .tc-layout { display: flex; height: calc(100vh - 60px); overflow: hidden; background: #E9EBF0; }
         .tc-tabs  { display: flex; gap: 0; border-bottom: 1px solid #E2E8F0; background: #fff; }
         .tc-tab   { padding: 13px 20px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; border-bottom: 2.5px solid transparent; transition: color .15s; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
@@ -290,8 +315,6 @@ export default function EmployeeCommunity() {
         .tc-header { padding: 14px 20px; background: #fff; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
         .tc-header-title { font-size: 15px; font-weight: 700; color: #0f172a; }
         .tc-header-sub   { font-size: 12px; color: #94a3b8; margin-top: 1px; }
-
-        /* Feed */
         .tc-feed { flex: 1; overflow-y: auto; padding: 16px 20px 8px; display: flex; flex-direction: column; gap: 0; }
         .tc-feed::-webkit-scrollbar { width: 4px; }
         .tc-feed::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
@@ -299,7 +322,7 @@ export default function EmployeeCommunity() {
         .tc-date-sep span { font-size: 11px; color: #94a3b8; background: #E8EBF0; padding: 4px 16px; border-radius: 10px; font-weight: 600; }
 
         /* Bubble rows */
-        .tc-brow { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 6px; }
+        .tc-brow { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 6px; position: relative; }
         .tc-brow.out { flex-direction: row-reverse; }
         .tc-brow.in  { flex-direction: row; }
         .tc-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
@@ -312,17 +335,43 @@ export default function EmployeeCommunity() {
         .tc-btime { font-size: 10px; margin-top: 5px; }
         .tc-bubble.out .tc-btime { color: rgba(255,255,255,.5); text-align: right; }
         .tc-bubble.in  .tc-btime { color: #94a3b8; }
-
-        /* Consecutive same-sender grouping */
-        .tc-brow + .tc-brow.out .tc-av, .tc-brow + .tc-brow.in .tc-av { visibility: visible; }
-
-        /* Attachment row inside bubble */
         .tc-bubble-attaches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
         .tc-img-thumb { max-width: 220px; max-height: 160px; border-radius: 10px; object-fit: cover; cursor: pointer; display: block; border: 1.5px solid rgba(0,0,0,.08); }
         .tc-bubble.out .tc-img-thumb { border-color: rgba(255,255,255,.2); }
 
+        /* Reply preview inside bubble */
+        .tc-reply-in-bubble { border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+        .tc-bubble.in  .tc-reply-in-bubble { background: #EEF2FF; border-left: 3px solid #4F46E5; }
+        .tc-bubble.out .tc-reply-in-bubble { background: rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.5); }
+        .tc-reply-name { font-size: 10.5px; font-weight: 700; margin-bottom: 2px; }
+        .tc-bubble.in  .tc-reply-name { color: #4F46E5; }
+        .tc-bubble.out .tc-reply-name { color: rgba(255,255,255,.85); }
+        .tc-reply-text { font-size: 12px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Deleted message */
+        .tc-deleted { font-style: italic; opacity: .55; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+
+        /* Edited label */
+        .tc-edited { font-size: 9.5px; opacity: .55; margin-left: 5px; }
+
+        /* Hover action bar — inline flex sibling so it never overflows the feed */
+        .tc-msg-actions { display: none; flex-direction: row; gap: 1px; align-self: flex-end; flex-shrink: 0; padding-bottom: 6px; }
+        .tc-brow:hover .tc-msg-actions { display: flex; }
+        .tc-msg-act-btn { background: none; border: 1px solid #E2E8F0; cursor: pointer; padding: 5px 7px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1; transition: background .1s, color .1s; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .tc-msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
+        .tc-msg-act-btn.danger { color: #EF4444; }
+        .tc-msg-act-btn.danger:hover { background: #FEE2E2; }
+
         /* Input area */
         .tc-input-area { padding: 12px 16px; background: #fff; border-top: 1px solid #E2E8F0; position: relative; }
+        .tc-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .tc-reply-bar-text { flex: 1; min-width: 0; }
+        .tc-reply-bar-label { font-size: 11px; font-weight: 700; color: #4F46E5; }
+        .tc-reply-bar-preview { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tc-edit-bar { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .tc-edit-bar-label { flex: 1; font-size: 12px; font-weight: 600; color: #92400E; }
+        .tc-cancel-bar-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: #92400E; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 6px; font-family: inherit; }
+        .tc-cancel-bar-btn:hover { background: rgba(0,0,0,.06); }
         .tc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
         .tc-chip  { display: flex; align-items: center; gap: 5px; padding: 4px 10px; background: #EEF2FF; border-radius: 8px; font-size: 12px; font-weight: 600; color: #4F46E5; }
         .tc-chip button { background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 13px; line-height: 1; }
@@ -333,16 +382,12 @@ export default function EmployeeCommunity() {
         .tc-action-btn:hover { background: #E2E8F0; }
         .tc-send-btn { width: 38px; height: 38px; background: #4F46E5; color: #fff; border: none; border-radius: 50%; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; }
         .tc-send-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-        /* Mention autocomplete */
         .tc-mention-list { position: absolute; bottom: calc(100% + 4px); left: 16px; right: 16px; background: #fff; border: 1.5px solid #E2E8F0; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.12); z-index: 50; overflow: hidden; }
         .tc-mention-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 13px; transition: background .1s; }
         .tc-mention-item:hover, .tc-mention-item.active { background: #EEF2FF; }
         .tc-mention-av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: #fff; flex-shrink: 0; }
         .tc-mention-name { font-weight: 700; color: #0f172a; font-size: 13px; }
         .tc-mention-dept { font-size: 11px; color: #94a3b8; }
-
-        /* Misc */
         .tc-load-more { text-align: center; padding: 8px; }
         .tc-load-more button { background: none; border: none; font-size: 12px; color: #4F46E5; font-weight: 600; cursor: pointer; padding: 4px 12px; border-radius: 6px; }
         .tc-load-more button:hover { background: #EEF2FF; }
@@ -360,8 +405,6 @@ export default function EmployeeCommunity() {
         .tc-error { background: #FEF2F2; color: #DC2626; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
         .tc-error button { background: none; border: none; cursor: pointer; color: #DC2626; margin-left: auto; }
         .tc-dm-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 10px; color: #94a3b8; padding: 40px; text-align: center; }
-
-        /* DM bubbles */
         .dm-feed { flex: 1; overflow-y: auto; padding: 16px 20px 8px; display: flex; flex-direction: column; background: #F0F2F5; }
         .dm-feed::-webkit-scrollbar { width: 4px; }
         .dm-feed::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
@@ -379,14 +422,13 @@ export default function EmployeeCommunity() {
         .dm-btime { font-size: 10px; margin-top: 5px; }
         .dm-bubble.admin .dm-btime    { color: #94a3b8; }
         .dm-bubble.employee .dm-btime { color: rgba(255,255,255,.5); text-align: right; }
-
-        /* Mobile */
         @media (max-width: 768px) {
           .tc-feed { padding: 12px 10px 6px; }
           .tc-bubble-wrap { max-width: 82%; }
           .tc-img-thumb { max-width: 180px; max-height: 130px; }
           .tc-input-area { padding: 10px 10px; }
           .tc-modal-box { width: calc(100vw - 32px); }
+          .tc-msg-actions { padding-bottom: 4px; }
         }
       `}</style>
 
@@ -463,28 +505,71 @@ export default function EmployeeCommunity() {
                                   </div>
                                 )}
                                 <div className={`tc-bubble ${side}`}>
-                                  {m.text && <div>{renderText(m.text, m.mentions, isMe)}</div>}
-                                  {(m.attachments || []).length > 0 && (
-                                    <div className="tc-bubble-attaches">
-                                      {m.attachments.map((a, i) => (
-                                        a.type === "image" ? (
-                                          <img key={i} src={a.url} alt={a.name} className="tc-img-thumb"
-                                            onClick={() => window.open(a.url, "_blank")} />
-                                        ) : (
-                                          <a key={i} href={a.url} target="_blank" rel="noreferrer"
-                                            style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px",
-                                              background: isMe ? "rgba(255,255,255,.2)" : "#EEF2FF",
-                                              borderRadius:8, fontSize:12, fontWeight:600,
-                                              color: isMe ? "#fff" : "#4F46E5", textDecoration:"none" }}>
-                                            <i className="bi bi-link-45deg" />{a.name}
-                                          </a>
-                                        )
-                                      ))}
+                                  {/* Reply preview */}
+                                  {m.replyTo?.msgId && !m.deleted && (
+                                    <div className="tc-reply-in-bubble">
+                                      <div className="tc-reply-name">{m.replyTo.senderName}</div>
+                                      <div className="tc-reply-text">{(m.replyTo.text || "").slice(0, 80)}</div>
                                     </div>
+                                  )}
+                                  {m.deleted ? (
+                                    <div className="tc-deleted">
+                                      <i className="bi bi-slash-circle" />
+                                      This message was deleted
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {m.text && (
+                                        <div>
+                                          {renderText(m.text, m.mentions, isMe)}
+                                          {m.edited && <span className="tc-edited">(edited)</span>}
+                                        </div>
+                                      )}
+                                      {(m.attachments || []).length > 0 && (
+                                        <div className="tc-bubble-attaches">
+                                          {m.attachments.map((a, i) => (
+                                            a.type === "image" ? (
+                                              <img key={i} src={a.url} alt={a.name} className="tc-img-thumb"
+                                                onClick={() => window.open(a.url, "_blank")} />
+                                            ) : (
+                                              <a key={i} href={a.url} target="_blank" rel="noreferrer"
+                                                style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px",
+                                                  background: isMe ? "rgba(255,255,255,.2)" : "#EEF2FF",
+                                                  borderRadius:8, fontSize:12, fontWeight:600,
+                                                  color: isMe ? "#fff" : "#4F46E5", textDecoration:"none" }}>
+                                                <i className="bi bi-link-45deg" />{a.name}
+                                              </a>
+                                            )
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                   <div className="tc-btime">{fmtTime(m.createdAt)}</div>
                                 </div>
                               </div>
+
+                              {/* Hover action menu */}
+                              {!m.deleted && (
+                                <div className="tc-msg-actions">
+                                  <button className="tc-msg-act-btn" title="Reply" onClick={() => startReply(m)}>
+                                    <i className="bi bi-reply" />
+                                  </button>
+                                  {isMe && (
+                                    <button className="tc-msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
+                                      <i className="bi bi-pencil" />
+                                    </button>
+                                  )}
+                                  {isMe && (
+                                    <button className="tc-msg-act-btn danger" title="Delete for everyone" onClick={() => deleteForAll(m)}>
+                                      <i className="bi bi-trash" />
+                                    </button>
+                                  )}
+                                  <button className="tc-msg-act-btn" title="Delete for me" onClick={() => deleteForMe(m)}>
+                                    <i className="bi bi-eye-slash" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })
@@ -500,6 +585,33 @@ export default function EmployeeCommunity() {
                           <button onClick={() => setError("")}><i className="bi bi-x" /></button>
                         </div>
                       )}
+
+                      {/* Reply bar */}
+                      {replyTo && (
+                        <div className="tc-reply-bar">
+                          <i className="bi bi-reply-fill" style={{ color: "#4F46E5", flexShrink: 0 }} />
+                          <div className="tc-reply-bar-text">
+                            <div className="tc-reply-bar-label">Replying to {replyTo.senderName}</div>
+                            <div className="tc-reply-bar-preview">{(replyTo.text || "").slice(0, 70)}</div>
+                          </div>
+                          <button style={{ background:"none", border:"none", cursor:"pointer", color:"#64748b", fontSize:16, padding:2 }}
+                            onClick={() => setReplyTo(null)}>
+                            <i className="bi bi-x" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Edit bar */}
+                      {editingId && (
+                        <div className="tc-edit-bar">
+                          <i className="bi bi-pencil-fill" style={{ color: "#92400E", flexShrink: 0 }} />
+                          <div className="tc-edit-bar-label">Editing message</div>
+                          <button className="tc-cancel-bar-btn" onClick={() => { setEditingId(null); setText(""); }}>
+                            <i className="bi bi-x" /> Cancel
+                          </button>
+                        </div>
+                      )}
+
                       {attachments.length > 0 && (
                         <div className="tc-chips">
                           {attachments.map((a, i) => (
@@ -532,27 +644,31 @@ export default function EmployeeCommunity() {
                       )}
 
                       <div className="tc-input-row">
-                        <button className="tc-action-btn" title="Attach image"
-                          onClick={() => fileRef.current?.click()} disabled={uploading}>
-                          <i className={`bi ${uploading ? "bi-hourglass-split" : "bi-image"}`}
-                            style={{ opacity: uploading ? .5 : 1 }} />
-                        </button>
-                        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageSelect} />
-                        <button className="tc-action-btn" title="Attach Drive link" onClick={() => setShowLink(true)}>
-                          <i className="bi bi-link-45deg" />
-                        </button>
+                        {!editingId && (
+                          <>
+                            <button className="tc-action-btn" title="Attach image"
+                              onClick={() => fileRef.current?.click()} disabled={uploading}>
+                              <i className={`bi ${uploading ? "bi-hourglass-split" : "bi-image"}`}
+                                style={{ opacity: uploading ? .5 : 1 }} />
+                            </button>
+                            <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageSelect} />
+                            <button className="tc-action-btn" title="Attach Drive link" onClick={() => setShowLink(true)}>
+                              <i className="bi bi-link-45deg" />
+                            </button>
+                          </>
+                        )}
                         <textarea
                           ref={textareaRef}
                           className="tc-ta"
                           rows={1}
-                          placeholder="Message the team... Type @ to mention someone"
+                          placeholder={editingId ? "Edit your message..." : "Message the team... Type @ to mention someone"}
                           value={text}
                           onChange={handleTextChange}
                           onKeyDown={handleKeyDown}
                         />
                         <button className="tc-send-btn" onClick={sendMessage}
                           disabled={sending || (!text.trim() && attachments.length === 0)}>
-                          <i className={`bi ${sending ? "bi-hourglass-split" : "bi-send-fill"}`} />
+                          <i className={`bi ${sending ? "bi-hourglass-split" : editingId ? "bi-check-lg" : "bi-send-fill"}`} />
                         </button>
                       </div>
                     </div>
@@ -578,20 +694,14 @@ export default function EmployeeCommunity() {
                         </div>
                       ) : (
                         dmGrouped.map((item, idx) => {
-                          if (item.type === "date") {
-                            return (
-                              <div key={`d${idx}`} className="tc-date-sep">
-                                <span>{item.label}</span>
-                              </div>
-                            );
-                          }
+                          if (item.type === "date") return (
+                            <div key={`d${idx}`} className="tc-date-sep"><span>{item.label}</span></div>
+                          );
                           const m = item.data;
                           const isAdmin = m.senderType === "admin";
                           return (
                             <div key={m._id} className={`dm-brow ${isAdmin ? "admin" : "employee"}`}>
-                              {isAdmin && (
-                                <div className="dm-av-sm" style={{ background: "#4F46E5" }}>AD</div>
-                              )}
+                              {isAdmin && <div className="dm-av-sm" style={{ background: "#4F46E5" }}>AD</div>}
                               <div className="dm-bwrap">
                                 <div className="dm-bname">{isAdmin ? "Admin" : "You"}</div>
                                 <div className={`dm-bubble ${isAdmin ? "admin" : "employee"}`}>
@@ -608,11 +718,7 @@ export default function EmployeeCommunity() {
                                   <div className="dm-btime">{fmtTime(m.createdAt)}</div>
                                 </div>
                               </div>
-                              {!isAdmin && (
-                                <div className="dm-av-sm" style={{ background: avColor(myName) }}>
-                                  {nameInitials(myName)}
-                                </div>
-                              )}
+                              {!isAdmin && <div className="dm-av-sm" style={{ background: avColor(myName) }}>{nameInitials(myName)}</div>}
                             </div>
                           );
                         })
@@ -620,17 +726,11 @@ export default function EmployeeCommunity() {
                       <div ref={dmBottomRef} />
                     </div>
 
-                    {/* DM reply input */}
                     <div className="tc-input-area" style={{ background: "#fff", borderTop: "1px solid #E2E8F0" }}>
                       <div className="tc-input-row">
-                        <textarea
-                          className="tc-ta"
-                          rows={1}
-                          placeholder="Reply to admin..."
-                          value={dmText}
-                          onChange={e => setDmText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDmReply(); } }}
-                        />
+                        <textarea className="tc-ta" rows={1} placeholder="Reply to admin..."
+                          value={dmText} onChange={e => setDmText(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDmReply(); } }} />
                         <button className="tc-send-btn" onClick={sendDmReply} disabled={dmSending || !dmText.trim()}>
                           <i className={`bi ${dmSending ? "bi-hourglass-split" : "bi-send-fill"}`} />
                         </button>

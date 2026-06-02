@@ -68,7 +68,7 @@ async function sendLateEmail(empEmail, empName, task, stageName, deadline) {
 
         <!-- CTA -->
         <div style="text-align:center;margin-bottom:22px">
-          <a href="${baseUrl}/employee/portal" style="display:inline-block;padding:13px 36px;background:#DC2626;color:#fff;text-decoration:none;border-radius:9px;font-weight:700;font-size:15px;letter-spacing:.3px">
+          <a href="${baseUrl}/employee/tasks" style="display:inline-block;padding:13px 36px;background:#DC2626;color:#fff;text-decoration:none;border-radius:9px;font-weight:700;font-size:15px;letter-spacing:.3px">
             Submit Now →
           </a>
         </div>

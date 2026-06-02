@@ -283,13 +283,10 @@ export default function AdCampaignsPage() {
     return true;
   });
 
-  const statBase    = brandFilter ? campaigns.filter(c => String(c.brandId?._id || c.brandId) === String(brandFilter)) : campaigns;
-  const active      = statBase.filter(c => c.status === "active");
-  const totalBudget = statBase.reduce((s, c) => s + (c.budget || 0), 0);
-  const totalSpent  = statBase.reduce((s, c) => s + (c.performance?.spent || 0), 0);
-  const totalConv   = statBase.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
-  const roasVals    = statBase.filter(c => c.performance?.roas).map(c => c.performance.roas);
-  const avgRoas     = roasVals.length ? (roasVals.reduce((a, b) => a + b, 0) / roasVals.length).toFixed(2) : "—";
+  const activeCampaigns = displayed.filter(c => c.status === "active");
+  const totalBudget     = activeCampaigns.reduce((s, c) => s + (c.budget || 0), 0);
+  const totalSpent      = displayed.reduce((s, c) => s + (c.performance?.spent || 0), 0);
+  const totalConv       = displayed.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
 
   const brandMap = {};
   for (const c of campaigns) {
@@ -396,11 +393,10 @@ export default function AdCampaignsPage() {
               {/* Stats */}
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 24 }}>
                 {[
-                  { label: "Active Campaigns", value: active.length,  icon: "bi-broadcast",    color: "#10B981", bg: "#ECFDF5", border: "#BBF7D0" },
-                  { label: "Total Budget",      value: fmtINR(totalBudget), icon: "bi-cash-stack",   color: "#6366F1", bg: "#EEF2FF", border: "#C7D2FE" },
-                  { label: "Total Spent",       value: fmtINR(totalSpent),  icon: "bi-credit-card",  color: "#F59E0B", bg: "#FFFBEB", border: "#FDE68A" },
-                  { label: "Avg. ROAS",         value: avgRoas === "—" ? "—" : avgRoas + "x", icon: "bi-graph-up-arrow", color: "#7C3AED", bg: "#F3E8FF", border: "#D8B4FE" },
-                  { label: "Conversions",       value: totalConv || "—", icon: "bi-arrow-repeat",  color: "#0EA5E9", bg: "#F0F9FF", border: "#BAE6FD" },
+                  { label: "Active Campaigns", value: activeCampaigns.length, icon: "bi-broadcast",   color: "#10B981", bg: "#ECFDF5", border: "#BBF7D0" },
+                  { label: "Total Budget",      value: totalBudget > 0 ? "₹" + totalBudget.toLocaleString("en-IN") : "₹0", icon: "bi-cash-stack",  color: "#6366F1", bg: "#EEF2FF", border: "#C7D2FE" },
+                  { label: "Total Spent",       value: totalSpent > 0 ? "₹" + totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "₹0", icon: "bi-credit-card", color: "#F59E0B", bg: "#FFFBEB", border: "#FDE68A" },
+                  { label: "Conversions",       value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", icon: "bi-arrow-repeat", color: "#0EA5E9", bg: "#F0F9FF", border: "#BAE6FD" },
                 ].map(s => (
                   <div key={s.label} className="ad-stat" style={{ flex: 1, minWidth: 130, background: s.bg, borderColor: s.border }}>
                     <div style={{ width: 38, height: 38, borderRadius: 10, background: s.color + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -442,7 +438,7 @@ export default function AdCampaignsPage() {
                 )}
               </div>
 
-              {/* Campaign cards */}
+              {/* Campaign Table — Facebook Ads Manager style */}
               {tab !== "monthly" && (
                 loading ? (
                   <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>Loading campaigns…</div>
@@ -454,90 +450,179 @@ export default function AdCampaignsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="camp-grid">
-                      {displayed.map(c => {
-                        const pm = PLATFORM_META[c.platform] || PLATFORM_META.meta;
-                        const sm = STATUS_META[c.status]   || STATUS_META.planned;
-                        const brand = c.brandId || {};
-                        const perf  = c.performance || {};
-                        const spentPct = c.budget ? Math.min(100, Math.round((perf.spent / c.budget) * 100)) : 0;
-                        const cpr = perf.conversions > 0 ? Math.round((perf.spent || 0) / perf.conversions) : null;
-                        return (
-                          <div key={c._id} className="ad-card">
-                            {/* Header */}
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                              <div style={{ width: 10, height: 10, borderRadius: "50%", background: brand.color || "#6366F1", flexShrink: 0 }} />
-                              <span style={{ fontWeight: 800, fontSize: 14, color: "#1E293B", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-                              <span className="ad-badge" style={{ background: pm.bg, color: pm.color }}>
-                                <i className={`bi ${pm.icon}`} style={{ fontSize: 10 }} /> {pm.label}
-                              </span>
-                              <span className="ad-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
-                            </div>
+                    <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+                      <span style={{ fontSize: 12, color: "#94A3B8", marginLeft: "auto" }}>{displayed.length} campaign{displayed.length !== 1 ? "s" : ""}</span>
+                    </div>
 
-                            {/* Brand name */}
-                            <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600, marginBottom: 10 }}>{brand.name || "—"}</div>
+                    {/* Table */}
+                    <div style={{ background: "#fff", borderRadius: 14, border: "1.5px solid #F1F5F9", overflow: "hidden" }}>
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="ad-table" style={{ minWidth: 1700 }}>
+                          <thead>
+                            <tr>
+                              <th>Campaign</th>
+                              <th>Brand</th>
+                              <th>Budget</th>
+                              <th>Results</th>
+                              <th>Reach</th>
+                              <th>Frequency</th>
+                              <th>Cost / Result</th>
+                              <th>Link Clicks</th>
+                              <th>Amount Spent</th>
+                              <th>CPM</th>
+                              <th>CTR</th>
+                              <th>Landing Page Views</th>
+                              <th>Cost per LP View</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {displayed.map(c => {
+                              const pm   = PLATFORM_META[c.platform] || PLATFORM_META.meta;
+                              const sm   = STATUS_META[c.status]   || STATUS_META.planned;
+                              const brand = c.brandId || {};
+                              const perf  = c.performance || {};
+                              const spent = perf.spent || 0;
+                              const impr  = perf.impressions || 0;
+                              const clicks = perf.clicks || 0;
+                              const reach = perf.reach || 0;
+                              const convs = perf.conversions || 0;
+                              const freq  = reach > 0 ? (impr / reach).toFixed(2) : "—";
+                              const linkClicks = perf.linkClicks || 0;
+                              const lpViews    = perf.landingPageViews || 0;
+                              const cpr   = convs > 0 ? parseFloat((spent / convs).toFixed(2)) : null;
+                              const cpm   = impr > 0 ? parseFloat(((spent / impr) * 1000).toFixed(2)) : null;
+                              const ctr   = perf.ctr != null ? parseFloat(perf.ctr.toFixed(2)) : null;
+                              const cplp  = lpViews > 0 ? parseFloat((spent / lpViews).toFixed(2)) : null;
+                              const budgetLabel = c.budget ? `${fmtINR(c.budget)} Daily` : "—";
+                              const spentPct = c.budget > 0 ? Math.min(100, Math.round((spent / c.budget) * 100)) : 0;
 
+                              return (
+                                <tr key={c._id}>
+                                  {/* Campaign name */}
+                                  <td style={{ minWidth: 180 }}>
+                                    <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B", marginBottom: 2 }}>{c.name}</div>
+                                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                                      <span className="ad-badge" style={{ background: pm.bg, color: pm.color, fontSize: 9 }}>
+                                        <i className={`bi ${pm.icon}`} style={{ fontSize: 8 }} /> {pm.label}
+                                      </span>
+                                      <span className="ad-badge" style={{ background: sm.bg, color: sm.color, fontSize: 9 }}>{sm.label}</span>
+                                    </div>
+                                  </td>
+                                  {/* Brand */}
+                                  <td>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: brand.color || "#6366F1", flexShrink: 0 }} />
+                                      <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{brand.name || "—"}</span>
+                                    </div>
+                                  </td>
 
-                            {/* Budget bar */}
-                            <div style={{ marginBottom: 10 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                                <span style={{ fontWeight: 700, color: "#374151" }}>Budget</span>
-                                <span style={{ color: "#64748B", fontWeight: 600 }}>{fmtINR(perf.spent || 0)} / {fmtINR(c.budget || 0)}</span>
-                              </div>
-                              <div style={{ height: 4, background: "#F1F5F9", borderRadius: 10 }}>
-                                <div style={{ height: "100%", borderRadius: 10, width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#6366F1", transition: "width .4s" }} />
-                              </div>
-                            </div>
+                                  {/* Budget */}
+                                  <td>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{budgetLabel}</div>
+                                    {c.budget > 0 && (
+                                      <div style={{ marginTop: 4, height: 3, width: 70, background: "#F1F5F9", borderRadius: 4 }}>
+                                        <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#6366F1", borderRadius: 4 }} />
+                                      </div>
+                                    )}
+                                  </td>
+                                  {/* Results */}
+                                  <td style={{ fontWeight: 700, color: convs > 0 ? "#10B981" : "#94A3B8" }}>
+                                    {convs > 0 ? (
+                                      <>
+                                        <div style={{ fontSize: 14 }}>{convs.toLocaleString()}</div>
+                                        <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Leads (Form)</div>
+                                      </>
+                                    ) : "—"}
+                                  </td>
+                                  {/* Reach */}
+                                  <td style={{ fontWeight: 600, color: "#374151" }}>{reach > 0 ? fmtNum(reach) : "—"}</td>
+                                  {/* Frequency */}
+                                  <td style={{ color: "#374151" }}>{freq}</td>
+                                  {/* Cost / Result */}
+                                  <td style={{ fontWeight: 700, color: cpr ? "#F59E0B" : "#94A3B8" }}>
+                                    {cpr ? (
+                                      <>
+                                        <div>₹{cpr.toFixed(2)}</div>
+                                        <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Per lead</div>
+                                      </>
+                                    ) : "—"}
+                                  </td>
+                                  {/* Link Clicks */}
+                                  <td style={{ fontWeight: 600, color: linkClicks > 0 ? "#374151" : "#94A3B8" }}>
+                                    {linkClicks > 0 ? fmtNum(linkClicks) : "—"}
+                                  </td>
+                                  {/* Amount Spent */}
+                                  <td>
+                                    <div style={{ fontWeight: 800, fontSize: 13, color: spent > 0 ? "#1E293B" : "#94A3B8" }}>
+                                      {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                                    </div>
+                                  </td>
+                                  {/* CPM */}
+                                  <td style={{ fontWeight: 600, color: cpm ? "#374151" : "#94A3B8" }}>
+                                    {cpm ? `₹${cpm.toFixed(2)}` : "—"}
+                                  </td>
+                                  {/* CTR */}
+                                  <td style={{ fontWeight: 600, color: ctr ? "#374151" : "#94A3B8" }}>
+                                    {ctr != null ? `${ctr.toFixed(2)}%` : "—"}
+                                  </td>
+                                  {/* Landing Page Views */}
+                                  <td style={{ fontWeight: 600, color: lpViews > 0 ? "#374151" : "#94A3B8" }}>
+                                    {lpViews > 0 ? fmtNum(lpViews) : "—"}
+                                  </td>
+                                  {/* Cost per LP View */}
+                                  <td style={{ fontWeight: 700, color: cplp ? "#7C3AED" : "#94A3B8" }}>
+                                    {cplp ? `₹${cplp.toFixed(2)}` : "—"}
+                                  </td>
+                                  {/* Status */}
+                                  <td>
+                                    <span className="ad-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
+                                  </td>
 
-                            {/* Metrics grid: Result | Reach | CPR | Amount Spent */}
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
-                              {[
-                                { label: "Result",  value: perf.conversions > 0 ? perf.conversions : "—",       color: "#10B981" },
-                                { label: "Reach",   value: fmtNum(perf.reach),                                   color: "#8B5CF6" },
-                                { label: "CPR",     value: cpr ? fmtINR(cpr) : "—",                             color: "#F59E0B" },
-                                { label: "Spent",   value: perf.spent > 0 ? fmtINR(perf.spent) : "₹0",          color: "#F97316" },
-                              ].map(m => (
-                                <div key={m.label} style={{ background: "#F8FAFC", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
-                                  <div style={{ fontSize: 12, fontWeight: 800, color: m.color }}>{m.value}</div>
-                                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .3, marginTop: 2 }}>{m.label}</div>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Agenda */}
-                            {c.agenda && (
-                              <div style={{ fontSize: 12, color: "#94A3B8", fontStyle: "italic", marginBottom: 12, borderTop: "1px solid #F8FAFC", paddingTop: 10 }}>
-                                {c.agenda}
-                              </div>
-                            )}
-
-                            {/* Actions */}
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                              <button onClick={() => openEdit(c)} style={{ padding: "5px 12px", background: "#EEF2FF", color: "#4F46E5", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                                <i className="bi bi-pencil" style={{ marginRight: 4 }} />Edit
-                              </button>
-                              <select
-                                value={c.status}
-                                onChange={e => updateStatus(c._id, e.target.value)}
-                                style={{ padding: "5px 8px", border: "1.5px solid #E2E8F0", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", color: "#374151", background: "#fff" }}
-                              >
-                                {Object.entries(STATUS_META).map(([k, v]) => (
-                                  <option key={k} value={k}>{v.label}</option>
-                                ))}
-                              </select>
-                              <button onClick={() => deleteCampaign(c._id)} style={{ padding: "5px 10px", background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginLeft: "auto" }}>
-                                <i className="bi bi-trash" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          {/* Totals row */}
+                          <tfoot>
+                            <tr style={{ background: "#FAFAFA", borderTop: "2px solid #F1F5F9" }}>
+                              <td colSpan={2} style={{ padding: "10px 14px", fontWeight: 700, fontSize: 12, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".5px" }}>
+                                Results from {displayed.length} campaign{displayed.length !== 1 ? "s" : ""}
+                              </td>
+                              <td style={{ padding: "10px 14px", fontWeight: 700, color: "#6366F1" }}>
+                                {activeCampaigns.length > 0 ? `${fmtINR(totalBudget)} Daily` : "—"}
+                              </td>
+                              <td style={{ fontWeight: 800, color: "#10B981", padding: "10px 14px" }}>
+                                {displayed.reduce((s, c) => s + (c.performance?.conversions || 0), 0).toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 700, padding: "10px 14px" }}>
+                                {fmtNum(displayed.reduce((s, c) => s + (c.performance?.reach || 0), 0))}
+                              </td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                              <td style={{ fontWeight: 700, padding: "10px 14px" }}>
+                                {fmtNum(displayed.reduce((s, c) => s + (c.performance?.linkClicks || 0), 0))}
+                              </td>
+                              <td style={{ fontWeight: 800, padding: "10px 14px" }}>
+                                ₹{displayed.reduce((s, c) => s + (c.performance?.spent || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                              <td style={{ fontWeight: 700, padding: "10px 14px" }}>
+                                {fmtNum(displayed.reduce((s, c) => s + (c.performance?.landingPageViews || 0), 0))}
+                              </td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                              <td style={{ padding: "10px 14px" }}>—</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
 
                     {/* Campaign Tracker by brand */}
                     {Object.keys(brandMap).length > 0 && (
-                      <div style={{ marginTop: 32, background: "#fff", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden" }}>
-                        <div style={{ padding: "16px 20px", borderBottom: "1.5px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ marginTop: 24, background: "#fff", borderRadius: 14, border: "1.5px solid #F1F5F9", overflow: "hidden" }}>
+                        <div style={{ padding: "14px 20px", borderBottom: "1.5px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
                           <i className="bi bi-table" style={{ color: "#6366F1" }} />
                           <span style={{ fontWeight: 700, fontSize: 14, color: "#1E293B" }}>Campaign Tracker</span>
                           <span style={{ fontSize: 12, color: "#94A3B8" }}>— which campaign is running for which brand</span>

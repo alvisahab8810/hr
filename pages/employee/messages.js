@@ -63,10 +63,33 @@ export default function EmployeeMessages() {
   const [sending, setSending]             = useState(false);
   const [error, setError]                 = useState("");
   const [authorized, setAuthorized]       = useState(true);
-  const bottomRef = useRef(null);
-  const pollRef   = useRef(null);
+  const [callRequests, setCallRequests]   = useState([]);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [actionTarget, setActionTarget]   = useState(null);
+  const [actionType, setActionType]       = useState("approved");
+  const [schedDate, setSchedDate]         = useState("");
+  const [schedTime, setSchedTime]         = useState("");
+  const [adminNote, setAdminNote]         = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [meId, setMeId]                   = useState(null);
+  const [replyTo, setReplyTo]             = useState(null);
+  const [editingId, setEditingId]         = useState(null);
+  const bottomRef    = useRef(null);
+  const pollRef      = useRef(null);
+  const isNearBottom = useRef(true);
+  const textareaRef  = useRef(null);
 
-  useEffect(() => { fetchBrands(); }, []);
+  function handleThreadScroll(e) {
+    const el = e.currentTarget;
+    isNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  useEffect(() => {
+    fetchBrands();
+    fetch("/api/employee/me", { headers: authH() })
+      .then(r => r.json()).then(d => { if (d.success) setMeId(String(d.employee._id)); })
+      .catch(() => {});
+  }, []);
 
   async function fetchBrands() {
     setLoading(true);
@@ -82,10 +105,50 @@ export default function EmployeeMessages() {
   async function selectBrand(brand) {
     setSelectedBrand(brand);
     setMessages([]);
+    setCallRequests([]);
+    isNearBottom.current = true;
     clearInterval(pollRef.current);
     await loadThread(brand._id);
+    loadCallRequests(brand._id);
     pollRef.current = setInterval(() => loadThread(brand._id), 8000);
     setBrands(prev => prev.map(b => b._id === brand._id ? { ...b, unread: 0 } : b));
+  }
+
+  async function loadCallRequests(brandId) {
+    try {
+      const r = await fetch(`/api/employee/call-requests?brandId=${brandId}`, { headers: authH() });
+      const d = await r.json();
+      if (d.success) setCallRequests(d.requests || []);
+    } catch {}
+  }
+
+  async function handleCallAction() {
+    if (!actionTarget || !actionType) return;
+    setActionLoading(true);
+    try {
+      const r = await fetch(`/api/employee/call-requests/${actionTarget._id}`, {
+        method: "PATCH",
+        headers: authH(),
+        body: JSON.stringify({ action: actionType, scheduledDate: schedDate, scheduledTime: schedTime, adminNote }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setCallRequests(prev => prev.map(cr => cr._id === actionTarget._id ? d.request : cr));
+        setShowActionModal(false);
+        setActionTarget(null);
+        setSchedDate(""); setSchedTime(""); setAdminNote("");
+      }
+    } catch {}
+    setActionLoading(false);
+  }
+
+  function openActionModal(cr, type) {
+    setActionTarget(cr);
+    setActionType(type);
+    setSchedDate(cr.preferredDate || "");
+    setSchedTime(cr.preferredTime || "");
+    setAdminNote("");
+    setShowActionModal(true);
   }
 
   async function loadThread(brandId) {
@@ -96,28 +159,69 @@ export default function EmployeeMessages() {
   }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isNearBottom.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
   async function send() {
     if (!selectedBrand || (!text.trim() && attachments.length === 0)) return;
+    isNearBottom.current = true;
     setSending(true);
     setError("");
-    const r = await fetch(`/api/employee/client-messages/${selectedBrand._id}`, {
-      method: "POST", headers: authH(),
-      body: JSON.stringify({ text, attachments }),
-    }).catch(() => null);
-    if (!r) { setError("Network error"); setSending(false); return; }
-    const d = await r.json();
-    if (d.success) {
-      setMessages(prev => [...prev, d.message]);
-      setText(""); setAttachments([]);
+
+    if (editingId) {
+      const r = await fetch(`/api/employee/client-messages/${selectedBrand._id}`, {
+        method: "PATCH", headers: authH(),
+        body: JSON.stringify({ messageId: editingId, action: "edit", text }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => prev.map(m => m._id === editingId ? d.message : m));
+        setText(""); setEditingId(null);
+      } else setError(d.message || "Failed to edit");
     } else {
-      setError(d.message || "Failed to send");
+      const r = await fetch(`/api/employee/client-messages/${selectedBrand._id}`, {
+        method: "POST", headers: authH(),
+        body: JSON.stringify({ text, attachments, replyTo }),
+      }).catch(() => null);
+      if (!r) { setError("Network error"); setSending(false); return; }
+      const d = await r.json();
+      if (d.success) {
+        setMessages(prev => [...prev, d.message]);
+        setText(""); setAttachments([]); setReplyTo(null);
+      } else setError(d.message || "Failed to send");
     }
     setSending(false);
+  }
+
+  function startReply(m) {
+    setReplyTo({ msgId: m._id, senderName: m.senderName, text: m.text || m.attachments?.[0]?.name || "" });
+    setEditingId(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  function startEdit(m) {
+    setEditingId(m._id);
+    setText(m.text || "");
+    setReplyTo(null);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function deleteMsg(m, action) {
+    const r = await fetch(`/api/employee/client-messages/${selectedBrand._id}`, {
+      method: "PATCH", headers: authH(),
+      body: JSON.stringify({ messageId: m._id, action }),
+    }).catch(() => null);
+    if (!r) return;
+    const d = await r.json();
+    if (d.success) {
+      if (action === "deleteForMe") setMessages(prev => prev.filter(msg => msg._id !== m._id));
+      else setMessages(prev => prev.map(msg => msg._id === m._id ? d.message : msg));
+    }
   }
 
   function addLink() {
@@ -127,6 +231,7 @@ export default function EmployeeMessages() {
   }
 
   function handleKeyDown(e) {
+    if (e.key === "Escape") { setEditingId(null); setReplyTo(null); setText(""); return; }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
@@ -204,6 +309,55 @@ export default function EmployeeMessages() {
         .em-btn-sec { padding: 9px 18px; background: #F1F5F9; color: #475569; border: 1.5px solid #E2E8F0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
         .em-error { background: #FEF2F2; color: #DC2626; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
         .em-error button { background: none; border: none; cursor: pointer; color: #DC2626; margin-left: auto; }
+        /* Reply preview inside bubble */
+        .em-reply-preview { border-radius: 7px; padding: 5px 9px; margin-bottom: 7px; }
+        .em-bubble.team .em-reply-preview  { background: #EEF2FF; border-left: 3px solid #4F46E5; }
+        .em-bubble.client .em-reply-preview { background: rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.5); }
+        .em-reply-pname { font-size: 10.5px; font-weight: 700; margin-bottom: 1px; }
+        .em-bubble.team .em-reply-pname { color: #4F46E5; }
+        .em-bubble.client .em-reply-pname { color: rgba(255,255,255,.9); }
+        .em-reply-ptext { font-size: 11.5px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Deleted / edited */
+        .em-deleted { font-style: italic; opacity: .55; font-size: 13px; display: flex; align-items: center; gap: 5px; }
+        .em-edited  { font-size: 9.5px; opacity: .55; margin-left: 4px; }
+        /* Inline action buttons (never clip) */
+        .em-brow { position: relative; }
+        .em-msg-actions { display: none; flex-direction: row; gap: 1px; align-self: flex-end; flex-shrink: 0; padding-bottom: 5px; }
+        .em-brow:hover .em-msg-actions { display: flex; }
+        .em-msg-act-btn { background: #fff; border: 1px solid #E2E8F0; cursor: pointer; padding: 5px 7px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: background .1s; }
+        .em-msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
+        .em-msg-act-btn.danger { color: #EF4444; }
+        .em-msg-act-btn.danger:hover { background: #FEE2E2; }
+        /* Reply / edit bars */
+        .em-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .em-edit-bar  { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .em-bar-body  { flex: 1; min-width: 0; }
+        .em-bar-cancel { background: none; border: none; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 6px; font-family: inherit; }
+        .em-bar-cancel:hover { background: rgba(0,0,0,.06); }
+        .em-req-panel { width: 270px; flex-shrink: 0; border-left: 1px solid #E2E8F0; background: #fff; display: flex; flex-direction: column; overflow: hidden; }
+        @media (max-width: 1100px) { .em-req-panel { display: none; } }
+        .em-req-hdr { padding: 13px 16px; border-bottom: 1px solid #E2E8F0; }
+        .em-req-title { font-size: 13px; font-weight: 700; color: #0f172a; }
+        .em-req-sub   { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+        .em-req-list  { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .em-req-item  { border: 1.5px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; background: #F8FAFC; }
+        .em-req-item.pending  { border-color: #FCD34D; background: #FFFBEB; }
+        .em-req-item.approved, .em-req-item.scheduled { border-color: #86EFAC; background: #F0FDF4; }
+        .em-req-item.rejected { border-color: #FCA5A5; background: #FEF2F2; }
+        .em-req-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; margin-bottom: 6px; }
+        .em-req-badge.pending   { background: #FEF9C3; color: #A16207; }
+        .em-req-badge.approved, .em-req-badge.scheduled { background: #DCFCE7; color: #15803D; }
+        .em-req-badge.rejected  { background: #FEE2E2; color: #DC2626; }
+        .em-req-client { font-size: 12px; font-weight: 700; color: #0f172a; }
+        .em-req-dt     { font-size: 11.5px; color: #4F46E5; font-weight: 600; margin-top: 2px; }
+        .em-req-note   { font-size: 11px; color: #64748b; margin-top: 3px; }
+        .em-req-actions { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+        .em-req-btn-approve  { padding: 5px 10px; background: #059669; color: #fff; border: none; border-radius: 7px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .em-req-btn-schedule { padding: 5px 10px; background: #4F46E5; color: #fff; border: none; border-radius: 7px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .em-req-btn-reject   { padding: 5px 10px; background: #DC2626; color: #fff; border: none; border-radius: 7px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .em-req-empty { padding: 24px 12px; text-align: center; font-size: 12px; color: #94a3b8; }
+        .em-act-modal-bg  { position: fixed; inset: 0; background: rgba(0,0,0,.38); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .em-act-modal-box { background: #fff; border-radius: 14px; padding: 26px; width: 380px; max-width: 95vw; }
       `}</style>
 
       <div className="add-employee-area">
@@ -271,13 +425,14 @@ export default function EmployeeMessages() {
                   </div>
                 </div>
 
-                {/* Chat area */}
+                {/* Chat area + requests panel */}
                 {!selectedBrand ? (
                   <div className="em-no-sel">
                     <i className="bi bi-chat-dots" style={{ fontSize: 38, color: "#CBD5E1" }} />
                     <div style={{ fontSize: 14, fontWeight: 600 }}>Select a brand to view messages</div>
                   </div>
                 ) : (
+                  <>
                   <div className="em-chat">
                     <div className="em-chat-hdr">
                       <div className="em-brand-av" style={{ background: brandColor(selectedBrand.name), width: 34, height: 34, borderRadius: 8, fontSize: 11 }}>
@@ -297,7 +452,7 @@ export default function EmployeeMessages() {
                       </div>
                     </div>
 
-                    <div className="em-thread">
+                    <div className="em-thread" onScroll={handleThreadScroll}>
                       {messages.length === 0 ? (
                         <div className="em-empty">
                           <i className="bi bi-chat" style={{ fontSize: 36, color: "#CBD5E1" }} />
@@ -314,7 +469,8 @@ export default function EmployeeMessages() {
                             );
                           }
                           const m = item.data;
-                          const isTeam = m.senderRole === "team";
+                          const isTeam  = m.senderRole === "team";
+                          const isMyMsg = isTeam && meId && String(m.senderId) === meId;
                           return (
                             <div key={m._id} className={`em-brow ${isTeam ? "team" : "client"}`}>
                               {isTeam && (
@@ -322,19 +478,59 @@ export default function EmployeeMessages() {
                                   {(m.senderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                                 </div>
                               )}
-                              <div>
+                              <div style={{ minWidth: 0 }}>
                                 {isTeam && <div className="em-bname">{m.senderName}</div>}
                                 <div className={`em-bubble ${isTeam ? "team" : "client"}`}>
-                                  {m.text && <div>{m.text}</div>}
-                                  {(m.attachments || []).map((a, i) => (
-                                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="em-blink">
-                                      <i className="bi bi-link-45deg" style={{ fontSize: 13 }} />
-                                      {a.name}
-                                    </a>
-                                  ))}
+                                  {/* Reply preview */}
+                                  {m.replyTo?.msgId && !m.deleted && (
+                                    <div className="em-reply-preview">
+                                      <div className="em-reply-pname">{m.replyTo.senderName}</div>
+                                      <div className="em-reply-ptext">{(m.replyTo.text || "").slice(0, 80)}</div>
+                                    </div>
+                                  )}
+                                  {m.deleted ? (
+                                    <div className="em-deleted">
+                                      <i className="bi bi-slash-circle" /> This message was deleted
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {m.text && (
+                                        <div>
+                                          {m.text}
+                                          {m.edited && <span className="em-edited">(edited)</span>}
+                                        </div>
+                                      )}
+                                      {(m.attachments || []).map((a, i) => (
+                                        <a key={i} href={a.url} target="_blank" rel="noreferrer" className="em-blink">
+                                          <i className="bi bi-link-45deg" style={{ fontSize: 13 }} />{a.name}
+                                        </a>
+                                      ))}
+                                    </>
+                                  )}
                                   <div className="em-btime">{fmtTime(m.createdAt)}</div>
                                 </div>
                               </div>
+                              {/* Inline action buttons */}
+                              {!m.deleted && (
+                                <div className="em-msg-actions">
+                                  <button className="em-msg-act-btn" title="Reply" onClick={() => startReply(m)}>
+                                    <i className="bi bi-reply" />
+                                  </button>
+                                  {isMyMsg && (
+                                    <button className="em-msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
+                                      <i className="bi bi-pencil" />
+                                    </button>
+                                  )}
+                                  {isMyMsg && (
+                                    <button className="em-msg-act-btn danger" title="Delete for everyone" onClick={() => deleteMsg(m, "deleteForAll")}>
+                                      <i className="bi bi-trash" />
+                                    </button>
+                                  )}
+                                  <button className="em-msg-act-btn" title="Delete for me" onClick={() => deleteMsg(m, "deleteForMe")}>
+                                    <i className="bi bi-eye-slash" />
+                                  </button>
+                                </div>
+                              )}
                               {!isTeam && (
                                 <div className="em-av-sm" style={{ background: "#E11D48" }}>
                                   {(m.senderName || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -354,6 +550,25 @@ export default function EmployeeMessages() {
                           <button onClick={() => setError("")}><i className="bi bi-x" /></button>
                         </div>
                       )}
+                      {replyTo && (
+                        <div className="em-reply-bar">
+                          <i className="bi bi-reply-fill" style={{ color: "#4F46E5", flexShrink: 0 }} />
+                          <div className="em-bar-body">
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5" }}>Replying to {replyTo.senderName}</div>
+                            <div style={{ fontSize: 12, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{(replyTo.text || "").slice(0, 60)}</div>
+                          </div>
+                          <button className="em-bar-cancel" style={{ color: "#64748b" }} onClick={() => setReplyTo(null)}><i className="bi bi-x" /></button>
+                        </div>
+                      )}
+                      {editingId && (
+                        <div className="em-edit-bar">
+                          <i className="bi bi-pencil-fill" style={{ color: "#92400E", flexShrink: 0 }} />
+                          <div className="em-bar-body" style={{ fontSize: 12, fontWeight: 600, color: "#92400E" }}>Editing message</div>
+                          <button className="em-bar-cancel" style={{ color: "#92400E" }} onClick={() => { setEditingId(null); setText(""); }}>
+                            <i className="bi bi-x" /> Cancel
+                          </button>
+                        </div>
+                      )}
                       {attachments.length > 0 && (
                         <div className="em-chips">
                           {attachments.map((a, i) => (
@@ -368,13 +583,16 @@ export default function EmployeeMessages() {
                         </div>
                       )}
                       <div className="em-input-row">
-                        <button className="em-link-btn" onClick={() => setShowLink(true)}>
-                          <i className="bi bi-link-45deg" /> Attach Link
-                        </button>
+                        {!editingId && (
+                          <button className="em-link-btn" onClick={() => setShowLink(true)}>
+                            <i className="bi bi-link-45deg" /> Attach Link
+                          </button>
+                        )}
                         <textarea
+                          ref={textareaRef}
                           className="em-ta"
                           rows={1}
-                          placeholder="Type a message..."
+                          placeholder={editingId ? "Edit your message..." : "Type a message..."}
                           value={text}
                           onChange={e => setText(e.target.value)}
                           onKeyDown={handleKeyDown}
@@ -384,18 +602,122 @@ export default function EmployeeMessages() {
                           onClick={send}
                           disabled={sending || (!text.trim() && attachments.length === 0)}
                         >
-                          <i className={`bi ${sending ? "bi-hourglass" : "bi-send"}`} />
+                          <i className={`bi ${sending ? "bi-hourglass" : editingId ? "bi-check-lg" : "bi-send"}`} />
                           Send
                         </button>
                       </div>
                     </div>
                   </div>
+
+                  {/* Call / Meeting Requests panel */}
+                  <div className="em-req-panel">
+                    <div className="em-req-hdr">
+                      <div className="em-req-title">
+                        <i className="bi bi-telephone-fill" style={{ marginRight: 6, color: "#4F46E5" }} />
+                        Meeting Requests
+                      </div>
+                      <div className="em-req-sub">Call/meeting requests from client</div>
+                    </div>
+                    <div className="em-req-list">
+                      {callRequests.length === 0 ? (
+                        <div className="em-req-empty">
+                          <i className="bi bi-calendar-x" style={{ fontSize: 28, color: "#CBD5E1", display: "block", marginBottom: 6 }} />
+                          No requests yet
+                        </div>
+                      ) : (
+                        callRequests.map(cr => (
+                          <div key={cr._id} className={`em-req-item ${cr.status}`}>
+                            <span className={`em-req-badge ${cr.status}`}>
+                              {cr.status === "scheduled" ? "Scheduled" : cr.status.charAt(0).toUpperCase() + cr.status.slice(1)}
+                            </span>
+                            <div className="em-req-client">{cr.clientName}</div>
+                            <div className="em-req-dt">
+                              <i className="bi bi-calendar2" style={{ marginRight: 4 }} />
+                              {cr.preferredDate} · {cr.preferredTime}
+                            </div>
+                            {cr.note ? <div className="em-req-note">{cr.note}</div> : null}
+                            {(cr.status === "approved" || cr.status === "scheduled") && (cr.scheduledDate || cr.scheduledTime) ? (
+                              <div style={{ fontSize: 11, color: "#059669", fontWeight: 600, marginTop: 3 }}>
+                                <i className="bi bi-check-circle-fill" style={{ marginRight: 3 }} />
+                                Confirmed: {cr.scheduledDate || cr.preferredDate} · {cr.scheduledTime || cr.preferredTime}
+                              </div>
+                            ) : null}
+                            {cr.adminNote ? <div className="em-req-note" style={{ fontStyle: "italic" }}>"{cr.adminNote}"</div> : null}
+                            {cr.status === "pending" && (
+                              <div className="em-req-actions">
+                                <button className="em-req-btn-approve"  onClick={() => openActionModal(cr, "approved")}>
+                                  <i className="bi bi-check" /> Approve
+                                </button>
+                                <button className="em-req-btn-schedule" onClick={() => openActionModal(cr, "scheduled")}>
+                                  <i className="bi bi-calendar-check" /> Schedule
+                                </button>
+                                <button className="em-req-btn-reject"   onClick={() => openActionModal(cr, "rejected")}>
+                                  <i className="bi bi-x" /> Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  </>
                 )}
               </div>
             )}
           </section>
         </div>
       </div>
+
+      {/* Call request action modal */}
+      {showActionModal && actionTarget && (
+        <div className="em-act-modal-bg" onClick={e => { if (e.target === e.currentTarget) setShowActionModal(false); }}>
+          <div className="em-act-modal-box">
+            <div className="em-modal-title">
+              {actionType === "approved"  && "✅ Approve Call Request"}
+              {actionType === "scheduled" && "📅 Schedule Meeting"}
+              {actionType === "rejected"  && "❌ Reject Call Request"}
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
+              {actionTarget.clientName} · Preferred: {actionTarget.preferredDate} at {actionTarget.preferredTime}
+            </div>
+
+            {actionType !== "rejected" && (
+              <>
+                <div className="em-field">
+                  <label>Confirmed Date</label>
+                  <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} />
+                </div>
+                <div className="em-field">
+                  <label>Confirmed Time</label>
+                  <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} />
+                </div>
+              </>
+            )}
+
+            <div className="em-field">
+              <label>Note to client (optional)</label>
+              <input
+                placeholder={actionType === "rejected" ? "Reason for unavailability..." : "e.g. Google Meet link or agenda..."}
+                value={adminNote}
+                onChange={e => setAdminNote(e.target.value)}
+              />
+            </div>
+
+            <div className="em-modal-actions">
+              <button
+                className="em-btn-pri"
+                style={{ background: actionType === "rejected" ? "#DC2626" : actionType === "scheduled" ? "#4F46E5" : "#059669" }}
+                onClick={handleCallAction}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "Saving..." : actionType === "approved" ? "Approve & Notify" : actionType === "scheduled" ? "Schedule & Notify" : "Reject & Notify"}
+              </button>
+              <button className="em-btn-sec" onClick={() => setShowActionModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Link attachment modal */}
       {showLink && (
