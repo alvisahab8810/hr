@@ -76,7 +76,7 @@ const ROLE_CONFIG = {
   general:   { label: "Team Member",    icon: "bi-person-badge",  ic: "#374151", bg: "#F3F4F6", bannerBg: "#F9FAFB", bannerBorder: "#E5E7EB", queueLabel: "My Queue",      queueStage: "",   queueIcon: "bi-list-task" },
 };
 
-const STATUS_MAP   = { todo: { label: "To Do", cls: "tms-badge-todo" }, in_progress: { label: "In Progress", cls: "tms-badge-inprogress" }, review: { label: "In Review", cls: "tms-badge-review" }, completed: { label: "Completed", cls: "tms-badge-completed" }, blocked: { label: "Blocked", cls: "tms-badge-blocked" } };
+const STATUS_MAP   = { todo: { label: "To Do", cls: "tms-badge-todo" }, in_progress: { label: "In Progress", cls: "tms-badge-inprogress" }, review: { label: "In Review", cls: "tms-badge-review" }, completed: { label: "Completed", cls: "tms-badge-completed" }, blocked: { label: "Rejected", cls: "tms-badge-blocked" } };
 const STAGE_COLOR  = { S1: "#7C3AED", S2: "#1D4ED8", S3: "#B45309", S4: "#065F46" };
 const STAGE_LABEL  = { S1: "Script/Concept", S2: "Shoot/Design", S3: "Edit/Develop", S4: "Posted/Live" };
 const CTYPE_COLOR  = { reel: "#7C3AED", post: "#1D4ED8", carousel: "#B45309", story: "#065F46", blog: "#DB2777" };
@@ -448,6 +448,7 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
   async function saveTask(silent = false) {
     if (!task) return;
+    if (task.status === "review" || task.status === "completed") return;
     setSaving(true);
     try {
       const r = await fetch(`/api/employee/tasks/${task._id}`, {
@@ -466,27 +467,46 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
   async function submitForReview() {
     if (!task) return;
-    if (task.status === "review") { toast.info("Already submitted — awaiting admin review."); return; }
+    const isProduction = task.taskType === "production" && (task.stages?.length > 0);
+    const s0 = task.stages?.[0];
+    // Already submitted check
+    if (isProduction && s0?.done && !s0?.rejected) { toast.info("Already submitted — awaiting admin review."); return; }
+    if (!isProduction && task.status === "review") { toast.info("Already submitted — awaiting admin review."); return; }
+    if (task.status === "completed") return;
     setSubmitting(true);
     try {
-      const r = await fetch(`/api/employee/tasks/${task._id}`, {
+      // Step 1: Save content fields so admin can see script/caption/tags
+      await fetch(`/api/employee/tasks/${task._id}`, {
         method: "PATCH", headers: authH(),
-        body: JSON.stringify({
-          status: "review",
-          submittedAt: new Date(),
-          description: script,
-          caption,
-          referenceLink: refLink,
-          pillar,
-          tags,
-        }),
+        body: JSON.stringify({ description: script, caption, referenceLink: refLink, pillar, tags, submittedAt: new Date() }),
       });
-      const d = await r.json();
-      if (d.success) {
-        toast.success("Submitted for review!");
-        setTask(prev => ({ ...prev, status: "review", submittedAt: new Date(), description: script, caption, referenceLink: refLink, pillar, tags }));
-        setLastSaved(new Date());
-      } else toast.error(d.message || "Submit failed");
+
+      if (isProduction) {
+        // Step 2: Mark S1 stage as done via stage-submit so it appears in the approvals queue
+        const stageKey = task.stage || "S1";
+        const r = await fetch("/api/employee/stage-submit", {
+          method: "POST", headers: authH(),
+          body: JSON.stringify({ taskId: task._id, proofUrl: "", notes: "", stageKey }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          toast.success("Script submitted for review!");
+          setTask(d.task);
+          setLastSaved(new Date());
+        } else toast.error(d.message || "Submit failed");
+      } else {
+        // Non-production: just mark task status as review
+        const r = await fetch(`/api/employee/tasks/${task._id}`, {
+          method: "PATCH", headers: authH(),
+          body: JSON.stringify({ status: "review" }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          toast.success("Submitted for review!");
+          setTask(prev => ({ ...prev, status: "review", description: script, caption, referenceLink: refLink, pillar, tags }));
+          setLastSaved(new Date());
+        } else toast.error(d.message || "Submit failed");
+      }
     } catch { toast.error("Submit failed"); }
     setSubmitting(false);
   }
@@ -547,22 +567,35 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => saveTask(false)} disabled={saving || task.status === "review" || task.status === "completed"} style={{ padding: "8px 18px", borderRadius: 8, background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, opacity: (saving || task.status === "review" || task.status === "completed") ? 0.5 : 1 }}>
+                {(() => {
+                  const s0 = task.stages?.[0];
+                  const isProd = task.taskType === "production";
+                  const s1Pending = isProd && s0?.done && !s0?.approved && !s0?.rejected;
+                  const s1Approved = isProd && s0?.approved;
+                  const isUnderReview = s1Pending || task.status === "review";
+                  const isApproved = s1Approved || task.status === "completed";
+                  const isRejected = task.status === "blocked" || (s0?.rejected && !s0?.done);
+                  const lockDraft = saving || isUnderReview || isApproved;
+                  const lockSubmit = submitting || isUnderReview || isApproved;
+                  return (<>
+                <button onClick={() => saveTask(false)} disabled={lockDraft} style={{ padding: "8px 18px", borderRadius: 8, background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, opacity: lockDraft ? 0.5 : 1 }}>
                   <i className="bi bi-floppy" />{saving ? "Saving…" : "Save Draft"}
                 </button>
                 <button
                   onClick={submitForReview}
-                  disabled={submitting || task.status === "review" || task.status === "completed"}
+                  disabled={lockSubmit}
                   style={{
                     padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700,
-                    cursor: (task.status === "review" || task.status === "completed") ? "default" : "pointer",
+                    cursor: lockSubmit ? "default" : "pointer",
                     display: "flex", alignItems: "center", gap: 6, opacity: submitting ? 0.7 : 1,
-                    background: task.status === "review" ? "#FFFBEB" : task.status === "completed" ? "#F0FDF4" : task.status === "blocked" ? "#7C3AED" : "#7C3AED",
-                    color:      task.status === "review" ? "#B45309" : task.status === "completed" ? "#16A34A" : "#fff",
+                    background: isUnderReview ? "#FFFBEB" : isApproved ? "#F0FDF4" : "#7C3AED",
+                    color:      isUnderReview ? "#B45309" : isApproved ? "#16A34A" : "#fff",
                   }}>
-                  <i className={`bi ${task.status === "review" ? "bi-hourglass-split" : task.status === "completed" ? "bi-check-circle-fill" : task.status === "blocked" ? "bi-send-fill" : "bi-send"}`} />
-                  {submitting ? "Submitting…" : task.status === "review" ? "Under Review" : task.status === "completed" ? "Approved" : task.status === "blocked" ? "Resubmit for Review" : "Submit for Review"}
+                  <i className={`bi ${isUnderReview ? "bi-hourglass-split" : isApproved ? "bi-check-circle-fill" : isRejected ? "bi-send-fill" : "bi-send"}`} />
+                  {submitting ? "Submitting…" : isUnderReview ? "Under Review" : isApproved ? "Approved ✓" : isRejected ? "Resubmit for Review" : "Submit for Review"}
                 </button>
+                  </>);
+                })()}
               </div>
             </div>
 
@@ -577,12 +610,71 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
             )}
 
             {/* Status banners */}
-            {task.status === "review" && (
-              <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "#FFFBEB", border: "1.5px solid #FCD34D", display: "flex", alignItems: "center", gap: 10 }}>
-                <i className="bi bi-hourglass-split" style={{ color: "#D97706", fontSize: 18, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#92400E" }}>Under Review — Awaiting admin approval</div>
-                  <div style={{ fontSize: 12, color: "#B45309", marginTop: 2 }}>Your content has been submitted. You'll be notified once the admin reviews it.</div>
+            {(task.status === "review" || (task.stages?.[0]?.done && !task.stages?.[0]?.approved && !task.stages?.[0]?.rejected)) && (
+              <>
+                <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "#FFFBEB", border: "1.5px solid #FCD34D", display: "flex", alignItems: "center", gap: 10 }}>
+                  <i className="bi bi-hourglass-split" style={{ color: "#D97706", fontSize: 18, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#92400E" }}>Under Review — Awaiting admin approval</div>
+                    <div style={{ fontSize: 12, color: "#B45309", marginTop: 2 }}>Your content has been submitted. You'll be notified once the admin reviews it.</div>
+                  </div>
+                </div>
+                {(script || caption || tags?.length > 0 || task.pillar || task.referenceLink) && (
+                  <div style={{ marginTop: 12, padding: "14px 16px", borderRadius: 8, background: "#F8FAFC", border: "1.5px solid #E2E8F0" }}>
+                    <div style={{ fontWeight: 700, fontSize: 11, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                      <i className="bi bi-file-earmark-check-fill" style={{ color: "#7C3AED", fontSize: 13 }} />Submitted Content
+                    </div>
+                    {script && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>Script</div>
+                        <div style={{ fontSize: 12.5, color: "#374151", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, padding: "8px 10px", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: 140, overflowY: "auto" }}>{script}</div>
+                      </div>
+                    )}
+                    {caption && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>Caption</div>
+                        <div style={{ fontSize: 12.5, color: "#374151", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, padding: "8px 10px", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{caption}</div>
+                      </div>
+                    )}
+                    {tags?.length > 0 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6 }}>Hashtags</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {tags.map(tg => (
+                            <span key={tg} style={{ fontSize: 12, padding: "2px 10px", borderRadius: 20, background: "#EDE9FE", color: "#7C3AED", fontWeight: 700 }}>#{tg}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {pillar && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>Content Pillar</div>
+                        <span style={{ fontSize: 12, padding: "2px 10px", borderRadius: 20, background: "#F3E8FF", color: "#7C3AED", fontWeight: 700 }}>{pillar}</span>
+                      </div>
+                    )}
+                    {refLink && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 4 }}>Reference Link</div>
+                        <a href={refLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#4F46E5", wordBreak: "break-all", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <i className="bi bi-link-45deg" />{refLink.length > 55 ? refLink.slice(0, 55) + "…" : refLink}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            {task.stages?.[0]?.rejected === true && task.stages?.[0]?.done !== true && task.status !== "blocked" && (
+              <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "#FEF2F2", border: "1.5px solid #FCA5A5", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <i className="bi bi-x-octagon-fill" style={{ color: "#DC2626", fontSize: 18, flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#991B1B" }}>Stage Rejected — Please revise and resubmit</div>
+                  {task.stages[0].rejectReason && (
+                    <div style={{ fontSize: 12.5, color: "#7F1D1D", marginTop: 6, background: "#FEE2E2", padding: "8px 12px", borderRadius: 6, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                      <strong>Admin feedback:</strong> {task.stages[0].rejectReason}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: "#B45309", marginTop: 6 }}>Update your script/content above and click Resubmit when ready.</div>
                 </div>
               </div>
             )}
@@ -624,19 +716,25 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
         )}
 
         {task && (<>
+          {(() => {
+            const s0 = task.stages?.[0];
+            const isLocked = task.status === "review" || task.status === "completed"
+              || (task.taskType === "production" && s0?.done && !s0?.rejected);
+            const lockedStyle = { opacity: isLocked ? 0.75 : 1, pointerEvents: isLocked ? "none" : undefined };
+            return (<>
           {/* Content Pillar */}
-          <div className="tms-card">
+          <div className="tms-card" style={lockedStyle}>
             <label style={lblStyle}>Content Pillar</label>
-            <select value={pillar} onChange={e => setPillar(e.target.value)} style={{ ...inpStyle, resize: "none" }}>
+            <select value={pillar} onChange={e => setPillar(e.target.value)} disabled={isLocked} style={{ ...inpStyle, resize: "none", cursor: isLocked ? "default" : "pointer" }}>
               <option value="">Select a pillar…</option>
               {PILLAR_OPTS.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
 
           {/* Reference Link */}
-          <div className="tms-card">
+          <div className="tms-card" style={lockedStyle}>
             <label style={lblStyle}>Reference Reel / Link</label>
-            <input type="url" value={refLink} onChange={e => setRefLink(e.target.value)} placeholder="https://instagram.com/reel/…" style={{ ...inpStyle, resize: "none" }} />
+            <input type="url" value={refLink} onChange={e => setRefLink(e.target.value)} readOnly={isLocked} placeholder="https://instagram.com/reel/…" style={{ ...inpStyle, resize: "none" }} />
             {refLink && (
               <div style={{ marginTop: 10, padding: "11px 14px", background: "#F5F3FF", borderRadius: 8, border: "1px solid #DDD6FE", display: "flex", alignItems: "center", gap: 10 }}>
                 <i className="bi bi-play-circle-fill" style={{ color: "#7C3AED", fontSize: 20, flexShrink: 0 }} />
@@ -648,42 +746,47 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
           </div>
 
           {/* Script / Content */}
-          <div className="tms-card">
+          <div className="tms-card" style={lockedStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <label style={lblStyle}>Script / Content</label>
               <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>
                 {script.length} chars · {wordCount} words{narration ? ` · ${narration} narration` : ""}
               </div>
             </div>
-            <textarea value={script} onChange={e => onScriptChange(e.target.value)} rows={12}
+            <textarea value={script} onChange={isLocked ? undefined : e => onScriptChange(e.target.value)} readOnly={isLocked} rows={12}
               placeholder="Write the script or content copy here…"
               style={{ ...inpStyle, fontFamily: "monospace", fontSize: 13, lineHeight: 1.8 }} />
           </div>
 
           {/* Caption */}
-          <div className="tms-card">
+          <div className="tms-card" style={lockedStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <label style={lblStyle}>Caption</label>
               <span style={{ fontSize: 11, color: caption.length > 150 ? "#DC2626" : "#9CA3AF", marginBottom: 6 }}>{caption.length}/150</span>
             </div>
-            <textarea value={caption} onChange={e => setCaption(e.target.value)} rows={3}
+            <textarea value={caption} onChange={isLocked ? undefined : e => setCaption(e.target.value)} readOnly={isLocked} rows={3}
               placeholder="Instagram / social media caption…" style={inpStyle} />
           </div>
 
           {/* Hashtags */}
-          <div className="tms-card">
+          <div className="tms-card" style={lockedStyle}>
             <label style={lblStyle}>Hashtags</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 8, minHeight: 46, background: "#FAFAFA" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 8, minHeight: 46, background: isLocked ? "#F9FAFB" : "#FAFAFA" }}>
               {tags.map(tag => (
-                <span key={tag} onClick={() => setTags(p => p.filter(x => x !== tag))} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 10px", borderRadius: 20, background: "#EDE9FE", color: "#7C3AED", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  #{tag} <span style={{ fontSize: 14, lineHeight: 1 }}>×</span>
+                <span key={tag} onClick={isLocked ? undefined : () => setTags(p => p.filter(x => x !== tag))} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 10px", borderRadius: 20, background: "#EDE9FE", color: "#7C3AED", fontSize: 12, fontWeight: 700, cursor: isLocked ? "default" : "pointer" }}>
+                  #{tag}{!isLocked && <span style={{ fontSize: 14, lineHeight: 1 }}>×</span>}
                 </span>
               ))}
-              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag}
-                placeholder={tags.length === 0 ? "Type hashtag + Enter…" : ""}
-                style={{ border: "none", background: "transparent", outline: "none", fontSize: 13, minWidth: 130, flex: 1 }} />
+              {!isLocked && (
+                <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag}
+                  placeholder={tags.length === 0 ? "Type hashtag + Enter…" : ""}
+                  style={{ border: "none", background: "transparent", outline: "none", fontSize: 13, minWidth: 130, flex: 1 }} />
+              )}
+              {isLocked && tags.length === 0 && <span style={{ fontSize: 12, color: "#D1D5DB" }}>No hashtags added</span>}
             </div>
           </div>
+          </>);
+          })()}
 
           {/* Footer */}
           <div className="tms-card" style={{ padding: "12px 16px" }}>
@@ -716,7 +819,7 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
               { label: "Type",   val: task.contentType },
               { label: "Stage",  val: task.stage ? `Stage ${task.stage.replace("S", "")} — ${STAGE_LABEL[task.stage]}` : null, color: STAGE_COLOR[task.stage] },
               { label: "Status", val: { todo: "To Do", in_progress: "In Progress", review: "Under Review", completed: "Approved", blocked: "Rejected" }[task.status] || task.status, color: task.status === "review" ? "#B45309" : task.status === "completed" ? "#16A34A" : task.status === "blocked" ? "#DC2626" : undefined },
-              { label: "Due",    val: fmtD(task.dueDate), danger: isOverdue(task.dueDate) },
+              { label: "Due",    val: fmtDT(task.stages?.[0]?.deadline || task.dueDate), danger: isOverdue(task.stages?.[0]?.deadline || task.dueDate) },
             ].filter(r => r.val).map(r => (
               <div key={r.label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #F3F4F6", fontSize: 12.5 }}>
                 <span style={{ color: "#9CA3AF" }}>{r.label}</span>
@@ -782,7 +885,7 @@ function QueueTab({ tasks, role }) {
   const myQ   = tasks.filter(t => t.taskType === "production" && (!t.stage || t.stage === assignedStage));
   const buckets = ["all", "todo", "in_progress", "review", "completed"];
   const vis   = filter === "all" ? myQ : myQ.filter(t => t.status === filter);
-  const STATUS_LABEL = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Blocked" };
+  const STATUS_LABEL = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Rejected" };
 
   return (
     <>
@@ -854,9 +957,9 @@ function TaskDetailModal({ task, onClose }) {
             <div><div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 }}>Caption</div>
             <div style={{ fontSize: 12.5, color: "#374151", background: "#F8FAFC", borderRadius: 8, padding: "10px 12px", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{task.caption}</div></div>
           )}
-          {task.hashtags && (
+          {task.tags?.length > 0 && (
             <div><div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 }}>Hashtags</div>
-            <div style={{ fontSize: 12, color: "#6366F1", background: "#EEF2FF", borderRadius: 8, padding: "8px 12px", lineHeight: 1.8 }}>{task.hashtags}</div></div>
+            <div style={{ fontSize: 12, color: "#6366F1", background: "#EEF2FF", borderRadius: 8, padding: "8px 12px", lineHeight: 1.8 }}>{task.tags.map(tg => `#${tg}`).join(" ")}</div></div>
           )}
           {task.referenceLink && (
             <div><div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", marginBottom: 4 }}>Reference Link</div>
@@ -872,6 +975,7 @@ function TaskDetailModal({ task, onClose }) {
 // ─── WEEKLY TRACKER TAB (content team) ───────────────────────────────────────
 function WeeklyTrackerTab({ tasks }) {
   const [weekOffset, setWeekOffset] = useState(0);
+  const [brandFilter, setBrandFilter] = useState("");
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const dow   = today.getDay();
@@ -882,7 +986,10 @@ function WeeklyTrackerTab({ tasks }) {
   });
   const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const prodTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
+  const allProdTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
+  // Extract unique brands
+  const brands = [...new Map(allProdTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
+  const prodTasks = brandFilter ? allProdTasks.filter(t => t.brandId?._id === brandFilter) : allProdTasks;
 
   function tasksForDay(day) {
     return prodTasks.filter(t => {
@@ -898,7 +1005,7 @@ function WeeklyTrackerTab({ tasks }) {
     in_progress: { label: "In Progress", bg: "#DBEAFE", color: "#1D4ED8" },
     review:      { label: "Review",      bg: "#FEF3C7", color: "#B45309" },
     completed:   { label: "Done",        bg: "#DCFCE7", color: "#15803D" },
-    blocked:     { label: "Blocked",     bg: "#FEE2E2", color: "#DC2626" },
+    blocked:     { label: "Rejected",    bg: "#FEE2E2", color: "#DC2626" },
   };
 
   const weekStart = days[0].toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -907,6 +1014,23 @@ function WeeklyTrackerTab({ tasks }) {
 
   return (
     <div>
+      {/* Brand filter */}
+      {brands.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px" }}>Brand:</span>
+          <div onClick={() => setBrandFilter("")}
+            style={{ padding: "4px 13px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", background: !brandFilter ? "#7C3AED" : "#fff", color: !brandFilter ? "#fff" : "#374151", borderColor: !brandFilter ? "#7C3AED" : "#E5E7EB" }}>
+            All
+          </div>
+          {brands.map(b => (
+            <div key={b._id} onClick={() => setBrandFilter(brandFilter === b._id ? "" : b._id)}
+              style={{ padding: "4px 13px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", display: "flex", alignItems: "center", gap: 5, background: brandFilter === b._id ? b.color || "#7C3AED" : "#fff", color: brandFilter === b._id ? "#fff" : "#374151", borderColor: brandFilter === b._id ? b.color || "#7C3AED" : "#E5E7EB" }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: brandFilter === b._id ? "#fff" : b.color, display: "inline-block" }} />{b.name}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Week nav */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
         <button onClick={() => setWeekOffset(w => w - 1)}
@@ -1122,21 +1246,25 @@ function MyCalendarTab({ tasks }) {
   const today     = new Date();
   const DAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  // My tasks: only production tasks where S1 (script) stage has been admin-approved
+  // Show tasks where any stage is approved OR task is completed (covers both old and new approval flows)
   const myTasks = tasks.filter(t =>
     (t.taskType === "production" || t.contentType) &&
-    (t.stages || []).some(s => s.approved)
+    ((t.stages || []).some(s => s.approved) || t.status === "completed")
   );
 
   // All brands from my tasks
   const brands = [...new Map(myTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
   const filtered = brandFilter ? myTasks.filter(t => t.brandId?._id === brandFilter) : myTasks;
 
-  // Place approved tasks on their S1 stage deadline (or task dueDate)
+  // Place approved/completed tasks on most relevant date available
   function getApprovedDate(t) {
     const s1 = t.stages?.[0];
-    if (s1?.deadline) return new Date(s1.deadline);
-    if (t.dueDate) return new Date(t.dueDate);
+    if (s1?.deadline)   return new Date(s1.deadline);
+    if (t.dueDate)      return new Date(t.dueDate);
+    if (s1?.doneAt)     return new Date(s1.doneAt);
+    if (t.submittedAt)  return new Date(t.submittedAt);
+    if (t.updatedAt)    return new Date(t.updatedAt);
+    if (t.createdAt)    return new Date(t.createdAt);
     return null;
   }
 
@@ -1158,11 +1286,12 @@ function MyCalendarTab({ tasks }) {
       <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} />
 
       {/* Brand filter */}
-      {brands.length > 1 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      {brands.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px" }}>Brand:</span>
           <div onClick={() => setBrandFilter("")}
             style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", background: !brandFilter ? "#4F46E5" : "#fff", color: !brandFilter ? "#fff" : "#374151", borderColor: !brandFilter ? "#4F46E5" : "#E5E7EB" }}>
-            All Brands
+            All
           </div>
           {brands.map(b => (
             <div key={b._id} onClick={() => setBrandFilter(brandFilter === b._id ? "" : b._id)}
@@ -1507,6 +1636,16 @@ function SubmissionsTab({ tasks }) {
                       </div>
                     )}
 
+                    {/* Hashtags */}
+                    {t.tags?.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 5 }}>Hashtags</div>
+                        <div style={{ fontSize: 12, color: "#6366F1", background: "#EEF2FF", borderRadius: 8, padding: "8px 12px", lineHeight: 1.8 }}>
+                          {t.tags.map(tg => `#${tg}`).join("  ")}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Stage proof links */}
                     {(t.stages || []).some(s => s.proofUrls?.length) && (
                       <div style={{ marginTop: 10 }}>
@@ -1579,7 +1718,7 @@ function SprintBoardTab({ tasks }) {
                   <option value="in_progress">In Progress</option>
                   <option value="review">Review</option>
                   <option value="completed">Done</option>
-                  <option value="blocked">Blocked</option>
+                  <option value="blocked">Rejected</option>
                 </select>
               </div>
             ))}
@@ -1726,7 +1865,7 @@ function PerformanceTab({ tasks, employee }) {
 const NEXT_STAGE   = { S1: "S2", S2: "S3", S3: "S4", S4: "S4" };
 const STAGE_NUM    = { S1: 1, S2: 2, S3: 3, S4: 4 };
 const STATUS_COLOR = { todo: "#64748b", in_progress: "#3b82f6", review: "#f59e0b", completed: "#22c55e", blocked: "#ef4444" };
-const SL           = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Blocked" };
+const SL           = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Rejected" };
 const RL           = { content: "Content Writer", design: "Designer", editor: "Video Editor", developer: "Developer", general: "Team Member" };
 
 function calcGrade(tasks) {
@@ -2012,7 +2151,7 @@ function NonSMMSubmitModal({ task, onClose, onSubmit, submitting }) {
 
 // ─── Non-SMM Detail Modal ─────────────────────────────────────────────────────
 const PRIORITY_META_D = { low:["#F1F5F9","#64748B"], medium:["#EFF6FF","#1D4ED8"], high:["#FFFBEB","#B45309"], urgent:["#FEF2F2","#DC2626"] };
-const STATUS_META_D   = { todo:["#F1F5F9","#64748B","To Do"], in_progress:["#EFF6FF","#1D4ED8","In Progress"], review:["#FFFBEB","#B45309","In Review"], completed:["#ECFDF5","#15803D","Completed"], blocked:["#FEF2F2","#DC2626","Blocked"] };
+const STATUS_META_D   = { todo:["#F1F5F9","#64748B","To Do"], in_progress:["#EFF6FF","#1D4ED8","In Progress"], review:["#FFFBEB","#B45309","In Review"], completed:["#ECFDF5","#15803D","Completed"], blocked:["#FEF2F2","#DC2626","Rejected"] };
 
 function NonSMMDetailModal({ task, onClose, onSubmit }) {
   if (!task) return null;
@@ -2794,12 +2933,75 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 
 // ─── PORTAL THIS WEEK VIEW ────────────────────────────────────────────────────
 function PortalThisWeekView({ tasks, loading, empId }) {
-  const [submitInfo,   setSubmitInfo]   = useState(null);
-  const [nonSMMTask,   setNonSMMTask]   = useState(null);
-  const [nonSMMSaving, setNonSMMSaving] = useState(false);
-  const [detailTask,   setDetailTask]   = useState(null);
-  const [localTasks,   setLocalTasks]   = useState(tasks);
+  const [submitInfo,      setSubmitInfo]      = useState(null);
+  const [nonSMMTask,      setNonSMMTask]      = useState(null);
+  const [nonSMMSaving,    setNonSMMSaving]    = useState(false);
+  const [detailTask,      setDetailTask]      = useState(null);
+  const [localTasks,      setLocalTasks]      = useState(tasks);
+  const [weekOffset,      setWeekOffset]      = useState(0);
+  const [contentTasks,    setContentTasks]    = useState([]);
+  const [contentLoading,  setContentLoading]  = useState(true);
+  const [brands,          setBrands]          = useState([]);
+  const [brandFilter,     setBrandFilter]     = useState("");
+  const [selectedContent, setSelectedContent] = useState(null);
+
   useEffect(() => { setLocalTasks(tasks); }, [tasks]);
+
+  const today   = new Date(); today.setHours(0,0,0,0);
+  const dow     = today.getDay();
+  const monday  = new Date(today);
+  monday.setDate(today.getDate() - (dow===0 ? 6 : dow-1) + weekOffset * 7);
+  const days    = Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(monday.getDate()+i); return d; });
+  const sunday  = days[6];
+  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+  // Fetch approved content tasks for the current week
+  useEffect(() => {
+    setContentLoading(true);
+    const start = new Date(monday); start.setHours(0,0,0,0);
+    const end   = new Date(sunday); end.setHours(23,59,59,999);
+    const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
+    if (brandFilter) q.set("brandId", brandFilter);
+    fetch(`/api/employee/brand-tasks?${q}`, { headers: authH() })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setContentTasks(d.tasks || []);
+          const seen = new Set(); const bs = [];
+          (d.tasks || []).forEach(t => {
+            if (t.brandId && !seen.has(t.brandId._id)) { seen.add(t.brandId._id); bs.push(t.brandId); }
+          });
+          setBrands(prev => {
+            const all = [...prev, ...bs];
+            return [...new Map(all.map(b => [b._id, b])).values()];
+          });
+        }
+      })
+      .catch(console.error)
+      .finally(() => setContentLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset, brandFilter]);
+
+  function getTaskDate(t) {
+    if (t.scheduledFor) return new Date(t.scheduledFor);
+    if (t.dueDate)      return new Date(t.dueDate);
+    const s1 = t.stages?.[0];
+    if (s1?.deadline)  return new Date(s1.deadline);
+    if (s1?.doneAt)    return new Date(s1.doneAt);
+    if (t.submittedAt) return new Date(t.submittedAt);
+    if (t.updatedAt)   return new Date(t.updatedAt);
+    if (t.createdAt)   return new Date(t.createdAt);
+    return null;
+  }
+
+  function dayContentTasks(day) {
+    return contentTasks.filter(t => {
+      const d = getTaskDate(t);
+      if (!d) return false;
+      const dc = new Date(d); dc.setHours(0,0,0,0);
+      return dc.getTime() === day.getTime();
+    });
+  }
 
   async function handleNonSMMSubmit(notes) {
     setNonSMMSaving(true);
@@ -2818,55 +3020,101 @@ function PortalThisWeekView({ tasks, loading, empId }) {
     finally { setNonSMMSaving(false); }
   }
 
-  const today  = new Date(); today.setHours(0,0,0,0);
-  const dow    = today.getDay();
-  const monday = new Date(today); monday.setDate(today.getDate() - (dow===0 ? 6 : dow-1));
-  const days   = Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(monday.getDate()+i); return d; });
-  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const activeTasks    = localTasks.filter(t => t.status !== "completed");
+  const isCurrentWeek  = weekOffset === 0;
+  const weekLabel      = `${monday.toLocaleDateString("en-IN",{day:"numeric",month:"short"})} — ${sunday.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`;
 
-  function dayTasks(day) {
-    return localTasks.filter(t => {
-      if (!t.dueDate) return false;
-      const d = new Date(t.dueDate); d.setHours(0,0,0,0);
-      return d.getTime() === day.getTime();
-    });
-  }
-  const activeTasks = localTasks.filter(t => t.status !== "completed");
+  const STATUS_STYLE = {
+    todo:        { label:"To Do",       bg:"#1e2330", color:"#94a3b8" },
+    in_progress: { label:"In Progress", bg:"#1e3a5f", color:"#60a5fa" },
+    review:      { label:"Review",      bg:"#3b2a00", color:"#fbbf24" },
+    completed:   { label:"Done",        bg:"#052e16", color:"#4ade80" },
+    blocked:     { label:"Rejected",    bg:"#3b0a0a", color:"#f87171" },
+  };
 
   return (
     <div className="ep-content">
-      <div className="ep-card" style={{ marginBottom:18 }}>
-        <div className="ep-card-title">
-          <i className="bi bi-calendar3" style={{ color:"#f5a623" }} />
-          {monday.toLocaleDateString("en-IN",{day:"numeric",month:"short"})} — {days[6].toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}
-          <span style={{ fontSize:12, color:"#64748b", fontWeight:400 }}>  · {activeTasks.length} active</span>
+      {/* ── Brand filter ── */}
+      {brands.length > 0 && (
+        <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:".5px" }}>Brand:</span>
+          <button onClick={() => setBrandFilter("")}
+            style={{ padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid", background:!brandFilter?"#5A57FB":"transparent", color:!brandFilter?"#fff":"#64748b", borderColor:!brandFilter?"#5A57FB":"#334155", fontFamily:"inherit" }}>
+            All
+          </button>
+          {brands.map(b => (
+            <button key={b._id} onClick={() => setBrandFilter(brandFilter===b._id?"":b._id)}
+              style={{ padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid", display:"flex", alignItems:"center", gap:5, background:brandFilter===b._id?b.color||"#5A57FB":"transparent", color:brandFilter===b._id?"#fff":"#94a3b8", borderColor:brandFilter===b._id?b.color||"#5A57FB":"#334155", fontFamily:"inherit" }}>
+              <span style={{ width:7, height:7, borderRadius:"50%", background:brandFilter===b._id?"#fff":b.color, display:"inline-block", flexShrink:0 }} />{b.name}
+            </button>
+          ))}
         </div>
-        {loading ? <div className="ep-empty"><div className="ep-spinner" /></div> : (
-          <div className="ep-week-grid">
-            {days.map((day,i) => {
-              const dt      = dayTasks(day);
-              const isToday = day.getTime() === today.getTime();
-              return (
-                <div key={i} className={`ep-day-col ${isToday?"today-col":""}`}>
-                  <div className={`ep-day-name ${isToday?"today-name":""}`}>{DAY_NAMES[i]}</div>
-                  <div className="ep-day-num">{day.getDate()}</div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                    {dt.map(t => (
-                      <div key={t._id} onClick={() => setSubmitInfo({task:t,stageKey:null})}
-                        style={{ padding:"2px 5px", borderRadius:4, background:(t.brandId?.color||"#f5a623")+"22", color:t.brandId?.color||"#f5a623", fontSize:9.5, fontWeight:600, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}
-                        title={t.nomenclature||t.title}>
-                        {t.brandId?.name||(t.nomenclature||t.title||"").slice(0,8)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      )}
+
+      {/* ── Week navigation ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        <button onClick={() => setWeekOffset(w => w-1)}
+          style={{ background:"#1e2330", border:"1px solid #334155", borderRadius:8, padding:"6px 12px", cursor:"pointer", color:"#94a3b8", fontSize:15, fontFamily:"inherit" }}>‹</button>
+        <span style={{ fontWeight:700, fontSize:14, color:"#e2e8f0", flex:1 }}>{weekLabel}</span>
+        <button onClick={() => setWeekOffset(w => w+1)} disabled={isCurrentWeek}
+          style={{ background:"#1e2330", border:"1px solid #334155", borderRadius:8, padding:"6px 12px", cursor:isCurrentWeek?"default":"pointer", color:isCurrentWeek?"#334155":"#94a3b8", fontSize:15, fontFamily:"inherit" }}>›</button>
+        {!isCurrentWeek && (
+          <button onClick={() => setWeekOffset(0)}
+            style={{ background:"rgba(90,87,251,.15)", border:"1px solid #5A57FB", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12, fontWeight:700, color:"#5A57FB", fontFamily:"inherit" }}>
+            This Week
+          </button>
         )}
+        <span style={{ fontSize:11, color:"#475569" }}>{contentTasks.length} task{contentTasks.length!==1?"s":""}</span>
       </div>
+
+      {/* ── Weekly content grid ── */}
+      {selectedContent && <PortalCalendarDetailModal task={selectedContent} onClose={() => setSelectedContent(null)} />}
+      <div className="ep-card" style={{ padding:0, overflow:"hidden", marginBottom:20 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:"1px solid #252a36" }}>
+          {DAY_NAMES.map((name, i) => {
+            const isToday = days[i].getTime() === today.getTime();
+            return (
+              <div key={name} style={{ padding:"10px 4px", textAlign:"center" }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:".5px", color:isToday?"#5A57FB":"#475569" }}>{name}</div>
+                <div style={{ width:28, height:28, borderRadius:"50%", margin:"4px auto 0", display:"flex", alignItems:"center", justifyContent:"center",
+                  background:isToday?"#5A57FB":"transparent", color:isToday?"#fff":"#94a3b8", fontWeight:isToday?800:400, fontSize:14 }}>
+                  {days[i].getDate()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", minHeight:120 }}>
+          {days.map((day, i) => {
+            const dt      = dayContentTasks(day);
+            const isToday = day.getTime() === today.getTime();
+            return (
+              <div key={i} style={{ padding:"8px 5px", borderRight:"1px solid #252a36", background:isToday?"rgba(90,87,251,.04)":"transparent", minHeight:120 }}>
+                {contentLoading ? (
+                  <div style={{ display:"flex", justifyContent:"center", paddingTop:16 }}><div className="ep-spinner" style={{ width:14, height:14 }} /></div>
+                ) : dt.length === 0 ? (
+                  <div style={{ fontSize:9, color:"#334155", textAlign:"center", marginTop:12 }}>—</div>
+                ) : dt.map(t => {
+                  const brandColor = t.brandId?.color || "#5A57FB";
+                  const ct = CAL_CTYPE[t.contentType];
+                  return (
+                    <div key={t._id} onClick={() => setSelectedContent(t)}
+                      style={{ fontSize:10, padding:"4px 6px", borderRadius:5, marginBottom:4, background:brandColor+"18", color:brandColor, fontWeight:600, cursor:"pointer", borderLeft:`3px solid ${brandColor}`, lineHeight:1.3 }}>
+                      {ct && <i className={`bi ${ct.icon}`} style={{ marginRight:3, fontSize:9 }} />}
+                      <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.nomenclature||t.title}</span>
+                      {t.brandId && <span style={{ fontSize:9, opacity:.75 }}>{t.brandId.name}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── My Active Tasks ── */}
       <div className="ep-sec-hd">
-        <div className="ep-sec-title">📋 All Active Tasks</div>
+        <div className="ep-sec-title">📋 My Active Tasks</div>
         <span style={{ fontSize:12, color:"#64748b" }}>{activeTasks.length} tasks</span>
       </div>
       {loading ? <div className="ep-empty"><div className="ep-spinner" /></div>
@@ -3191,7 +3439,7 @@ function PortalCalendarDetailModal({ task, onClose }) {
           {task.pillar && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Content Pillar</div><div style={{ fontSize:13, color:"#7C3AED", fontWeight:600 }}><i className="bi bi-tag me-1" />{task.pillar}</div></div>}
           {task.description && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Script / Description</div><div style={{ fontSize:12.5, color:"#374151", background:"#F8FAFC", borderRadius:8, padding:"10px 12px", lineHeight:1.7, whiteSpace:"pre-wrap", maxHeight:180, overflowY:"auto" }}>{task.description}</div></div>}
           {task.caption && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Caption</div><div style={{ fontSize:12.5, color:"#374151", background:"#F8FAFC", borderRadius:8, padding:"10px 12px", lineHeight:1.7, whiteSpace:"pre-wrap" }}>{task.caption}</div></div>}
-          {task.hashtags && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Hashtags</div><div style={{ fontSize:12, color:"#6366F1", background:"#EEF2FF", borderRadius:8, padding:"8px 12px", lineHeight:1.8 }}>{task.hashtags}</div></div>}
+          {task.tags?.length > 0 && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Hashtags</div><div style={{ fontSize:12, color:"#6366F1", background:"#EEF2FF", borderRadius:8, padding:"8px 12px", lineHeight:1.8 }}>{task.tags.map(tg => `#${tg}`).join(" ")}</div></div>}
           {task.referenceLink && <div><div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", marginBottom:4 }}>Reference</div><a href={task.referenceLink} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#4F46E5", display:"inline-flex", alignItems:"center", gap:4, background:"#EEF2FF", padding:"6px 12px", borderRadius:8, textDecoration:"none" }}><i className="bi bi-link-45deg" /> View Reference</a></div>}
         </div>
       </div>
@@ -3240,11 +3488,22 @@ function PortalCalendarView() {
   const cells     = Array(offset).fill(null).concat(Array.from({ length: daysInMon }, (_, i) => i + 1));
   const DAY_HEADS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
+  function getTaskDate(t) {
+    if (t.scheduledFor) return new Date(t.scheduledFor);
+    if (t.dueDate)      return new Date(t.dueDate);
+    const s1 = t.stages?.[0];
+    if (s1?.deadline)  return new Date(s1.deadline);
+    if (s1?.doneAt)    return new Date(s1.doneAt);
+    if (t.submittedAt) return new Date(t.submittedAt);
+    if (t.updatedAt)   return new Date(t.updatedAt);
+    if (t.createdAt)   return new Date(t.createdAt);
+    return null;
+  }
+
   function dayTasks(day) {
     return tasks.filter(t => {
-      const raw = t.scheduledFor || t.dueDate;
-      if (!raw) return false;
-      const d = new Date(raw);
+      const d = getTaskDate(t);
+      if (!d) return false;
       return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
     });
   }
@@ -3260,7 +3519,7 @@ function PortalCalendarView() {
         <button onClick={prevMonth} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><i className="bi bi-chevron-left" style={{ color:"#374151" }} /></button>
         <div>
           <div style={{ fontWeight:800, fontSize:17, color:"#1e293b" }}>{CAL_MONTHS[month]} {year}</div>
-          <div style={{ fontSize:12, color:"#64748b" }}>{tasks.length} content tasks</div>
+          <div style={{ fontSize:12, color:"#64748b" }}>{tasks.length} approved content task{tasks.length !== 1 ? "s" : ""}</div>
         </div>
         <button onClick={nextMonth} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><i className="bi bi-chevron-right" style={{ color:"#374151" }} /></button>
         <button onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:600, color:"#374151" }}>Today</button>

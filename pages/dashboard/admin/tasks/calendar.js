@@ -43,17 +43,27 @@ export default function ContentCalendarPage() {
       .then(r => r.json()).then(d => { if (d.success) setBrands(d.brands || []); }).catch(() => {});
   }, []);
 
-  /* ── Fetch tasks for the month ── */
+  /* ── Fetch tasks for the month (all production tasks across all departments) ── */
   useEffect(() => {
     setLoading(true);
     const start = new Date(year, month, 1).toISOString();
     const end   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
-    const q = new URLSearchParams({ limit: 500, dateStart: start, dateEnd: end, taskType: "production" });
+    // Fetch production tasks from all departments; no taskType filter so stage-based tasks also appear
+    const q = new URLSearchParams({ limit: 500, dateStart: start, dateEnd: end });
     if (brandFilter) q.set("brandId", brandFilter);
 
     fetch(`/api/admin/tasks?${q}`, { credentials: "include" })
       .then(r => r.json())
-      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .then(d => {
+        if (d.success) {
+          // Show tasks where S1 is approved OR task is completed (covers both new and old approval flows)
+          const approved = (d.tasks || []).filter(t =>
+            (t.taskType === "production" || t.contentType) &&
+            ((t.stages || []).some(s => s.approved) || t.status === "completed")
+          );
+          setTasks(approved);
+        }
+      })
       .catch(() => toast.error("Failed to load calendar"))
       .finally(() => setLoading(false));
   }, [year, month, brandFilter]);
@@ -71,17 +81,23 @@ export default function ContentCalendarPage() {
     setSelectedDay(null);
   };
 
-  /* ── Group tasks by day (scheduledFor → dueDate → earliest stage deadline) ── */
+  /* ── Group tasks by day: scheduledFor → dueDate → stage deadline → doneAt → submittedAt → updatedAt → createdAt ── */
   const tasksByDay = {};
   for (const t of tasks) {
     let d = t.scheduledFor ? new Date(t.scheduledFor)
           : t.dueDate      ? new Date(t.dueDate)
           : null;
-    // Fall back to the earliest stage deadline if no task-level date
     if (!d && t.stages?.length) {
       const deadlines = t.stages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
       if (deadlines.length) d = deadlines.reduce((a, b) => a < b ? a : b);
     }
+    if (!d && t.stages?.length) {
+      const doneDates = t.stages.map(s => s.doneAt).filter(Boolean).map(x => new Date(x));
+      if (doneDates.length) d = doneDates[0];
+    }
+    if (!d && t.submittedAt) d = new Date(t.submittedAt);
+    if (!d && t.updatedAt)   d = new Date(t.updatedAt);
+    if (!d && t.createdAt)   d = new Date(t.createdAt);
     if (!d) continue;
     if (d.getFullYear() !== year || d.getMonth() !== month) continue;
     const day = d.getDate();
@@ -147,7 +163,7 @@ export default function ContentCalendarPage() {
                   <button className="cal-btn" onClick={prevMonth}><i className="bi bi-chevron-left" /></button>
                   <div>
                     <h5 className="admin-main-heading" style={{ margin: 0 }}>{MONTHS_FULL[month]} {year}</h5>
-                    <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{tasks.length} content team tasks</p>
+                    <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{tasks.length} approved content task{tasks.length !== 1 ? "s" : ""}</p>
                   </div>
                   <button className="cal-btn" onClick={nextMonth}><i className="bi bi-chevron-right" /></button>
                   <button className="cal-btn" onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}>
@@ -295,6 +311,11 @@ export default function ContentCalendarPage() {
                   {t.pillar && (
                     <div style={{ fontSize: 10, color: "#6366F1", marginTop: 4, fontWeight: 600 }}>
                       <i className="bi bi-tag me-1" />{t.pillar}
+                    </div>
+                  )}
+                  {t.tags?.length > 0 && (
+                    <div style={{ fontSize: 10, color: "#6366F1", marginTop: 4, lineHeight: 1.6 }}>
+                      {t.tags.slice(0, 5).map(tg => `#${tg}`).join(" ")}{t.tags.length > 5 ? " …" : ""}
                     </div>
                   )}
                   {t.stages?.[0]?.assignedTo?.length > 0 && (

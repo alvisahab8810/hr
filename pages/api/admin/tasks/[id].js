@@ -91,6 +91,7 @@ export default async function handler(req, res) {
         .populate("projectId",  "name status")
         .populate("sprintId",   "name status")
         .populate("clientId",   "name company")
+        .populate("brandId",    "name color")
         .lean();
 
       // Log each detected change
@@ -179,6 +180,11 @@ export default async function handler(req, res) {
       if (Array.isArray(updates.stages)) {
         const existingStages = existing.stages || [];
 
+        // Task-level assignedTo as fallback when stage has no assignees
+        const taskLevelIds = Array.isArray(existing.assignedTo)
+          ? existing.assignedTo.map(a => a?._id ? String(a._id) : String(a)).filter(Boolean)
+          : existing.assignedTo ? [String(existing.assignedTo)] : [];
+
         // Collect all stage-assignee IDs that need emails
         const approvalEmailJobs = [];
         const rejectionEmailJobs = [];
@@ -187,8 +193,10 @@ export default async function handler(req, res) {
         updates.stages.forEach((newStg, i) => {
           const oldStg = existingStages[i] || {};
           const stageName  = newStg.name || STAGE_NAMES_LIST[i] || `Stage ${i + 1}`;
-          const assigneeIds = Array.isArray(newStg.assignedTo) ? newStg.assignedTo.map(String) : [];
-          const oldAssigneeIds = Array.isArray(oldStg.assignedTo) ? oldStg.assignedTo.map(String) : [];
+          // Handle both plain ObjectId strings and populated objects; fall back to task-level assignedTo
+          const rawIds = Array.isArray(newStg.assignedTo) ? newStg.assignedTo.map(a => a?._id ? String(a._id) : String(a)).filter(Boolean) : [];
+          const assigneeIds = rawIds.length > 0 ? rawIds : taskLevelIds;
+          const oldAssigneeIds = Array.isArray(oldStg.assignedTo) ? oldStg.assignedTo.map(a => a?._id ? String(a._id) : String(a)).filter(Boolean) : [];
 
           // Stage approved
           if (newStg.approved && !oldStg.approved) {

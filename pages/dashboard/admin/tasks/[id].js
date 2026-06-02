@@ -15,7 +15,7 @@ const STATUS_META = {
   in_progress: { label: "In Progress", bg: "#DBEAFE", color: "#1D4ED8", border: "#93C5FD" },
   review:      { label: "Review",      bg: "#FEF3C7", color: "#B45309", border: "#FDE68A" },
   completed:   { label: "Completed",   bg: "#DCFCE7", color: "#15803D", border: "#BBF7D0" },
-  blocked:     { label: "Blocked",     bg: "#FEE2E2", color: "#DC2626", border: "#FCA5A5" },
+  blocked:     { label: "Rejected",    bg: "#FEE2E2", color: "#DC2626", border: "#FCA5A5" },
 };
 
 const PRIORITY_META = {
@@ -43,13 +43,19 @@ const ACTION_LABELS = {
   comment_added:       "Comment added",
   attachment_added:    "Attachment uploaded",
   completed:           "Task completed",
-  blocked:             "Task blocked",
+  blocked:             "Task rejected",
   stage_done:          "Stage marked done",
 };
 
 const STAGE_COLORS = ["#F59E0B", "#6366F1", "#10B981", "#EC4899"];
 const STAGE_NAMES  = ["Script/Concept", "Shoot/Design", "Edit/Develop", "Posted/Live"];
 const PRIORITIES   = ["low", "medium", "high", "urgent"];
+
+// Map raw DB status values to display labels
+function fmtStatusVal(s) {
+  const M = { blocked: "Rejected", in_progress: "In Progress", todo: "To Do", review: "In Review", completed: "Completed" };
+  return M[s] || s;
+}
 
 const STAGE_DEPT_KEYWORDS = [
   { include: ["content team"],           exclude: [] },
@@ -329,10 +335,18 @@ export default function TaskDetail() {
   const handleApprove = async () => {
     if (!window.confirm("Mark this task as Completed?")) return;
     try {
+      const now = new Date().toISOString();
+      const updates = { status: "completed", performedByName: adminUser?.name || "Admin" };
+      // For production tasks, also mark S1 stage as done + approved so calendars pick it up
+      if (task?.taskType === "production" && task.stages?.length > 0) {
+        updates.stages = (task.stages || []).map((s, i) =>
+          i === 0 ? { ...s, done: true, approved: true, rejected: false, rejectReason: "", doneAt: s.doneAt || now } : s
+        );
+      }
       const res  = await fetch(`/api/admin/tasks/${id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "completed", performedByName: adminUser?.name || "Admin" }),
+        body: JSON.stringify(updates),
       });
       const data = await res.json();
       if (data.success) { toast.success("Task approved!"); fetchTask(); }
@@ -573,11 +587,6 @@ export default function TaskDetail() {
                   <button className="tdbtn tdbtn-ghost" onClick={() => router.push("/dashboard/admin/tasks/list")}>
                     <i className="bi bi-arrow-left" /> Back
                   </button>
-                  {task.status === "review" && (
-                    <span style={{ padding: "6px 14px", borderRadius: 8, background: "#FEF3C7", color: "#B45309", fontSize: 12, fontWeight: 700, border: "1.5px solid #FDE68A" }}>
-                      <i className="bi bi-hourglass-split me-1" />Awaiting Client Review
-                    </span>
-                  )}
                   {task.taskType === "production" && task.status === "in_progress" && (() => {
                     const stageNum = task.stage ? parseInt(task.stage.replace("S","")) : 1;
                     const activeIdx = stageNum - 1;
@@ -601,12 +610,6 @@ export default function TaskDetail() {
                     }
                     return null;
                   })()}
-                  <button className="tdbtn tdbtn-green" onClick={handleApprove} disabled={task.status === "completed"}>
-                    <i className="bi bi-check-circle-fill" /> Approve
-                  </button>
-                  <button className="tdbtn tdbtn-red" onClick={() => setShowReject(true)} disabled={task.status === "blocked"}>
-                    <i className="bi bi-x-circle-fill" /> Reject
-                  </button>
                 </div>
               </div>
 
@@ -898,7 +901,7 @@ export default function TaskDetail() {
                                 {ACTION_LABELS[a.action] || a.action}
                                 {a.from && a.to && (
                                   <span style={{ fontWeight: 400, color: "#64748B" }}>
-                                    {" "}— <span style={{ textDecoration: "line-through", color: "#94A3B8" }}>{a.from}</span> → <strong>{a.to}</strong>
+                                    {" "}— <span style={{ textDecoration: "line-through", color: "#94A3B8" }}>{fmtStatusVal(a.from)}</span> → <strong>{fmtStatusVal(a.to)}</strong>
                                   </span>
                                 )}
                               </div>
@@ -933,7 +936,7 @@ export default function TaskDetail() {
                                 {ACTION_LABELS[a.action] || a.action}
                                 {a.from && a.to && (
                                   <span style={{ fontWeight: 400, color: "#64748B" }}>
-                                    {" "}— <span style={{ textDecoration: "line-through", color: "#94A3B8" }}>{a.from}</span> → <strong>{a.to}</strong>
+                                    {" "}— <span style={{ textDecoration: "line-through", color: "#94A3B8" }}>{fmtStatusVal(a.from)}</span> → <strong>{fmtStatusVal(a.to)}</strong>
                                   </span>
                                 )}
                               </div>
@@ -999,7 +1002,7 @@ export default function TaskDetail() {
                           <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Hashtags</div>
                           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {task.tags.map(tag => (
-                              <span key={tag} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 20, background: "#FDE68A", color: "#92400E", fontWeight: 600 }}>{tag}</span>
+                              <span key={tag} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 20, background: "#FDE68A", color: "#92400E", fontWeight: 600 }}>#{tag}</span>
                             ))}
                           </div>
                         </div>
@@ -1070,7 +1073,7 @@ export default function TaskDetail() {
                         <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, marginBottom: 6 }}>TAGS</div>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           {task.tags.map((tag) => (
-                            <span key={tag} className="tdbadge" style={{ background: "#F1F5F9", color: "#64748B" }}>{tag}</span>
+                            <span key={tag} className="tdbadge" style={{ background: "#EEF2FF", color: "#4F46E5" }}>#{tag}</span>
                           ))}
                         </div>
                       </div>
@@ -1412,7 +1415,7 @@ export default function TaskDetail() {
                 <i className="bi bi-exclamation-triangle-fill me-2" />
                 {task?.status === "review"
                   ? "The employee will see your feedback and can revise then resubmit."
-                  : "Rejecting will set status to Blocked and notify the assignee."}
+                  : "Rejecting will set status to Rejected and notify the assignee."}
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", display: "block", marginBottom: 6 }}>

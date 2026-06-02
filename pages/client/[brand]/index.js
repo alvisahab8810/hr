@@ -1678,8 +1678,11 @@ function ApprovalsView({ overview, onRefresh }) {
 /* ─── Content calendar view ──────────────────────────────────────────────── */
 function CalendarView({ overview }) {
   const { allTasks = [] } = overview || {};
-  // Only production (social media) tasks written by content team
-  const content = allTasks.filter(t => t.taskType === "production" || t.contentType);
+  // Only approved/completed production tasks — client sees the approved content plan
+  const content = allTasks.filter(t =>
+    (t.taskType === "production" || t.contentType) &&
+    ((t.stages || []).some(s => s.approved) || t.status === "completed")
+  );
 
   const todayReal = new Date();
   const [year,  setYear]  = useState(todayReal.getFullYear());
@@ -1693,9 +1696,21 @@ function CalendarView({ overview }) {
   const startOfMo = new Date(year, month, 1);
   const startDow  = (startOfMo.getDay() + 6) % 7; // Mon=0
 
+  function getTaskDate(t) {
+    if (t.scheduledFor) return new Date(t.scheduledFor);
+    if (t.dueDate)      return new Date(t.dueDate);
+    const s1 = t.stages?.[0];
+    if (s1?.deadline)  return new Date(s1.deadline);
+    if (s1?.doneAt)    return new Date(s1.doneAt);
+    if (t.submittedAt) return new Date(t.submittedAt);
+    if (t.updatedAt)   return new Date(t.updatedAt);
+    if (t.createdAt)   return new Date(t.createdAt);
+    return null;
+  }
+
   function tasksByDay(day) {
     return content.filter(t => {
-      const d = t.scheduledFor ? new Date(t.scheduledFor) : t.dueDate ? new Date(t.dueDate) : null;
+      const d = getTaskDate(t);
       if (!d) return false;
       return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
     });
@@ -1718,7 +1733,7 @@ function CalendarView({ overview }) {
             </button>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a" }}>{MONTH_NAMES[month]} {year}</div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>{content.filter(t => { const d = t.scheduledFor ? new Date(t.scheduledFor) : t.dueDate ? new Date(t.dueDate) : null; return d && d.getFullYear()===year && d.getMonth()===month; }).length} content pieces</div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>{content.filter(t => { const d = getTaskDate(t); return d && d.getFullYear()===year && d.getMonth()===month; }).length} content pieces</div>
             </div>
             <button onClick={nextMonth} style={{ border: "1.5px solid #E2E8F0", background: "#fff", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
               <i className="bi bi-chevron-right" />

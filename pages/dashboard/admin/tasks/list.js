@@ -46,7 +46,7 @@ const STATUS_META = {
   in_progress: { label: "In Progress", color: "#1D4ED8", bg: "#DBEAFE" },
   review:      { label: "Review",      color: "#B45309", bg: "#FEF3C7" },
   completed:   { label: "Done",        color: "#15803D", bg: "#DCFCE7" },
-  blocked:     { label: "Blocked",     color: "#DC2626", bg: "#FEE2E2" },
+  blocked:     { label: "Rejected",    color: "#DC2626", bg: "#FEE2E2" },
 };
 
 const CONTENT_META = {
@@ -147,6 +147,12 @@ function fmtDate(d) {
   if (!d) return "—";
   const dt = new Date(d);
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]} '${String(dt.getFullYear()).slice(2)}`;
+}
+function fmtDateWithTime(d) {
+  if (!d) return "—";
+  const dt  = new Date(d);
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getDate()} ${MONTHS[dt.getMonth()]} '${String(dt.getFullYear()).slice(2)}, ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
 function fmtDateTimeInput(d) {
   if (!d) return "";
@@ -776,7 +782,7 @@ export default function TasksListPage() {
                                             const [bg, fg] = avatarColor(n);
                                             return <div key={emp._id} title={n} style={{ width: 22, height: 22, borderRadius: 6, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 800 }}>{getInitials(n)}</div>;
                                           })}
-                                          {stg.deadline && <div style={{ fontSize: 9, color: "#94A3B8", whiteSpace: "nowrap", marginLeft: 2 }}>{fmtDate(stg.deadline)}</div>}
+                                          {stg.deadline && <div style={{ fontSize: 9, color: "#94A3B8", whiteSpace: "nowrap", marginLeft: 2 }}>{fmtDateWithTime(stg.deadline)}</div>}
                                         </div>
                                       ) : <span style={{ color: "#CBD5E1" }}>—</span>}
                                     </td>

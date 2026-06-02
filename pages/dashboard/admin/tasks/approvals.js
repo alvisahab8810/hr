@@ -77,13 +77,21 @@ export default function ApprovalsPage() {
     finally { setSaving(p => ({ ...p, [key]: false })); }
   }
 
-  async function rejectStage(task, stageIdx, reason) {
+  async function rejectStage(task, stageIdx, reason, newDeadline) {
     if (!reason?.trim()) return toast.error("Rejection reason required");
     const key = `${task._id}_${stageIdx}_rej`;
     setSaving(p => ({ ...p, [key]: true }));
     try {
       const stages = (task.stages || []).map((s, i) =>
-        i === stageIdx ? { ...s, done: false, approved: false, rejected: true, rejectReason: reason, doneAt: null } : s
+        i === stageIdx ? {
+          ...s,
+          done: false,
+          approved: false,
+          rejected: true,
+          rejectReason: reason,
+          doneAt: null,
+          ...(newDeadline ? { deadline: new Date(newDeadline).toISOString() } : {}),
+        } : s
       );
       const res = await fetch(`/api/admin/tasks/${task._id}`, {
         method: "PATCH", credentials: "include",
@@ -101,10 +109,18 @@ export default function ApprovalsPage() {
     const key = `${task._id}_task`;
     setSaving(p => ({ ...p, [key]: true }));
     try {
+      const now = new Date().toISOString();
+      const updates = { status: "completed" };
+      // For production tasks, also mark S1 stage as done + approved so calendars pick it up
+      if (task.taskType === "production" && task.stages?.length > 0) {
+        updates.stages = (task.stages || []).map((s, i) =>
+          i === 0 ? { ...s, done: true, approved: true, rejected: false, rejectReason: "", doneAt: s.doneAt || now } : s
+        );
+      }
       const res = await fetch(`/api/admin/tasks/${task._id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "completed" }),
+        body: JSON.stringify(updates),
       });
       const data = await res.json();
       if (data.success) { toast.success("Task approved!"); load(); }
@@ -113,7 +129,7 @@ export default function ApprovalsPage() {
     finally { setSaving(p => ({ ...p, [key]: false })); }
   }
 
-  async function rejectTask(task, reason) {
+  async function rejectTask(task, reason, newDeadline) {
     if (!reason?.trim()) return toast.error("Rejection reason required");
     const key = `${task._id}_task_rej`;
     setSaving(p => ({ ...p, [key]: true }));
@@ -121,7 +137,11 @@ export default function ApprovalsPage() {
       const res = await fetch(`/api/admin/tasks/${task._id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "blocked", reviewNote: reason }),
+        body: JSON.stringify({
+          status: "blocked",
+          reviewNote: reason,
+          ...(newDeadline ? { dueDate: new Date(newDeadline).toISOString() } : {}),
+        }),
       });
       const data = await res.json();
       if (data.success) { toast.success("Rejected & returned to employee"); load(); }
@@ -136,11 +156,17 @@ export default function ApprovalsPage() {
     taskList.forEach(t => {
       const stages = t.stages || [];
       if (stages.length > 0) {
+        let hasStageActivity = false;
         stages.forEach((s, i) => {
           if (s.done || s.approved || s.rejected) {
+            hasStageActivity = true;
             items.push({ task: t, stageIdx: i, stg: s, type: "stage" });
           }
         });
+        // Production task in "review" status but no stage marked done yet (e.g. submitted via old flow)
+        if (!hasStageActivity && ["review", "completed", "blocked"].includes(t.status)) {
+          items.push({ task: t, stageIdx: -1, stg: null, type: "task" });
+        }
       } else {
         // Non-production task (no stages) - show at task level
         if (["review", "completed", "blocked", "in_progress"].includes(t.status)) {
@@ -283,7 +309,7 @@ export default function ApprovalsPage() {
                         onToggle={() => setExpanded(p => ({ ...p, [key]: !p[key] }))}
                         saving={!!saving[key] || !!saving[`${key}_rej`]}
                         onApprove={() => approveStage(t, stageIdx)}
-                        onReject={(reason) => rejectStage(t, stageIdx, reason)}
+                        onReject={(reason, deadline) => rejectStage(t, stageIdx, reason, deadline)}
                         readOnly={stg.approved || stg.rejected}
                       />
                     );
@@ -296,7 +322,7 @@ export default function ApprovalsPage() {
                       onToggle={() => setExpanded(p => ({ ...p, [key]: !p[key] }))}
                       saving={!!saving[`${t._id}_task`] || !!saving[`${t._id}_task_rej`]}
                       onApprove={() => approveTask(t)}
-                      onReject={(reason) => rejectTask(t, reason)}
+                      onReject={(reason, deadline) => rejectTask(t, reason, deadline)}
                       readOnly={["completed", "blocked"].includes(t.status)}
                     />
                   );
@@ -314,6 +340,7 @@ export default function ApprovalsPage() {
 function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectText, setRejectText] = useState("");
+  const [newDeadline, setNewDeadline] = useState("");
 
   const TYPE_LABELS = { project: "Project", sprint: "Sprint", manual: "Task", production: "Production" };
   const TYPE_COLORS = { project: "#7C3AED", sprint: "#F59E0B", manual: "#64748B", production: "#10B981" };
@@ -356,6 +383,46 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
 
       {isOpen && (
         <div className="ap-card-body" style={{ paddingTop: 14 }}>
+          {/* Full content for production tasks — script, caption, hashtags, pillar, reference */}
+          {t.taskType === "production" && (t.description || t.caption || t.tags?.length > 0 || t.pillar || t.referenceLink) ? (
+            <div style={{ marginBottom: 14 }}>
+              {t.pillar && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Content Pillar</div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>{t.pillar}</span>
+                </div>
+              )}
+              {t.description && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Script / Content</div>
+                  <div className="ap-content-box">{t.description}</div>
+                </div>
+              )}
+              {t.caption && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Caption</div>
+                  <div className="ap-content-box">{t.caption}</div>
+                </div>
+              )}
+              {t.tags?.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Hashtags</div>
+                  <div style={{ fontSize: 12, color: "#6366F1", background: "#EEF2FF", borderRadius: 8, padding: "8px 12px", lineHeight: 1.8 }}>
+                    {t.tags.map(tg => `#${tg}`).join("  ")}
+                  </div>
+                </div>
+              )}
+              {t.referenceLink && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Reference Link</div>
+                  <a href={t.referenceLink} target="_blank" rel="noreferrer" className="ap-proof-link">
+                    <i className="bi bi-link-45deg" />{t.referenceLink}
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
           {t.description && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Work / Description</div>
@@ -374,6 +441,8 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
                 <i className="bi bi-link-45deg" />{t.proofLink}
               </a>
             </div>
+          )}
+          </>
           )}
 
           {readOnly ? (
@@ -406,11 +475,22 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
                 value={rejectText}
                 onChange={e => setRejectText(e.target.value)}
               />
-              <div className="ap-actions" style={{ marginTop: 6 }}>
-                <button className="ap-btn-reject" onClick={() => onReject(rejectText)} disabled={saving || !rejectText.trim()}>
+              <div style={{ marginTop: 8 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 }}>
+                  New Deadline <span style={{ fontWeight: 400, color: "#94A3B8" }}>(optional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newDeadline}
+                  onChange={e => setNewDeadline(e.target.value)}
+                  style={{ width: "100%", padding: "7px 10px", border: "1.5px solid #FCA5A5", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "inherit", background: "#FFF5F5" }}
+                />
+              </div>
+              <div className="ap-actions" style={{ marginTop: 8 }}>
+                <button className="ap-btn-reject" onClick={() => onReject(rejectText, newDeadline)} disabled={saving || !rejectText.trim()}>
                   {saving ? "…" : <><i className="bi bi-send me-1" />Send Rejection</>}
                 </button>
-                <button onClick={() => { setRejectMode(false); setRejectText(""); }} style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button onClick={() => { setRejectMode(false); setRejectText(""); setNewDeadline(""); }} style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   Cancel
                 </button>
               </div>
@@ -426,6 +506,7 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
 function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectText, setRejectText] = useState("");
+  const [newDeadline, setNewDeadline] = useState("");
   const brand = t.brandId || {};
   const color = STAGE_COLORS[stageIdx];
   const router = useRouter();
@@ -467,8 +548,14 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
       {isOpen && (
         <div className="ap-card-body" style={{ paddingTop: 14 }}>
           {/* Content to review */}
-          {stageIdx === 0 && (t.description || t.caption || t.referenceLink) && (
+          {stageIdx === 0 && (t.description || t.caption || t.referenceLink || t.tags?.length > 0 || t.pillar) && (
             <div style={{ marginBottom: 14 }}>
+              {t.pillar && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Content Pillar</div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", background: "#EDE9FE", padding: "3px 10px", borderRadius: 20 }}>{t.pillar}</span>
+                </div>
+              )}
               {t.description && (
                 <>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Script / Content</div>
@@ -480,6 +567,14 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Caption</div>
                   <div className="ap-content-box">{t.caption}</div>
                 </>
+              )}
+              {t.tags?.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 5 }}>Hashtags</div>
+                  <div style={{ fontSize: 12, color: "#6366F1", background: "#EEF2FF", borderRadius: 8, padding: "8px 12px", lineHeight: 1.8 }}>
+                    {t.tags.map(tg => `#${tg}`).join("  ")}
+                  </div>
+                </div>
               )}
               {t.referenceLink && (
                 <a href={t.referenceLink} target="_blank" rel="noreferrer" className="ap-proof-link" style={{ marginTop: 6 }}>
@@ -539,11 +634,22 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
                 value={rejectText}
                 onChange={e => setRejectText(e.target.value)}
               />
-              <div className="ap-actions" style={{ marginTop: 6 }}>
-                <button className="ap-btn-reject" onClick={() => onReject(rejectText)} disabled={saving || !rejectText.trim()}>
+              <div style={{ marginTop: 8 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 }}>
+                  New Deadline <span style={{ fontWeight: 400, color: "#94A3B8" }}>(optional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newDeadline}
+                  onChange={e => setNewDeadline(e.target.value)}
+                  style={{ width: "100%", padding: "7px 10px", border: "1.5px solid #FCA5A5", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "inherit", background: "#FFF5F5" }}
+                />
+              </div>
+              <div className="ap-actions" style={{ marginTop: 8 }}>
+                <button className="ap-btn-reject" onClick={() => onReject(rejectText, newDeadline)} disabled={saving || !rejectText.trim()}>
                   {saving ? "…" : <><i className="bi bi-send me-1" />Send Rejection</>}
                 </button>
-                <button onClick={() => { setRejectMode(false); setRejectText(""); }} style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button onClick={() => { setRejectMode(false); setRejectText(""); setNewDeadline(""); }} style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   Cancel
                 </button>
               </div>

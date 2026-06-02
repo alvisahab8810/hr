@@ -29,7 +29,11 @@
       "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(grep -E \"\\\\.js$\")",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(xargs wc -l)",
+      "Bash(xargs ls -lh)",
+      "Bash(dir \"d:\\\\viralon-payroll\\\\pages\" /b /s)",
+      "Bash(findstr -i \"client\\\\|tourwatchout\\\\|portal\")"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",
