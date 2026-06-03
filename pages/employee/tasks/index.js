@@ -84,10 +84,10 @@ const PILLAR_OPTS  = ["Education", "Entertainment", "Inspiration", "Promotion", 
 
 const TABS_BY_ROLE = {
   content:   ["dashboard", "tasks", "editor", "weekly", "mycal", "library", "submissions", "performance"],
-  design:    ["dashboard", "tasks", "queue",  "brandcal", "performance"],
-  editor:    ["dashboard", "tasks", "queue",  "brandcal", "performance"],
+  design:    ["dashboard", "tasks", "queue",  "weekly", "brandcal", "performance"],
+  editor:    ["dashboard", "tasks", "queue",  "weekly", "brandcal", "performance"],
   developer: ["dashboard", "tasks", "board",  "performance"],
-  general:   ["dashboard", "tasks", "performance"],
+  general:   ["dashboard", "tasks", "weekly", "performance"],
 };
 
 const TAB_META = {
@@ -521,8 +521,20 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
     if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
       e.preventDefault();
       const v = tagInput.trim().replace(/^#/, "");
-      if (v && !tags.includes(v)) setTags(p => [...p, v]);
-      setTagInput("");
+      if (v && !tags.includes(v)) {
+        const newTags = [...tags, v];
+        setTags(newTags);
+        setTagInput("");
+        // Save immediately so hashtags persist without needing a manual save
+        if (task && task.status !== "review" && task.status !== "completed") {
+          fetch(`/api/employee/tasks/${task._id}`, {
+            method: "PATCH", headers: authH(),
+            body: JSON.stringify({ description: script, caption, referenceLink: refLink, tags: newTags }),
+          }).then(r => r.json()).then(d => { if (d.success) setLastSaved(new Date()); }).catch(() => {});
+        }
+      } else {
+        setTagInput("");
+      }
     }
   }
 
@@ -773,7 +785,16 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
             <label style={lblStyle}>Hashtags</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "9px 11px", border: "1.5px solid #E5E7EB", borderRadius: 8, minHeight: 46, background: isLocked ? "#F9FAFB" : "#FAFAFA" }}>
               {tags.map(tag => (
-                <span key={tag} onClick={isLocked ? undefined : () => setTags(p => p.filter(x => x !== tag))} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 10px", borderRadius: 20, background: "#EDE9FE", color: "#7C3AED", fontSize: 12, fontWeight: 700, cursor: isLocked ? "default" : "pointer" }}>
+                <span key={tag} onClick={isLocked ? undefined : () => {
+                  const newTags = tags.filter(x => x !== tag);
+                  setTags(newTags);
+                  if (task && task.status !== "review" && task.status !== "completed") {
+                    fetch(`/api/employee/tasks/${task._id}`, {
+                      method: "PATCH", headers: authH(),
+                      body: JSON.stringify({ description: script, caption, referenceLink: refLink, tags: newTags }),
+                    }).then(r => r.json()).then(d => { if (d.success) setLastSaved(new Date()); }).catch(() => {});
+                  }
+                }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 10px", borderRadius: 20, background: "#EDE9FE", color: "#7C3AED", fontSize: 12, fontWeight: 700, cursor: isLocked ? "default" : "pointer" }}>
                   #{tag}{!isLocked && <span style={{ fontSize: 14, lineHeight: 1 }}>×</span>}
                 </span>
               ))}
@@ -790,19 +811,9 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
           {/* Footer */}
           <div className="tms-card" style={{ padding: "12px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "#9CA3AF" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: lastSaved ? "#22c55e" : "#D1D5DB" }} />
-                {lastSaved ? `Auto-saved at ${lastSaved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Not saved yet"}
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => navTask(-1)} disabled={taskIdx <= 0} style={{ padding: "6px 13px", borderRadius: 7, border: "1px solid #E5E7EB", background: "transparent", color: "#6B7280", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, opacity: taskIdx <= 0 ? 0.4 : 1 }}>
-                  <i className="bi bi-chevron-left" /> Previous
-                </button>
-                <button onClick={() => navTask(1)} disabled={taskIdx >= scriptTasks.length - 1} style={{ padding: "6px 13px", borderRadius: 7, border: "1px solid #E5E7EB", background: "transparent", color: "#6B7280", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, opacity: taskIdx >= scriptTasks.length - 1 ? 0.4 : 1 }}>
-                  Next <i className="bi bi-chevron-right" />
-                </button>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "#9CA3AF" }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: lastSaved ? "#22c55e" : "#D1D5DB" }} />
+              {lastSaved ? `Auto-saved at ${lastSaved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Not saved yet"}
             </div>
           </div>
         </>)}
@@ -973,129 +984,192 @@ function TaskDetailModal({ task, onClose }) {
 
 // ─── BRAND CALENDAR TAB ───────────────────────────────────────────────────────
 // ─── WEEKLY TRACKER TAB (content team) ───────────────────────────────────────
-function WeeklyTrackerTab({ tasks }) {
+const WT_CONTENT_META = {
+  reel:     { label: "Reel",     icon: "bi-camera-video-fill", color: "#F59E0B" },
+  post:     { label: "Post",     icon: "bi-image-fill",        color: "#6366F1" },
+  carousel: { label: "Carousel", icon: "bi-images",            color: "#10B981" },
+  story:    { label: "Story",    icon: "bi-phone-fill",        color: "#EC4899" },
+};
+const WT_STATUS_META = {
+  todo:        { label: "To Do",       color: "#64748B", bg: "#F1F5F9", dot: "#94A3B8" },
+  in_progress: { label: "In Progress", color: "#1D4ED8", bg: "#DBEAFE", dot: "#3B82F6" },
+  review:      { label: "Review",      color: "#B45309", bg: "#FEF3C7", dot: "#F59E0B" },
+  completed:   { label: "Done",        color: "#15803D", bg: "#DCFCE7", dot: "#10B981" },
+  blocked:     { label: "Blocked",     color: "#DC2626", bg: "#FEE2E2", dot: "#EF4444" },
+};
+const WT_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+function fmtWTShort(date) {
+  return `${date.getDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][date.getMonth()]}`;
+}
+
+function getWTWeekDates(offset = 0) {
+  const now = new Date();
+  const dow = now.getDay();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7);
+  return WT_DAYS.map((label, i) => {
+    const date = new Date(mon);
+    date.setDate(mon.getDate() + i);
+    return { label, date };
+  });
+}
+
+function WeeklyTrackerTab() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [brandFilter, setBrandFilter] = useState("");
+  const [brands, setBrands]   = useState([]);
+  const [tasks,  setTasks]    = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const dow   = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + weekOffset * 7);
-  const days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday); d.setDate(monday.getDate() + i); return d;
-  });
-  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekDates = getWTWeekDates(weekOffset);
+  const weekStart = weekDates[0].date;
+  const weekEnd   = weekDates[6].date;
 
-  const allProdTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
-  // Extract unique brands
-  const brands = [...new Map(allProdTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
-  const prodTasks = brandFilter ? allProdTasks.filter(t => t.brandId?._id === brandFilter) : allProdTasks;
+  useEffect(() => {
+    const token = localStorage.getItem("employeeToken") || "";
+    setLoading(true);
+    const start = new Date(weekStart); start.setHours(0, 0, 0, 0);
+    const end   = new Date(weekEnd);   end.setHours(23, 59, 59, 999);
+    const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
+    fetch(`/api/employee/weekly-tracker?${q}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) { setTasks(d.tasks || []); setBrands(d.brands || []); }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [weekOffset]);
 
-  function tasksForDay(day) {
-    return prodTasks.filter(t => {
-      const dl = t.stages?.[0]?.deadline || t.dueDate;
-      if (!dl) return false;
-      const d = new Date(dl); d.setHours(0, 0, 0, 0);
-      return d.getTime() === day.getTime();
-    });
-  }
+  const getScheduled = (brand, dayLabel) =>
+    (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
 
-  const STATUS_STYLE = {
-    todo:        { label: "To Do",       bg: "#F1F5F9", color: "#64748B" },
-    in_progress: { label: "In Progress", bg: "#DBEAFE", color: "#1D4ED8" },
-    review:      { label: "Review",      bg: "#FEF3C7", color: "#B45309" },
-    completed:   { label: "Done",        bg: "#DCFCE7", color: "#15803D" },
-    blocked:     { label: "Rejected",    bg: "#FEE2E2", color: "#DC2626" },
-  };
-
-  const weekStart = days[0].toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  const weekEnd   = days[6].toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  const isCurrentWeek = weekOffset === 0;
+  const displayBrands = brandFilter ? brands.filter(b => b._id?.toString() === brandFilter) : brands;
 
   return (
     <div>
-      {/* Brand filter */}
-      {brands.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px" }}>Brand:</span>
-          <div onClick={() => setBrandFilter("")}
-            style={{ padding: "4px 13px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", background: !brandFilter ? "#7C3AED" : "#fff", color: !brandFilter ? "#fff" : "#374151", borderColor: !brandFilter ? "#7C3AED" : "#E5E7EB" }}>
-            All
-          </div>
-          {brands.map(b => (
-            <div key={b._id} onClick={() => setBrandFilter(brandFilter === b._id ? "" : b._id)}
-              style={{ padding: "4px 13px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", display: "flex", alignItems: "center", gap: 5, background: brandFilter === b._id ? b.color || "#7C3AED" : "#fff", color: brandFilter === b._id ? "#fff" : "#374151", borderColor: brandFilter === b._id ? b.color || "#7C3AED" : "#E5E7EB" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: brandFilter === b._id ? "#fff" : b.color, display: "inline-block" }} />{b.name}
-            </div>
-          ))}
-        </div>
-      )}
+      <style>{`
+        .emp-wt-table { width:100%; border-collapse:collapse; }
+        .emp-wt-table th { padding:10px 8px; font-size:11px; font-weight:700; color:#64748B; border-bottom:2px solid #F1F5F9; background:#FAFAFA; text-align:center; white-space:nowrap; }
+        .emp-wt-table th.brand-col { text-align:left; width:140px; }
+        .emp-wt-table td { padding:6px; border-bottom:1px solid #F8FAFC; vertical-align:top; min-width:90px; }
+        .emp-wt-table tr:hover td { background:#FAFBFF; }
+        .emp-wt-cell { min-height:50px; }
+        .emp-wt-slot { border-radius:7px; padding:3px 6px; margin-bottom:3px; font-size:10px; font-weight:700; display:flex; align-items:center; gap:3px; }
+        .emp-wt-task { border-radius:7px; padding:3px 6px; margin-bottom:3px; font-size:10px; font-weight:600; border:1px solid; cursor:default; }
+        .emp-today-col { background:#F5F3FF !important; }
+      `}</style>
 
-      {/* Week nav */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-        <button onClick={() => setWeekOffset(w => w - 1)}
-          style={{ background: "#F1F5F9", border: "none", borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontSize: 14 }}>
-          ‹
-        </button>
-        <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>
-          {weekStart} — {weekEnd}
-        </span>
-        <button onClick={() => setWeekOffset(w => w + 1)} disabled={isCurrentWeek}
-          style={{ background: "#F1F5F9", border: "none", borderRadius: 8, padding: "7px 12px", cursor: isCurrentWeek ? "default" : "pointer", fontSize: 14, opacity: isCurrentWeek ? 0.4 : 1 }}>
-          ›
-        </button>
-        {weekOffset !== 0 && (
-          <button onClick={() => setWeekOffset(0)}
-            style={{ background: "#EEF2FF", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>
-            This Week
+      {/* Header row */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <button onClick={() => setWeekOffset(w => w - 1)}
+            style={{ background:"#F1F5F9", border:"none", borderRadius:8, padding:"6px 11px", cursor:"pointer", fontSize:13, fontWeight:700 }}>
+            <i className="bi bi-chevron-left" />
           </button>
-        )}
+          <div>
+            <div style={{ fontWeight:800, fontSize:15, color:"#0f172a" }}>Weekly Tracker</div>
+            <div style={{ fontSize:11, color:"#94A3B8" }}>
+              {fmtWTShort(weekStart)} – {fmtWTShort(weekEnd)}
+              {weekOffset === 0 && <span style={{ color:"#6366F1", fontWeight:700, marginLeft:6 }}>· This Week</span>}
+            </div>
+          </div>
+          <button onClick={() => setWeekOffset(w => w + 1)}
+            style={{ background:"#F1F5F9", border:"none", borderRadius:8, padding:"6px 11px", cursor:"pointer", fontSize:13, fontWeight:700 }}>
+            <i className="bi bi-chevron-right" />
+          </button>
+          {weekOffset !== 0 && (
+            <button onClick={() => setWeekOffset(0)}
+              style={{ background:"#EEF2FF", border:"none", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12, fontWeight:700, color:"#4F46E5" }}>
+              This Week
+            </button>
+          )}
+        </div>
+        <select
+          value={brandFilter}
+          onChange={e => setBrandFilter(e.target.value)}
+          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, outline:"none", background:"#fff" }}>
+          <option value="">All Brands</option>
+          {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+        </select>
       </div>
 
-      {/* Day columns */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10 }}>
-        {days.map((day, i) => {
-          const isToday = day.getTime() === today.getTime();
-          const dt = tasksForDay(day);
-          return (
-            <div key={i}>
-              {/* Day header */}
-              <div style={{ textAlign: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#9CA3AF", letterSpacing: ".5px" }}>{DAY_NAMES[i]}</div>
-                <div style={{ width: 32, height: 32, borderRadius: "50%", margin: "4px auto 0", display: "flex", alignItems: "center", justifyContent: "center",
-                  background: isToday ? "#6366F1" : "transparent", color: isToday ? "#fff" : "#374151", fontWeight: isToday ? 800 : 500, fontSize: 14 }}>
-                  {day.getDate()}
-                </div>
-              </div>
+      {/* Legend */}
+      <div style={{ display:"flex", gap:14, marginBottom:12, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600, color:"#64748B" }}>
+          <span style={{ width:12, height:12, borderRadius:3, background:"#E5E7EB", display:"inline-block", border:"1.5px dashed #94A3B8" }} />
+          Scheduled (from brand plan)
+        </div>
+      </div>
 
-              {/* Tasks */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, minHeight: 80 }}>
-                {dt.length === 0 ? (
-                  <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "10px 6px", textAlign: "center", color: "#D1D5DB", fontSize: 10 }}>—</div>
-                ) : dt.map(t => {
-                  const sm = STATUS_STYLE[t.status] || STATUS_STYLE.todo;
-                  const approved = (t.stages || []).some(s => s.approved);
-                  const brandColor = t.brandId?.color || "#6366F1";
+      {loading ? (
+        <div style={{ padding:40, textAlign:"center", color:"#94A3B8" }}>
+          <div className="spinner-border spinner-border-sm text-primary" />
+        </div>
+      ) : displayBrands.length === 0 ? (
+        <div style={{ padding:"48px 32px", textAlign:"center", background:"#fff", borderRadius:14, border:"1.5px solid #E2E8F0" }}>
+          <i className="bi bi-calendar-week" style={{ fontSize:36, color:"#CBD5E1", display:"block", marginBottom:10 }} />
+          <div style={{ fontSize:14, fontWeight:700, color:"#94a3b8" }}>No tasks assigned this week</div>
+        </div>
+      ) : (
+        <div style={{ background:"#fff", borderRadius:14, border:"1.5px solid #F1F5F9", overflowX:"auto" }}>
+          <table className="emp-wt-table">
+            <thead>
+              <tr>
+                <th className="brand-col">Brand</th>
+                {weekDates.map(({ label, date }) => {
+                  const isToday = date.toDateString() === new Date().toDateString();
                   return (
-                    <div key={t._id} style={{ background: "#fff", border: `1.5px solid ${brandColor}30`, borderLeft: `3px solid ${brandColor}`, borderRadius: 8, padding: "8px 8px 6px" }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#1E293B", marginBottom: 4, lineHeight: 1.3, wordBreak: "break-word" }}>
-                        {t.nomenclature || t.title}
-                      </div>
-                      {t.brandId && (
-                        <div style={{ fontSize: 9, color: brandColor, fontWeight: 700, marginBottom: 4 }}>{t.brandId.name}</div>
-                      )}
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: sm.bg, color: sm.color }}>{sm.label}</span>
-                        {approved && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "#DCFCE7", color: "#15803D" }}>✓ Approved</span>}
-                      </div>
-                    </div>
+                    <th key={label} style={{ color: isToday ? "#6366F1" : "#64748B" }}>
+                      <div>{label}</div>
+                      <div style={{ fontSize:10, fontWeight:400 }}>{fmtWTShort(date)}</div>
+                      {isToday && <div style={{ width:6, height:6, borderRadius:"50%", background:"#6366F1", margin:"2px auto 0" }} />}
+                    </th>
                   );
                 })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              </tr>
+            </thead>
+            <tbody>
+              {displayBrands.map(brand => (
+                <tr key={brand._id}>
+                  <td>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:6, height:30, borderRadius:4, background:brand.color || "#6366F1", flexShrink:0 }} />
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:12, color:"#1E293B" }}>{brand.name}</div>
+                        <div style={{ fontSize:10, color:"#94A3B8" }}>{(brand.weeklySchedule || []).length} post/wk</div>
+                      </div>
+                    </div>
+                  </td>
+                  {weekDates.map(({ label, date }) => {
+                    const isToday   = date.toDateString() === new Date().toDateString();
+                    const scheduled = getScheduled(brand, label);
+                    return (
+                      <td key={label} className={isToday ? "emp-today-col" : ""}>
+                        <div className="emp-wt-cell">
+                          {scheduled.map((slot, si) => {
+                            const ct = WT_CONTENT_META[slot.contentType] || {};
+                            return (
+                              <div key={si} className="emp-wt-slot"
+                                style={{ background:(ct.color || "#94A3B8")+"12", color:ct.color||"#94A3B8", border:`1px dashed ${ct.color||"#94A3B8"}40` }}>
+                                <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
+                                {ct.label || slot.contentType}
+                              </div>
+                            );
+                          })}
+                          {scheduled.length === 0 && (
+                            <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -2932,205 +3006,133 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 }
 
 // ─── PORTAL THIS WEEK VIEW ────────────────────────────────────────────────────
-function PortalThisWeekView({ tasks, loading, empId }) {
-  const [submitInfo,      setSubmitInfo]      = useState(null);
-  const [nonSMMTask,      setNonSMMTask]      = useState(null);
-  const [nonSMMSaving,    setNonSMMSaving]    = useState(false);
-  const [detailTask,      setDetailTask]      = useState(null);
-  const [localTasks,      setLocalTasks]      = useState(tasks);
-  const [weekOffset,      setWeekOffset]      = useState(0);
-  const [contentTasks,    setContentTasks]    = useState([]);
-  const [contentLoading,  setContentLoading]  = useState(true);
-  const [brands,          setBrands]          = useState([]);
-  const [brandFilter,     setBrandFilter]     = useState("");
-  const [selectedContent, setSelectedContent] = useState(null);
+function PortalThisWeekView() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [wtBrands,     setWtBrands]     = useState([]);
+  const [wtLoading,    setWtLoading]    = useState(true);
+  const [brandFilter,  setBrandFilter]  = useState("");
 
-  useEffect(() => { setLocalTasks(tasks); }, [tasks]);
+  const weekDates = getWTWeekDates(weekOffset);
+  const weekStart = weekDates[0].date;
+  const weekEnd   = weekDates[6].date;
+  const isCurrentWeek = weekOffset === 0;
+  const weekLabel = `${fmtWTShort(weekStart)} — ${fmtWTShort(weekEnd)}`;
 
-  const today   = new Date(); today.setHours(0,0,0,0);
-  const dow     = today.getDay();
-  const monday  = new Date(today);
-  monday.setDate(today.getDate() - (dow===0 ? 6 : dow-1) + weekOffset * 7);
-  const days    = Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(monday.getDate()+i); return d; });
-  const sunday  = days[6];
-  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-
-  // Fetch approved content tasks for the current week
   useEffect(() => {
-    setContentLoading(true);
-    const start = new Date(monday); start.setHours(0,0,0,0);
-    const end   = new Date(sunday); end.setHours(23,59,59,999);
+    setWtLoading(true);
+    const start = new Date(weekStart); start.setHours(0,0,0,0);
+    const end   = new Date(weekEnd);   end.setHours(23,59,59,999);
     const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
-    if (brandFilter) q.set("brandId", brandFilter);
-    fetch(`/api/employee/brand-tasks?${q}`, { headers: authH() })
+    fetch(`/api/employee/weekly-tracker?${q}`, { headers: authH() })
       .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setContentTasks(d.tasks || []);
-          const seen = new Set(); const bs = [];
-          (d.tasks || []).forEach(t => {
-            if (t.brandId && !seen.has(t.brandId._id)) { seen.add(t.brandId._id); bs.push(t.brandId); }
-          });
-          setBrands(prev => {
-            const all = [...prev, ...bs];
-            return [...new Map(all.map(b => [b._id, b])).values()];
-          });
-        }
-      })
-      .catch(console.error)
-      .finally(() => setContentLoading(false));
+      .then(d => { if (d.success) setWtBrands(d.brands || []); })
+      .catch(() => {})
+      .finally(() => setWtLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset, brandFilter]);
+  }, [weekOffset]);
 
-  function getTaskDate(t) {
-    if (t.scheduledFor) return new Date(t.scheduledFor);
-    if (t.dueDate)      return new Date(t.dueDate);
-    const s1 = t.stages?.[0];
-    if (s1?.deadline)  return new Date(s1.deadline);
-    if (s1?.doneAt)    return new Date(s1.doneAt);
-    if (t.submittedAt) return new Date(t.submittedAt);
-    if (t.updatedAt)   return new Date(t.updatedAt);
-    if (t.createdAt)   return new Date(t.createdAt);
-    return null;
-  }
+  const getScheduled = (brand, dayLabel) =>
+    (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
 
-  function dayContentTasks(day) {
-    return contentTasks.filter(t => {
-      const d = getTaskDate(t);
-      if (!d) return false;
-      const dc = new Date(d); dc.setHours(0,0,0,0);
-      return dc.getTime() === day.getTime();
-    });
-  }
-
-  async function handleNonSMMSubmit(notes) {
-    setNonSMMSaving(true);
-    try {
-      const r = await fetch(`/api/employee/tasks/${nonSMMTask._id}`, {
-        method: "PATCH", headers: authH(),
-        body: JSON.stringify({ status: "review", reviewNote: notes || "" }),
-      });
-      const d = await r.json();
-      if (d.success) {
-        toast.success("Submitted for approval!");
-        setLocalTasks(prev => prev.map(t => t._id === nonSMMTask._id ? { ...t, status: "review" } : t));
-        setNonSMMTask(null);
-      } else toast.error(d.message || "Submission failed");
-    } catch { toast.error("Network error"); }
-    finally { setNonSMMSaving(false); }
-  }
-
-  const activeTasks    = localTasks.filter(t => t.status !== "completed");
-  const isCurrentWeek  = weekOffset === 0;
-  const weekLabel      = `${monday.toLocaleDateString("en-IN",{day:"numeric",month:"short"})} — ${sunday.toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}`;
-
-  const STATUS_STYLE = {
-    todo:        { label:"To Do",       bg:"#1e2330", color:"#94a3b8" },
-    in_progress: { label:"In Progress", bg:"#1e3a5f", color:"#60a5fa" },
-    review:      { label:"Review",      bg:"#3b2a00", color:"#fbbf24" },
-    completed:   { label:"Done",        bg:"#052e16", color:"#4ade80" },
-    blocked:     { label:"Rejected",    bg:"#3b0a0a", color:"#f87171" },
-  };
+  const displayBrands = brandFilter ? wtBrands.filter(b => b._id?.toString() === brandFilter) : wtBrands;
 
   return (
     <div className="ep-content">
-      {/* ── Brand filter ── */}
-      {brands.length > 0 && (
-        <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
-          <span style={{ fontSize:11, fontWeight:700, color:"#475569", textTransform:"uppercase", letterSpacing:".5px" }}>Brand:</span>
-          <button onClick={() => setBrandFilter("")}
-            style={{ padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid", background:!brandFilter?"#5A57FB":"transparent", color:!brandFilter?"#fff":"#64748b", borderColor:!brandFilter?"#5A57FB":"#334155", fontFamily:"inherit" }}>
-            All
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <button onClick={() => setWeekOffset(w => w-1)}
+            style={{ background:"#F1F5F9", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", color:"#475569", fontSize:14, fontFamily:"inherit" }}>
+            <i className="bi bi-chevron-left" />
           </button>
-          {brands.map(b => (
-            <button key={b._id} onClick={() => setBrandFilter(brandFilter===b._id?"":b._id)}
-              style={{ padding:"4px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid", display:"flex", alignItems:"center", gap:5, background:brandFilter===b._id?b.color||"#5A57FB":"transparent", color:brandFilter===b._id?"#fff":"#94a3b8", borderColor:brandFilter===b._id?b.color||"#5A57FB":"#334155", fontFamily:"inherit" }}>
-              <span style={{ width:7, height:7, borderRadius:"50%", background:brandFilter===b._id?"#fff":b.color, display:"inline-block", flexShrink:0 }} />{b.name}
+          <div>
+            <div style={{ fontWeight:800, fontSize:15, color:"#0f172a" }}>Weekly Tracker</div>
+            <div style={{ fontSize:11, color:"#94A3B8" }}>
+              {weekLabel}
+              {isCurrentWeek && <span style={{ color:"#6366F1", fontWeight:700, marginLeft:6 }}>· This Week</span>}
+            </div>
+          </div>
+          <button onClick={() => setWeekOffset(w => w+1)}
+            style={{ background:"#F1F5F9", border:"none", borderRadius:8, padding:"6px 12px", cursor:"pointer", color:"#475569", fontSize:14, fontFamily:"inherit" }}>
+            <i className="bi bi-chevron-right" />
+          </button>
+          {!isCurrentWeek && (
+            <button onClick={() => setWeekOffset(0)}
+              style={{ background:"#EEF2FF", border:"none", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12, fontWeight:700, color:"#4F46E5", fontFamily:"inherit" }}>
+              This Week
             </button>
-          ))}
+          )}
         </div>
-      )}
-
-      {/* ── Week navigation ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-        <button onClick={() => setWeekOffset(w => w-1)}
-          style={{ background:"#1e2330", border:"1px solid #334155", borderRadius:8, padding:"6px 12px", cursor:"pointer", color:"#94a3b8", fontSize:15, fontFamily:"inherit" }}>‹</button>
-        <span style={{ fontWeight:700, fontSize:14, color:"#e2e8f0", flex:1 }}>{weekLabel}</span>
-        <button onClick={() => setWeekOffset(w => w+1)} disabled={isCurrentWeek}
-          style={{ background:"#1e2330", border:"1px solid #334155", borderRadius:8, padding:"6px 12px", cursor:isCurrentWeek?"default":"pointer", color:isCurrentWeek?"#334155":"#94a3b8", fontSize:15, fontFamily:"inherit" }}>›</button>
-        {!isCurrentWeek && (
-          <button onClick={() => setWeekOffset(0)}
-            style={{ background:"rgba(90,87,251,.15)", border:"1px solid #5A57FB", borderRadius:8, padding:"5px 12px", cursor:"pointer", fontSize:12, fontWeight:700, color:"#5A57FB", fontFamily:"inherit" }}>
-            This Week
-          </button>
-        )}
-        <span style={{ fontSize:11, color:"#475569" }}>{contentTasks.length} task{contentTasks.length!==1?"s":""}</span>
+        <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
+          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, background:"#fff", color:"#374151", outline:"none", fontFamily:"inherit" }}>
+          <option value="">All Brands</option>
+          {wtBrands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+        </select>
       </div>
 
-      {/* ── Weekly content grid ── */}
-      {selectedContent && <PortalCalendarDetailModal task={selectedContent} onClose={() => setSelectedContent(null)} />}
-      <div className="ep-card" style={{ padding:0, overflow:"hidden", marginBottom:20 }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:"1px solid #252a36" }}>
-          {DAY_NAMES.map((name, i) => {
-            const isToday = days[i].getTime() === today.getTime();
-            return (
-              <div key={name} style={{ padding:"10px 4px", textAlign:"center" }}>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:".5px", color:isToday?"#5A57FB":"#475569" }}>{name}</div>
-                <div style={{ width:28, height:28, borderRadius:"50%", margin:"4px auto 0", display:"flex", alignItems:"center", justifyContent:"center",
-                  background:isToday?"#5A57FB":"transparent", color:isToday?"#fff":"#94a3b8", fontWeight:isToday?800:400, fontSize:14 }}>
-                  {days[i].getDate()}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", minHeight:120 }}>
-          {days.map((day, i) => {
-            const dt      = dayContentTasks(day);
-            const isToday = day.getTime() === today.getTime();
-            return (
-              <div key={i} style={{ padding:"8px 5px", borderRight:"1px solid #252a36", background:isToday?"rgba(90,87,251,.04)":"transparent", minHeight:120 }}>
-                {contentLoading ? (
-                  <div style={{ display:"flex", justifyContent:"center", paddingTop:16 }}><div className="ep-spinner" style={{ width:14, height:14 }} /></div>
-                ) : dt.length === 0 ? (
-                  <div style={{ fontSize:9, color:"#334155", textAlign:"center", marginTop:12 }}>—</div>
-                ) : dt.map(t => {
-                  const brandColor = t.brandId?.color || "#5A57FB";
-                  const ct = CAL_CTYPE[t.contentType];
+      {/* Weekly tracker table */}
+      {wtLoading ? (
+        <div style={{ textAlign:"center", padding:32, color:"#94A3B8" }}><div className="spinner-border spinner-border-sm text-primary" /></div>
+      ) : displayBrands.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"32px", color:"#94a3b8", fontSize:13 }}>No brands found</div>
+      ) : (
+        <div style={{ background:"#fff", borderRadius:14, border:"1.5px solid #F1F5F9", overflowX:"auto", marginBottom:20 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ background:"#FAFAFA" }}>
+                <th style={{ padding:"10px 12px", fontSize:11, fontWeight:700, color:"#64748B", borderBottom:"2px solid #F1F5F9", textAlign:"left", width:140 }}>Brand</th>
+                {weekDates.map(({ label, date }) => {
+                  const isToday = date.toDateString() === new Date().toDateString();
                   return (
-                    <div key={t._id} onClick={() => setSelectedContent(t)}
-                      style={{ fontSize:10, padding:"4px 6px", borderRadius:5, marginBottom:4, background:brandColor+"18", color:brandColor, fontWeight:600, cursor:"pointer", borderLeft:`3px solid ${brandColor}`, lineHeight:1.3 }}>
-                      {ct && <i className={`bi ${ct.icon}`} style={{ marginRight:3, fontSize:9 }} />}
-                      <span style={{ display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.nomenclature||t.title}</span>
-                      {t.brandId && <span style={{ fontSize:9, opacity:.75 }}>{t.brandId.name}</span>}
-                    </div>
+                    <th key={label} style={{ padding:"10px 8px", fontSize:11, fontWeight:700, color:isToday?"#6366F1":"#64748B", borderBottom:"2px solid #F1F5F9", textAlign:"center" }}>
+                      <div>{label}</div>
+                      <div style={{ fontSize:10, fontWeight:400 }}>{fmtWTShort(date)}</div>
+                      {isToday && <div style={{ width:6, height:6, borderRadius:"50%", background:"#6366F1", margin:"2px auto 0" }} />}
+                    </th>
                   );
                 })}
-              </div>
-            );
-          })}
+              </tr>
+            </thead>
+            <tbody>
+              {displayBrands.map(brand => (
+                <tr key={brand._id} style={{ borderBottom:"1px solid #F8FAFC" }}>
+                  <td style={{ padding:"8px 12px", verticalAlign:"top" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:6, height:30, borderRadius:4, background:brand.color||"#6366F1", flexShrink:0 }} />
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:12, color:"#1E293B" }}>{brand.name}</div>
+                        <div style={{ fontSize:10, color:"#94A3B8" }}>{(brand.weeklySchedule||[]).length} post/wk</div>
+                      </div>
+                    </div>
+                  </td>
+                  {weekDates.map(({ label, date }) => {
+                    const isToday   = date.toDateString() === new Date().toDateString();
+                    const scheduled = getScheduled(brand, label);
+                    return (
+                      <td key={label} style={{ padding:"6px 4px", verticalAlign:"top", background:isToday?"#F5F3FF":"transparent", minWidth:80 }}>
+                        {scheduled.map((slot, si) => {
+                          const ct = WT_CONTENT_META[slot.contentType] || {};
+                          return (
+                            <div key={si} style={{ borderRadius:7, padding:"3px 6px", marginBottom:3, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", gap:3,
+                              background:(ct.color||"#94A3B8")+"12", color:ct.color||"#94A3B8", border:`1px dashed ${ct.color||"#94A3B8"}40` }}>
+                              <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
+                              {ct.label||slot.contentType}
+                            </div>
+                          );
+                        })}
+                        {scheduled.length === 0 && (
+                          <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      )}
 
-      {/* ── My Active Tasks ── */}
-      <div className="ep-sec-hd">
-        <div className="ep-sec-title">📋 My Active Tasks</div>
-        <span style={{ fontSize:12, color:"#64748b" }}>{activeTasks.length} tasks</span>
-      </div>
-      {loading ? <div className="ep-empty"><div className="ep-spinner" /></div>
-        : activeTasks.length === 0 ? <div className="ep-empty"><i className="bi bi-calendar-x" /><p>No active tasks</p></div>
-        : <div className="ep-tgrid">{activeTasks.map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}</div>
-      }
-      {submitInfo && (
-        <PSubmitModal task={submitInfo.task} stageKey={submitInfo.stageKey} onClose={() => setSubmitInfo(null)}
-          onSuccess={updated => { setLocalTasks(prev => prev.map(t => t._id===updated._id?updated:t)); setSubmitInfo(null); }} />
-      )}
-      {nonSMMTask && (
-        <NonSMMSubmitModal task={nonSMMTask} onClose={() => setNonSMMTask(null)} onSubmit={handleNonSMMSubmit} submitting={nonSMMSaving} />
-      )}
-      {detailTask && (
-        <NonSMMDetailModal task={detailTask} onClose={() => setDetailTask(null)} onSubmit={t => { setDetailTask(null); setNonSMMTask(t); }} />
-      )}
     </div>
   );
 }
@@ -3616,14 +3618,14 @@ function DarkPortal() {
   const NAV = [
     { key:"today",       label:"Today",            icon:"bi-house" },
     { key:"tasks",       label:"My Tasks",          icon:"bi-check2-square" },
-    { key:"week",        label:"This Week",         icon:"bi-calendar-week" },
+    { key:"week",        label:"Weekly Tracker",     icon:"bi-calendar-week" },
     { key:"history",     label:"History",           icon:"bi-clock-history" },
     ...(empRole !== "developer" ? [{ key:"calendar", label:"Content Calendar", icon:"bi-calendar3" }] : []),
     { key:"grades",      label:"Grades",            icon:"bi-award" },
     { key:"notifs",      label:"Notifications",     icon:"bi-bell" },
     { key:"performance", label:"My Stats",          icon:"bi-graph-up-arrow" },
   ];
-  const TITLES = { today:"Today", tasks:"My Tasks", week:"This Week", history:"History", calendar:"Content Calendar", grades:"Grades", notifs:"Notifications", performance:"My Stats", profile:"Profile" };
+  const TITLES = { today:"Today", tasks:"My Tasks", week:"Weekly Tracker", history:"History", calendar:"Content Calendar", grades:"Grades", notifs:"Notifications", performance:"My Stats", profile:"Profile" };
 
   function logout() { localStorage.removeItem("employeeToken"); router.push("/employee/login"); }
 
@@ -3689,7 +3691,7 @@ function DarkPortal() {
 
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "tasks"       && <PortalMyTasksView       tasks={tasks} loading={loading} empId={employee?._id} />}
-          {view === "week"        && <PortalThisWeekView      tasks={tasks} loading={loading} empId={employee?._id} />}
+          {view === "week"        && <PortalThisWeekView />}
           {view === "history"     && <PortalHistoryView       tasks={tasks} loading={loading} />}
           {view === "calendar"    && <PortalCalendarView />}
           {view === "grades"      && <PortalGradesView        tasks={tasks} loading={loading} />}
@@ -3837,7 +3839,7 @@ export default function EmployeeTasksDashboard() {
             {activeTab === "editor"      && <ContentEditorTab tasks={tasks} initialTask={editorTask} />}
             {activeTab === "brandcal"    && <BrandCalendarTab tasks={tasks} />}
             {activeTab === "calendar"    && <BrandCalendarTab tasks={tasks} />}
-            {activeTab === "weekly"      && <WeeklyTrackerTab tasks={tasks} />}
+            {activeTab === "weekly"      && <WeeklyTrackerTab />}
             {activeTab === "mycal"       && <MyCalendarTab    tasks={tasks} />}
             {activeTab === "library"     && <ScriptLibraryTab tasks={tasks} />}
             {activeTab === "submissions" && <SubmissionsTab   tasks={tasks} />}

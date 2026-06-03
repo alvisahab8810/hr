@@ -3243,6 +3243,10 @@ function MessagesView({ brandSlug, client }) {
   const [callRequests, setCallRequests]   = useState([]);
   const [replyTo, setReplyTo]             = useState(null);
   const [editingId, setEditingId]         = useState(null);
+  const [msgPanelTab, setMsgPanelTab]     = useState("chat");   // "chat" | "requests"
+  const [callReqTab, setCallReqTab]       = useState("call");   // "call" | "meeting"
+  const [meetingLinkInput, setMeetingLinkInput] = useState("");
+  const [openMenu, setOpenMenu]               = useState(null); // _id of msg with open dropdown
   const bottomRef    = useRef(null);
   const pollRef      = useRef(null);
   const crPollRef    = useRef(null);
@@ -3363,12 +3367,20 @@ function MessagesView({ brandSlug, client }) {
       const r = await fetch(`/api/client/call-requests?brand=${brandSlug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferredDate: callDate, preferredTime: callTime, note: callNote }),
+        body: JSON.stringify({
+          preferredDate: callDate,
+          preferredTime: callTime,
+          note: callNote,
+          requestType: callReqTab,
+          meetingLink: meetingLinkInput,
+        }),
       });
       const d = await r.json();
       if (d.success) {
         setCallRequests(prev => [d.request, ...prev]);
-        setShowCallReq(false); setCallDate(""); setCallTime(""); setCallNote("");
+        setShowCallReq(false);
+        setCallDate(""); setCallTime(""); setCallNote(""); setMeetingLinkInput("");
+        setCallReqTab("call");
       }
     } catch {}
     setSending(false);
@@ -3414,12 +3426,12 @@ function MessagesView({ brandSlug, client }) {
         .msg-date-sep { text-align: center; margin: 10px 0 6px; }
         .msg-date-sep span { font-size: 11px; color: #94a3b8; background: #EEF2FF; padding: 3px 12px; border-radius: 10px; font-weight: 600; }
         .msg-brow { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 6px; }
-        .msg-brow.client { justify-content: flex-end; }
-        .msg-brow.team   { justify-content: flex-start; }
+        .msg-brow.client { justify-content: flex-start; }
+        .msg-brow.team   { justify-content: flex-end; }
         .msg-av-xs { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0; margin-bottom: 2px; }
-        .msg-b { max-width: 72%; min-width: 80px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.6; overflow-wrap: break-word; word-break: normal; }
-        .msg-b.client { background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
-        .msg-b.team   { background: #fff; border: 1px solid #E2E8F0; color: #0f172a; border-bottom-left-radius: 4px; }
+        .msg-b { max-width: 72%; min-width: 160px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.6; overflow-wrap: break-word; word-break: break-word; position: relative; }
+        .msg-b.client { background: #4F46E5; color: #fff; border-bottom-left-radius: 4px; }
+        .msg-b.team   { background: #fff; border: 1px solid #E2E8F0; color: #0f172a; border-bottom-right-radius: 4px; }
         .msg-b-name { font-size: 10.5px; font-weight: 600; color: #94a3b8; margin-bottom: 3px; }
         .msg-b-time { font-size: 10px; margin-top: 5px; text-align: right; }
         .msg-b.client .msg-b-time { color: rgba(255,255,255,.5); }
@@ -3473,14 +3485,32 @@ function MessagesView({ brandSlug, client }) {
         /* Deleted / edited */
         .msg-deleted { font-style: italic; opacity: .55; font-size: 13px; display: flex; align-items: center; gap: 5px; }
         .msg-edited  { font-size: 9.5px; opacity: .55; margin-left: 4px; }
-        /* Inline action buttons */
-        .msg-brow { position: relative; }
-        .msg-msg-actions { display: none; flex-direction: row; gap: 1px; align-self: flex-end; flex-shrink: 0; padding-bottom: 5px; }
-        .msg-brow:hover .msg-msg-actions { display: flex; }
-        .msg-act-btn { background: #fff; border: 1px solid #E2E8F0; cursor: pointer; padding: 5px 7px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: background .1s; }
-        .msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
-        .msg-act-btn.danger { color: #EF4444; }
-        .msg-act-btn.danger:hover { background: #FEE2E2; }
+        /* WhatsApp-style message menu */
+        .msg-wa-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 2; }
+        .msg-b.client .msg-wa-btn { background: rgba(0,0,0,.18); color: rgba(255,255,255,.9); }
+        .msg-b.team   .msg-wa-btn { background: rgba(0,0,0,.09); color: #475569; }
+        .msg-b:hover .msg-wa-btn  { opacity: 1; pointer-events: auto; }
+        .msg-wa-btn:hover { opacity: 1 !important; filter: brightness(.85); }
+        .msg-wa-dropdown { position: absolute; top: 26px; right: 0; background: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.16); z-index: 200; min-width: 170px; overflow: hidden; border: 1px solid #E2E8F0; }
+        .msg-wa-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 13px; color: #0f172a; cursor: pointer; background: none; border: none; width: 100%; font-family: inherit; text-align: left; white-space: nowrap; }
+        .msg-wa-item:hover { background: #F1F5F9; }
+        .msg-wa-item.danger { color: #EF4444; }
+        .msg-wa-item.danger:hover { background: #FEF2F2; }
+        /* Panel tabs */
+        .msg-panel-tabs { display: flex; border-bottom: 1px solid #E2E8F0; background: #fff; }
+        .msg-ptab { flex: 1; padding: 11px 14px; font-size: 13px; font-weight: 600; color: #64748b; background: none; border: none; border-bottom: 2.5px solid transparent; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .msg-ptab.active { color: #4F46E5; border-bottom-color: #4F46E5; background: #fafbff; }
+        .msg-ptab-badge { background: #EF4444; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; }
+        /* Requests tab list */
+        .msg-req-list { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #F8FAFC; }
+        .msg-req-card { background: #fff; border: 1.5px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; }
+        .msg-req-card.pending   { border-left: 3px solid #F59E0B; }
+        .msg-req-card.approved, .msg-req-card.scheduled { border-left: 3px solid #10B981; }
+        .msg-req-card.rejected  { border-left: 3px solid #F97316; }
+        /* Modal tabs */
+        .msg-modal-tabs { display: flex; gap: 0; margin-bottom: 18px; border: 1.5px solid #E2E8F0; border-radius: 8px; overflow: hidden; }
+        .msg-modal-tab { flex: 1; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: #F8FAFC; border: none; font-family: inherit; color: #64748b; }
+        .msg-modal-tab.active { background: #4F46E5; color: #fff; }
         /* Reply / edit bars above input */
         .msg-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
         .msg-edit-bar  { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
@@ -3505,11 +3535,63 @@ function MessagesView({ brandSlug, client }) {
       <div className="msg-view">
         {/* Chat panel */}
         <div className="msg-panel">
-          <div className="msg-panel-header">
-            <div className="msg-panel-title">Conversation</div>
-            <div className="msg-panel-sub">Messages between you and your Viralon team</div>
+          {/* Panel tabs */}
+          <div className="msg-panel-tabs">
+            <button className={`msg-ptab ${msgPanelTab === "chat" ? "active" : ""}`} onClick={() => setMsgPanelTab("chat")}>
+              <i className="bi bi-chat-dots" /> Conversation
+            </button>
+            <button className={`msg-ptab ${msgPanelTab === "requests" ? "active" : ""}`} onClick={() => setMsgPanelTab("requests")}>
+              <i className="bi bi-telephone-fill" /> Requests
+              {callRequests.filter(cr => cr.status === "pending").length > 0 && (
+                <span className="msg-ptab-badge">{callRequests.filter(cr => cr.status === "pending").length}</span>
+              )}
+            </button>
           </div>
 
+          {/* Requests tab */}
+          {msgPanelTab === "requests" && (
+            <div className="msg-req-list">
+              {callRequests.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"32px 0", color:"#94a3b8" }}>
+                  <i className="bi bi-telephone" style={{ fontSize:32, display:"block", marginBottom:8, color:"#CBD5E1" }} />
+                  <div style={{ fontSize:13, fontWeight:600 }}>No requests yet</div>
+                  <div style={{ fontSize:12, marginTop:4 }}>Use the "Call Request / Meeting" button to get in touch</div>
+                </div>
+              ) : callRequests.map(cr => {
+                const sm = { pending:{bg:"#FEF9C3",col:"#A16207",lbl:"Pending"}, approved:{bg:"#DCFCE7",col:"#15803D",lbl:"Approved"}, scheduled:{bg:"#DCFCE7",col:"#15803D",lbl:"Scheduled"}, rejected:{bg:"#FFF7ED",col:"#C2410C",lbl:"Rescheduled"} }[cr.status] || {};
+                return (
+                  <div key={cr._id} className={`msg-req-card ${cr.status}`}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:6 }}>
+                      <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:700, background:sm.bg, color:sm.col }}>{sm.lbl}</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:"#4F46E5", background:"#EEF2FF", padding:"2px 7px", borderRadius:6 }}>
+                        {cr.requestType === "meeting" ? "📅 Meeting" : "📞 Call"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:600, color:"#0f172a" }}>
+                      <i className="bi bi-calendar2" style={{ marginRight:4 }} />{cr.preferredDate} · {cr.preferredTime}
+                    </div>
+                    {cr.note && <div style={{ fontSize:11.5, color:"#64748b", marginTop:3 }}>{cr.note}</div>}
+                    {(cr.status === "approved" || cr.status === "scheduled") && (
+                      <div style={{ fontSize:11.5, color:"#059669", fontWeight:700, marginTop:5 }}>
+                        <i className="bi bi-check-circle-fill" style={{ marginRight:3 }} />
+                        Confirmed: {cr.scheduledDate || cr.preferredDate} at {cr.scheduledTime || cr.preferredTime}
+                      </div>
+                    )}
+                    {cr.meetingLink && (
+                      <a href={cr.meetingLink} target="_blank" rel="noreferrer"
+                        style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6, fontSize:12, fontWeight:700, color:"#4F46E5", textDecoration:"none", background:"#EEF2FF", padding:"4px 10px", borderRadius:7 }}>
+                        <i className="bi bi-camera-video-fill" /> Join Meeting
+                      </a>
+                    )}
+                    {cr.adminNote && <div style={{ fontSize:11, color:"#64748b", fontStyle:"italic", marginTop:4 }}>"{cr.adminNote}"</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Chat thread + input — only when chat tab active */}
+          {msgPanelTab === "chat" && (<>
           <div className="msg-thread-scroll" onScroll={handleThreadScroll}>
             {messages.length === 0 ? (
               <div className="msg-empty-thread">
@@ -3530,6 +3612,11 @@ function MessagesView({ brandSlug, client }) {
                 const isClient = m.senderRole === "client";
                 return (
                   <div key={m._id} className={`msg-brow ${isClient ? "client" : "team"}`}>
+                    {isClient && (
+                      <div className="msg-av-xs" style={{ background: "#4F46E5" }}>
+                        {(client?.name || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     {!isClient && (
                       <div className="msg-av-xs" style={{ background: "#5A57FB" }}>
                         {(m.senderName || "V").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -3562,37 +3649,38 @@ function MessagesView({ brandSlug, client }) {
                                 <i className="bi bi-link-45deg" />{a.name}
                               </a>
                             ))}
+                            {/* WhatsApp-style dropdown trigger */}
+                            <button
+                              className="msg-wa-btn"
+                              onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === m._id ? null : m._id); }}
+                            >
+                              <i className="bi bi-chevron-down" />
+                            </button>
+                            {openMenu === m._id && (
+                              <>
+                                <div style={{ position:"fixed", inset:0, zIndex:199 }} onClick={() => setOpenMenu(null)} />
+                                <div className="msg-wa-dropdown" style={{ left:0, right:"auto" }}>
+                                  <button className="msg-wa-item" onClick={() => { startReply(m); setOpenMenu(null); }}>
+                                    <i className="bi bi-reply" /> Reply
+                                  </button>
+                                  {isClient && (
+                                    <button className="msg-wa-item" onClick={() => { startEdit(m); setOpenMenu(null); }}>
+                                      <i className="bi bi-pencil" /> Edit
+                                    </button>
+                                  )}
+                                  {isClient && (
+                                    <button className="msg-wa-item danger" onClick={() => { deleteMsg(m, "deleteForAll"); setOpenMenu(null); }}>
+                                      <i className="bi bi-trash" /> Delete
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            )}
                           </>
                         )}
                         <div className="msg-b-time">{fmtTime(m.createdAt)}</div>
                       </div>
                     </div>
-                    {/* Inline action buttons */}
-                    {!m.deleted && (
-                      <div className="msg-msg-actions">
-                        <button className="msg-act-btn" title="Reply" onClick={() => startReply(m)}>
-                          <i className="bi bi-reply" />
-                        </button>
-                        {isClient && (
-                          <button className="msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
-                            <i className="bi bi-pencil" />
-                          </button>
-                        )}
-                        {isClient && (
-                          <button className="msg-act-btn danger" title="Delete for everyone" onClick={() => deleteMsg(m, "deleteForAll")}>
-                            <i className="bi bi-trash" />
-                          </button>
-                        )}
-                        <button className="msg-act-btn" title="Delete for me" onClick={() => deleteMsg(m, "deleteForMe")}>
-                          <i className="bi bi-eye-slash" />
-                        </button>
-                      </div>
-                    )}
-                    {isClient && (
-                      <div className="msg-av-xs" style={{ background: "#4F46E5" }}>
-                        {(client?.name || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
                   </div>
                 );
               })
@@ -3659,6 +3747,7 @@ function MessagesView({ brandSlug, client }) {
               </button>
             </div>
           </div>
+          </>)}
         </div>
 
         {/* Account Manager panel */}
@@ -3675,7 +3764,7 @@ function MessagesView({ brandSlug, client }) {
                 onClick={() => setShowCallReq(true)}
               >
                 <i className="bi bi-telephone" />
-                Request a Call
+                Call Request / Meeting
               </button>
               <a
                 href="mailto:anurag@viralon.in"
@@ -3686,34 +3775,6 @@ function MessagesView({ brandSlug, client }) {
               </a>
             </div>
             <div className="msg-am-info">Response within 4 business hours</div>
-          </div>
-
-          {/* Call / Meeting Requests — above Quick Tips */}
-          <div className="cr-card">
-            <div className="cr-card-title">
-              <i className="bi bi-telephone-fill" style={{ marginRight: 5, color: "#4F46E5" }} />
-              Call / Meeting Requests
-            </div>
-            {callRequests.length === 0 ? (
-              <div className="cr-empty">No requests yet</div>
-            ) : (
-              callRequests.map(cr => (
-                <div key={cr._id} className="cr-item">
-                  <span className={`cr-badge ${cr.status}`}>
-                    {cr.status === "scheduled" ? "Scheduled" : cr.status.charAt(0).toUpperCase() + cr.status.slice(1)}
-                  </span>
-                  <div className="cr-dt">{cr.preferredDate} · {cr.preferredTime}</div>
-                  {cr.note ? <div className="cr-note">{cr.note}</div> : null}
-                  {(cr.status === "approved" || cr.status === "scheduled") ? (
-                    <div className="cr-conf">
-                      <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }} />
-                      {cr.scheduledDate || cr.preferredDate} at {cr.scheduledTime || cr.preferredTime}
-                    </div>
-                  ) : null}
-                  {cr.adminNote ? <div className="cr-note" style={{ fontStyle: "italic" }}>"{cr.adminNote}"</div> : null}
-                </div>
-              ))
-            )}
           </div>
 
           <div className="msg-am-card" style={{ padding: 16 }}>
@@ -3764,13 +3825,24 @@ function MessagesView({ brandSlug, client }) {
         </div>
       )}
 
-      {/* Request a Call modal */}
+      {/* Call Request / Meeting modal */}
       {showCallReq && (
         <div className="msg-modal-bg" onClick={e => { if (e.target === e.currentTarget) setShowCallReq(false); }}>
           <div className="msg-modal-box">
-            <div className="msg-modal-title">Request a Call</div>
+            <div className="msg-modal-title">Call Request / Meeting</div>
+            {/* Tabs */}
+            <div className="msg-modal-tabs" style={{ marginBottom: 18 }}>
+              <button className={`msg-modal-tab ${callReqTab === "call" ? "active" : ""}`} onClick={() => setCallReqTab("call")}>
+                <i className="bi bi-telephone" style={{ marginRight: 5 }} />Call
+              </button>
+              <button className={`msg-modal-tab ${callReqTab === "meeting" ? "active" : ""}`} onClick={() => setCallReqTab("meeting")}>
+                <i className="bi bi-camera-video" style={{ marginRight: 5 }} />Meeting
+              </button>
+            </div>
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
-              Let us know when you are available. Anurag will confirm the time.
+              {callReqTab === "call"
+                ? "Let us know when you are available. Anurag will confirm the time."
+                : "Schedule a video meeting. Anurag will confirm and share a link."}
             </div>
             <div className="msg-field">
               <label>Preferred Date</label>
@@ -3790,9 +3862,9 @@ function MessagesView({ brandSlug, client }) {
               />
             </div>
             <div className="msg-field">
-              <label>Note (optional)</label>
+              <label>{callReqTab === "meeting" ? "Meeting Agenda (optional)" : "Call Agenda (optional)"}</label>
               <input
-                placeholder="e.g. Discuss Q3 campaign strategy"
+                placeholder={callReqTab === "meeting" ? "e.g. Review campaign strategy" : "e.g. Discuss Q3 campaign strategy"}
                 value={callNote}
                 onChange={e => setCallNote(e.target.value)}
               />
@@ -3803,7 +3875,7 @@ function MessagesView({ brandSlug, client }) {
                 onClick={submitCallRequest}
                 disabled={sending || !callDate || !callTime}
               >
-                {sending ? "Sending..." : "Send Request"}
+                {sending ? "Sending..." : `Send ${callReqTab === "meeting" ? "Meeting Request" : "Call Request"}`}
               </button>
               <button className="msg-btn-sec" onClick={() => setShowCallReq(false)}>Cancel</button>
             </div>

@@ -736,7 +736,7 @@ export default function TasksListPage() {
                                       <i className="bi bi-arrow-counterclockwise" />Client Revision
                                     </span>
                                   )}
-                                  {t.status === "completed" && (
+                                  {t.stages?.[3]?.approved === true && (
                                     <span style={{ display: "inline-flex", gap: 4, marginTop: 3, padding: "2px 7px", borderRadius: 20, background: "#DCFCE7", color: "#15803D", fontSize: 10, fontWeight: 700 }}>
                                       <i className="bi bi-check-circle-fill" />Done
                                     </span>
@@ -754,21 +754,24 @@ export default function TasksListPage() {
                                 <td onClick={e => e.stopPropagation()}>
                                   <div style={{ display: "flex", gap: 4 }}>
                                     {STAGE_KEYS.map((key, i) => {
-                                      const meta = STAGE_META[key];
-                                      const stg  = t.stages?.[i] || {};
-                                      const done = stg.done; const approved = stg.approved; const rejected = stg.rejected;
-                                      const pending = done && !approved && !rejected;
-                                      const isActive = !done && t.stage === key;
-                                      // Gray = not started, stage-color = active/done/pending, red = rejected
-                                      const bg     = rejected ? "#DC2626" : (done || isActive) ? meta.color : "#E2E8F0";
-                                      const border = rejected ? "#DC2626" : (done || isActive) ? meta.color : "#D1D5DB";
-                                      // Dark text on bright yellow/cyan/green/orange, white on red/gray
-                                      const txtCol = rejected ? "#fff" : (done || isActive) ? "#000" : "#9CA3AF";
+                                      const meta       = STAGE_META[key];
+                                      const stg        = t.stages?.[i] || {};
+                                      const approved   = !!stg.approved;
+                                      const done       = !!stg.done;
+                                      const rejected   = !!stg.rejected;
+                                      const pending    = done && !approved && !rejected;
+                                      // Active = this is the current stage AND it has assignees (not just a skip target)
+                                      const hasAssignees = normalizeAssignedTo(stg.assignedTo).length > 0;
+                                      const isActive   = !done && t.stage === key && hasAssignees;
+                                      // Approved → always green. Active → stage color. Else → gray.
+                                      const bg     = rejected ? "#DC2626" : approved ? "#22c55e" : isActive ? meta.color : "#E2E8F0";
+                                      const border = rejected ? "#DC2626" : approved ? "#22c55e" : (isActive || pending) ? meta.color : "#D1D5DB";
+                                      const txtCol = rejected ? "#fff"    : approved ? "#fff"    : (isActive || pending) ? "#000" : "#9CA3AF";
                                       return (
                                         <div key={key} className="stage-dot"
                                           style={{ background: bg, borderColor: border, color: txtCol }}
                                           onClick={() => openStageEditor(t, i)}>
-                                          {rejected ? "✗" : pending ? "⏳" : done ? "✓" : i + 1}
+                                          {rejected ? "✗" : approved ? "✓" : pending ? "⏳" : i + 1}
                                         </div>
                                       );
                                     })}

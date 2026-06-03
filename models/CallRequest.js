@@ -10,6 +10,8 @@ const schema = new S({
   preferredDate: { type: String, required: true },
   preferredTime: { type: String, required: true },
   note:          { type: String, default: "" },
+  requestType:   { type: String, enum: ["call", "meeting"], default: "call" },
+  meetingLink:   { type: String, default: "" },
   status:        { type: String, enum: ["pending", "approved", "rejected", "scheduled"], default: "pending" },
   scheduledDate: { type: String, default: "" },
   scheduledTime: { type: String, default: "" },

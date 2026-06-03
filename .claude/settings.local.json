@@ -39,7 +39,9 @@
       "Read(//d/viralon-payroll/pages/**)",
       "Read(//d/viralon-payroll/pages/client/**)",
       "Bash(Get-ChildItem -Path . -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(git -C d:\\\\viralon-payroll diff --stat HEAD)",
+      "Bash(git diff *)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

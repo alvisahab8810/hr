@@ -70,6 +70,7 @@ export default function EmployeeMessages() {
   const [schedDate, setSchedDate]         = useState("");
   const [schedTime, setSchedTime]         = useState("");
   const [adminNote, setAdminNote]         = useState("");
+  const [openMenu, setOpenMenu]           = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [meId, setMeId]                   = useState(null);
   const [replyTo, setReplyTo]             = useState(null);
@@ -272,19 +273,19 @@ export default function EmployeeMessages() {
         .em-date-sep { text-align: center; margin: 12px 0 8px; }
         .em-date-sep span { font-size: 11px; color: #94a3b8; background: #F1F5F9; padding: 3px 12px; border-radius: 10px; font-weight: 600; }
         .em-brow { display: flex; gap: 7px; align-items: flex-end; margin-bottom: 5px; }
-        .em-brow.team   { justify-content: flex-start; }
-        .em-brow.client { justify-content: flex-end; }
+        .em-brow.team   { justify-content: flex-end; }
+        .em-brow.client { justify-content: flex-start; }
         .em-av-sm { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: #fff; flex-shrink: 0; margin-bottom: 2px; }
-        .em-bubble { max-width: 72%; min-width: 80px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; overflow-wrap: break-word; word-break: normal; }
-        .em-bubble.team   { background: #fff; border: 1.5px solid #E2E8F0; color: #0f172a; border-bottom-left-radius: 4px; }
-        .em-bubble.client { background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
+        .em-bubble { max-width: 72%; min-width: 160px; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.55; overflow-wrap: break-word; word-break: break-word; position: relative; }
+        .em-bubble.team   { background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
+        .em-bubble.client { background: #fff; border: 1.5px solid #E2E8F0; color: #0f172a; border-bottom-left-radius: 4px; }
         .em-bname { font-size: 10.5px; font-weight: 600; color: #64748b; margin-bottom: 3px; }
         .em-btime { font-size: 10px; margin-top: 5px; text-align: right; }
-        .em-bubble.team .em-btime   { color: #94a3b8; }
-        .em-bubble.client .em-btime { color: rgba(255,255,255,.5); }
+        .em-bubble.team .em-btime   { color: rgba(255,255,255,.5); }
+        .em-bubble.client .em-btime { color: #94a3b8; }
         .em-blink { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; }
-        .em-bubble.team .em-blink   { background: #EEF2FF; color: #4F46E5; }
-        .em-bubble.client .em-blink { background: rgba(255,255,255,.18); color: #fff; }
+        .em-bubble.team .em-blink   { background: rgba(255,255,255,.18); color: #fff; }
+        .em-bubble.client .em-blink { background: #EEF2FF; color: #4F46E5; }
         .em-input { padding: 14px 18px; background: #fff; border-top: 1px solid #E2E8F0; }
         .em-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
         .em-chip  { display: flex; align-items: center; gap: 5px; padding: 4px 10px; background: #EEF2FF; border-radius: 8px; font-size: 12px; font-weight: 600; color: #4F46E5; }
@@ -311,23 +312,27 @@ export default function EmployeeMessages() {
         .em-error button { background: none; border: none; cursor: pointer; color: #DC2626; margin-left: auto; }
         /* Reply preview inside bubble */
         .em-reply-preview { border-radius: 7px; padding: 5px 9px; margin-bottom: 7px; }
-        .em-bubble.team .em-reply-preview  { background: #EEF2FF; border-left: 3px solid #4F46E5; }
-        .em-bubble.client .em-reply-preview { background: rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.5); }
+        .em-bubble.team .em-reply-preview  { background: rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.5); }
+        .em-bubble.client .em-reply-preview { background: #EEF2FF; border-left: 3px solid #4F46E5; }
         .em-reply-pname { font-size: 10.5px; font-weight: 700; margin-bottom: 1px; }
-        .em-bubble.team .em-reply-pname { color: #4F46E5; }
-        .em-bubble.client .em-reply-pname { color: rgba(255,255,255,.9); }
+        .em-bubble.team .em-reply-pname { color: rgba(255,255,255,.9); }
+        .em-bubble.client .em-reply-pname { color: #4F46E5; }
         .em-reply-ptext { font-size: 11.5px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* Deleted / edited */
         .em-deleted { font-style: italic; opacity: .55; font-size: 13px; display: flex; align-items: center; gap: 5px; }
         .em-edited  { font-size: 9.5px; opacity: .55; margin-left: 4px; }
         /* Inline action buttons (never clip) */
-        .em-brow { position: relative; }
-        .em-msg-actions { display: none; flex-direction: row; gap: 1px; align-self: flex-end; flex-shrink: 0; padding-bottom: 5px; }
-        .em-brow:hover .em-msg-actions { display: flex; }
-        .em-msg-act-btn { background: #fff; border: 1px solid #E2E8F0; cursor: pointer; padding: 5px 7px; border-radius: 8px; font-size: 13px; color: #94a3b8; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.08); transition: background .1s; }
-        .em-msg-act-btn:hover { background: #F1F5F9; color: #0f172a; }
-        .em-msg-act-btn.danger { color: #EF4444; }
-        .em-msg-act-btn.danger:hover { background: #FEE2E2; }
+        /* WhatsApp-style message dropdown */
+        .em-wa-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 2; }
+        .em-bubble.team   .em-wa-btn { background: rgba(0,0,0,.18); color: rgba(255,255,255,.9); }
+        .em-bubble.client .em-wa-btn { background: rgba(0,0,0,.09); color: #475569; }
+        .em-bubble:hover .em-wa-btn  { opacity: 1; pointer-events: auto; }
+        .em-wa-btn:hover { opacity: 1 !important; filter: brightness(.85); }
+        .em-wa-dropdown { position: absolute; top: 26px; left: 0; background: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.16); z-index: 200; min-width: 170px; overflow: hidden; border: 1px solid #E2E8F0; }
+        .em-wa-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 13px; color: #0f172a; cursor: pointer; background: none; border: none; width: 100%; font-family: inherit; text-align: left; white-space: nowrap; }
+        .em-wa-item:hover { background: #F1F5F9; }
+        .em-wa-item.danger { color: #EF4444; }
+        .em-wa-item.danger:hover { background: #FEF2F2; }
         /* Reply / edit bars */
         .em-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
         .em-edit-bar  { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
@@ -473,13 +478,13 @@ export default function EmployeeMessages() {
                           const isMyMsg = isTeam && meId && String(m.senderId) === meId;
                           return (
                             <div key={m._id} className={`em-brow ${isTeam ? "team" : "client"}`}>
-                              {isTeam && (
-                                <div className="em-av-sm" style={{ background: "#5A57FB" }}>
-                                  {(m.senderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                              {!isTeam && (
+                                <div className="em-av-sm" style={{ background: "#E11D48" }}>
+                                  {(m.senderName || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                                 </div>
                               )}
                               <div style={{ minWidth: 0 }}>
-                                {isTeam && <div className="em-bname">{m.senderName}</div>}
+                                {!isTeam && <div className="em-bname">{m.senderName}</div>}
                                 <div className={`em-bubble ${isTeam ? "team" : "client"}`}>
                                   {/* Reply preview */}
                                   {m.replyTo?.msgId && !m.deleted && (
@@ -505,35 +510,41 @@ export default function EmployeeMessages() {
                                           <i className="bi bi-link-45deg" style={{ fontSize: 13 }} />{a.name}
                                         </a>
                                       ))}
+                                      {/* WhatsApp-style dropdown */}
+                                      <button
+                                        className="em-wa-btn"
+                                        onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === m._id ? null : m._id); }}
+                                      >
+                                        <i className="bi bi-chevron-down" />
+                                      </button>
+                                      {openMenu === m._id && (
+                                        <>
+                                          <div style={{ position:"fixed", inset:0, zIndex:199 }} onClick={() => setOpenMenu(null)} />
+                                          <div className="em-wa-dropdown" style={isTeam ? { right:0, left:"auto" } : { left:0, right:"auto" }}>
+                                            <button className="em-wa-item" onClick={() => { startReply(m); setOpenMenu(null); }}>
+                                              <i className="bi bi-reply" /> Reply
+                                            </button>
+                                            {isMyMsg && (
+                                              <button className="em-wa-item" onClick={() => { startEdit(m); setOpenMenu(null); }}>
+                                                <i className="bi bi-pencil" /> Edit
+                                              </button>
+                                            )}
+                                            {isMyMsg && (
+                                              <button className="em-wa-item danger" onClick={() => { deleteMsg(m, "deleteForAll"); setOpenMenu(null); }}>
+                                                <i className="bi bi-trash" /> Delete
+                                              </button>
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
                                     </>
                                   )}
                                   <div className="em-btime">{fmtTime(m.createdAt)}</div>
                                 </div>
                               </div>
-                              {/* Inline action buttons */}
-                              {!m.deleted && (
-                                <div className="em-msg-actions">
-                                  <button className="em-msg-act-btn" title="Reply" onClick={() => startReply(m)}>
-                                    <i className="bi bi-reply" />
-                                  </button>
-                                  {isMyMsg && (
-                                    <button className="em-msg-act-btn" title="Edit" onClick={() => startEdit(m)}>
-                                      <i className="bi bi-pencil" />
-                                    </button>
-                                  )}
-                                  {isMyMsg && (
-                                    <button className="em-msg-act-btn danger" title="Delete for everyone" onClick={() => deleteMsg(m, "deleteForAll")}>
-                                      <i className="bi bi-trash" />
-                                    </button>
-                                  )}
-                                  <button className="em-msg-act-btn" title="Delete for me" onClick={() => deleteMsg(m, "deleteForMe")}>
-                                    <i className="bi bi-eye-slash" />
-                                  </button>
-                                </div>
-                              )}
-                              {!isTeam && (
-                                <div className="em-av-sm" style={{ background: "#E11D48" }}>
-                                  {(m.senderName || "C").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                              {isTeam && (
+                                <div className="em-av-sm" style={{ background: "#5A57FB" }}>
+                                  {(m.senderName || "T").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                                 </div>
                               )}
                             </div>
@@ -609,58 +620,6 @@ export default function EmployeeMessages() {
                     </div>
                   </div>
 
-                  {/* Call / Meeting Requests panel */}
-                  <div className="em-req-panel">
-                    <div className="em-req-hdr">
-                      <div className="em-req-title">
-                        <i className="bi bi-telephone-fill" style={{ marginRight: 6, color: "#4F46E5" }} />
-                        Meeting Requests
-                      </div>
-                      <div className="em-req-sub">Call/meeting requests from client</div>
-                    </div>
-                    <div className="em-req-list">
-                      {callRequests.length === 0 ? (
-                        <div className="em-req-empty">
-                          <i className="bi bi-calendar-x" style={{ fontSize: 28, color: "#CBD5E1", display: "block", marginBottom: 6 }} />
-                          No requests yet
-                        </div>
-                      ) : (
-                        callRequests.map(cr => (
-                          <div key={cr._id} className={`em-req-item ${cr.status}`}>
-                            <span className={`em-req-badge ${cr.status}`}>
-                              {cr.status === "scheduled" ? "Scheduled" : cr.status.charAt(0).toUpperCase() + cr.status.slice(1)}
-                            </span>
-                            <div className="em-req-client">{cr.clientName}</div>
-                            <div className="em-req-dt">
-                              <i className="bi bi-calendar2" style={{ marginRight: 4 }} />
-                              {cr.preferredDate} · {cr.preferredTime}
-                            </div>
-                            {cr.note ? <div className="em-req-note">{cr.note}</div> : null}
-                            {(cr.status === "approved" || cr.status === "scheduled") && (cr.scheduledDate || cr.scheduledTime) ? (
-                              <div style={{ fontSize: 11, color: "#059669", fontWeight: 600, marginTop: 3 }}>
-                                <i className="bi bi-check-circle-fill" style={{ marginRight: 3 }} />
-                                Confirmed: {cr.scheduledDate || cr.preferredDate} · {cr.scheduledTime || cr.preferredTime}
-                              </div>
-                            ) : null}
-                            {cr.adminNote ? <div className="em-req-note" style={{ fontStyle: "italic" }}>"{cr.adminNote}"</div> : null}
-                            {cr.status === "pending" && (
-                              <div className="em-req-actions">
-                                <button className="em-req-btn-approve"  onClick={() => openActionModal(cr, "approved")}>
-                                  <i className="bi bi-check" /> Approve
-                                </button>
-                                <button className="em-req-btn-schedule" onClick={() => openActionModal(cr, "scheduled")}>
-                                  <i className="bi bi-calendar-check" /> Schedule
-                                </button>
-                                <button className="em-req-btn-reject"   onClick={() => openActionModal(cr, "rejected")}>
-                                  <i className="bi bi-x" /> Reject
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
                   </>
                 )}
               </div>

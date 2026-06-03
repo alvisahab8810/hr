@@ -57,10 +57,10 @@ async function sendRequestEmails({ clientEmail, clientName, brandName, title, co
   t.sendMail({
     from: `"Viralon Client Portal" <info@viralon.in>`,
     to:   "anurag@viralon.in",
-    subject: `📋 New Task Request — ${brandName}: ${title}`,
+    subject: `New Task Request — ${brandName}: ${title}`,
     html: wrapEmail(
-      `📋 New Task Request`,
-      `⚡ Action needed — review and scope this request`,
+      `New Task Request`,
+      `Action needed — review and scope this request`,
       `<p style="margin:0 0 16px;font-size:14px;color:#374151">Hi Anurag, a new task request has been submitted.</p>
        <div style="background:#EEF2FF;border:1.5px solid #C7D2FE;border-radius:10px;padding:16px 20px;margin-bottom:20px">
          <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:10px">${title}</div>
@@ -75,10 +75,10 @@ async function sendRequestEmails({ clientEmail, clientName, brandName, title, co
     t.sendMail({
       from: `"Viralon Team" <info@viralon.in>`,
       to:   clientEmail,
-      subject: `✅ Request Received — ${title}`,
+      subject: `Request Received — ${title}`,
       html: wrapEmail(
-        `✅ Request Received`,
-        `🎉 Your request has been received! We'll review it shortly.`,
+        `Request Received`,
+        `Your request has been received. We'll review it shortly.`,
         `<p style="margin:0 0 16px;font-size:14px;color:#374151">Hi <strong>${clientName}</strong>,</p>
          <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65">We've received your task request. Our team will review it and confirm whether it's in scope. You'll be notified once we've had a chance to look at it.</p>
          <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:10px;padding:16px 20px;margin-bottom:20px">

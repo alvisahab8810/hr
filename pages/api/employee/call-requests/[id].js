@@ -22,13 +22,13 @@ async function sendActionEmail({ clientEmail, clientName, brandName, action, pre
   });
 
   const confirmed = action !== "rejected";
-  const title = confirmed ? "✅ Call / Meeting Confirmed" : "❌ Call Request Update";
+  const title = confirmed ? "Call / Meeting Confirmed" : "Call Request Update";
   const confDate = scheduledDate || preferredDate;
   const confTime = scheduledTime || preferredTime;
 
   const strip = confirmed
-    ? `<tr><td style="background:#DCFCE7;border-bottom:1px solid #BBF7D0;padding:12px 32px"><span style="font-size:13px;font-weight:700;color:#15803D;">🎉 Your call/meeting has been confirmed!</span></td></tr>`
-    : `<tr><td style="background:#FEE2E2;border-bottom:1px solid #FCA5A5;padding:12px 32px"><span style="font-size:13px;font-weight:700;color:#DC2626;">Your call request could not be confirmed at this time.</span></td></tr>`;
+    ? `<tr><td style="background:#DCFCE7;border-bottom:1px solid #BBF7D0;padding:12px 32px"><span style="font-size:13px;font-weight:700;color:#15803D;">Your call/meeting has been confirmed!</span></td></tr>`
+    : `<tr><td style="background:#FFF7ED;border-bottom:1px solid #FED7AA;padding:12px 32px"><span style="font-size:13px;font-weight:700;color:#C2410C;">Please suggest a new time — we'd love to connect!</span></td></tr>`;
 
   const body = confirmed ? `
     <p style="margin:0 0 16px;font-size:14px;color:#374151">Hi <strong>${clientName}</strong>,</p>
@@ -41,9 +41,10 @@ async function sendActionEmail({ clientEmail, clientName, brandName, action, pre
       </table>
     </div>` : `
     <p style="margin:0 0 16px;font-size:14px;color:#374151">Hi <strong>${clientName}</strong>,</p>
-    <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65">Unfortunately, we are unable to confirm the call on <strong>${preferredDate}</strong> at <strong>${preferredTime}</strong>.</p>
-    ${adminNote ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:16px 20px;margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:#DC2626;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Message from Anurag</div><div style="font-size:14px;color:#7F1D1D;line-height:1.65">${adminNote}</div></div>` : ""}
-    <p style="font-size:13px;color:#374151">Please use the client portal to submit another request with a different date/time.</p>`;
+    <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65">We appreciate you reaching out! Unfortunately, we are unable to make it on <strong>${preferredDate}</strong> at <strong>${preferredTime}</strong>. We'd love to reschedule at your convenience.</p>
+    ${adminNote ? `<div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#C2410C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Message from Anurag</div><div style="font-size:14px;color:#7C2D12;line-height:1.65">${adminNote}</div></div>` : ""}
+    <p style="font-size:13px;color:#374151;line-height:1.65">Please use the client portal to submit a new request with a different date and time. We look forward to connecting with you!</p>
+    <div style="text-align:center;margin-top:16px"><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/tourwatchout" style="display:inline-block;padding:10px 24px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px">Request New Time →</a></div>`;
 
   await transporter.sendMail({
     from:    `"Viralon Team" <info@viralon.in>`,
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ success: false });
 
   const { id } = req.query;
-  const { action, scheduledDate, scheduledTime, adminNote } = req.body || {};
+  const { action, scheduledDate, scheduledTime, adminNote, meetingLink } = req.body || {};
 
   if (!["approved", "rejected", "scheduled"].includes(action))
     return res.status(400).json({ success: false, message: "Invalid action" });
@@ -95,9 +96,10 @@ export default async function handler(req, res) {
   if (!callReq) return res.status(404).json({ success: false, message: "Request not found" });
 
   callReq.status    = action;
-  if (scheduledDate)           callReq.scheduledDate = scheduledDate;
-  if (scheduledTime)           callReq.scheduledTime = scheduledTime;
-  if (adminNote !== undefined) callReq.adminNote     = adminNote;
+  if (scheduledDate)            callReq.scheduledDate = scheduledDate;
+  if (scheduledTime)            callReq.scheduledTime = scheduledTime;
+  if (adminNote !== undefined)  callReq.adminNote     = adminNote;
+  if (meetingLink !== undefined) callReq.meetingLink  = meetingLink;
   await callReq.save();
 
   // Respond immediately — email fires in background

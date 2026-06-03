@@ -18,9 +18,9 @@ function makeT() {
 async function sendScopeEmail({ clientEmail, clientName, brandName, title, status, adminRemark }) {
   const t = makeT();
   const confirmed = status === "in_scope";
-  const subject   = confirmed ? `✅ Task Request In Scope — ${title}` : `❌ Task Request Update — ${title}`;
+  const subject   = confirmed ? `Task Request In Scope — ${title}` : `Task Request Update — ${title}`;
   const strip     = confirmed
-    ? `✅ Great news! Your request is in scope and our team will work on it.`
+    ? `Great news! Your request is in scope and our team will work on it.`
     : `Your request is currently out of scope. See details below.`;
   const body = confirmed
     ? `<p style="font-size:14px;color:#374151">Hi <strong>${clientName}</strong>,</p>
@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   res.json({ success: true, request });
 
   if (request.clientId?._id) {
-    const statusLabel = status === "in_scope" ? "In Scope ✓" : status === "out_of_scope" ? "Out of Scope" : "Pending";
+    const statusLabel = status === "in_scope" ? "In Scope" : status === "out_of_scope" ? "Out of Scope" : "Pending";
     sendNotification({
       recipientId: request.clientId._id,
       recipientModel: "Client",

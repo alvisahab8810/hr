@@ -25,7 +25,14 @@ export default async function handler(req, res) {
   if (!dept.includes("digital") && !dept.includes("marketing"))
     return res.status(403).json({ success: false });
 
-  const { brandId } = req.query;
+  const { brandId, count } = req.query;
+
+  // count=true — return total pending requests across all brands (for sidebar badge)
+  if (count === "true") {
+    const total = await CallRequest.countDocuments({ status: "pending" });
+    return res.json({ success: true, pending: total });
+  }
+
   if (!brandId) return res.status(400).json({ success: false, message: "brandId required" });
 
   const requests = await CallRequest.find({ brandId })

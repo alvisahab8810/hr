@@ -12,14 +12,13 @@ const MONTHS = [
 ];
 
 const DEDUCTION_LINES = [
-  { key: "absent",      label: "Absent Days",  icon: "bi-person-x-fill",    color: "#DC2626", bg: "#FEE2E2" },
-  { key: "halfDay",     label: "Half Day",     icon: "bi-calendar-half",    color: "#1D4ED8", bg: "#DBEAFE" },
-  { key: "late",        label: "Late Penalty", icon: "bi-alarm-fill",       color: "#D97706", bg: "#FEF3C7" },
-  { key: "lunch",       label: "Lunch Penalty",icon: "bi-cup-hot-fill",     color: "#A21CAF", bg: "#FDF4FF" },
-  { key: "unpaidLeave", label: "Unpaid Leave", icon: "bi-calendar-x-fill",  color: "#059669", bg: "#ECFDF5" },
-  { key: "other",       label: "Other",        icon: "bi-dash-circle-fill", color: "#6B7280", bg: "#F3F4F6" },
+  { key: "absent",      label: "Absent Days",   icon: "bi-person-x-fill",    color: "#DC2626", bg: "#FEE2E2" },
+  { key: "halfDay",     label: "Half Day",      icon: "bi-calendar-half",    color: "#1D4ED8", bg: "#DBEAFE" },
+  { key: "late",        label: "Late Penalty",  icon: "bi-alarm-fill",       color: "#D97706", bg: "#FEF3C7" },
+  { key: "lunch",       label: "Lunch Penalty", icon: "bi-cup-hot-fill",     color: "#A21CAF", bg: "#FDF4FF" },
+  { key: "unpaidLeave", label: "Unpaid Leave",  icon: "bi-calendar-x-fill",  color: "#059669", bg: "#ECFDF5" },
+  { key: "other",       label: "Other",         icon: "bi-dash-circle-fill", color: "#6B7280", bg: "#F3F4F6" },
 ];
-
 
 const fmt = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 const empName = (e) => e ? `${e.firstName || ""} ${e.lastName || ""}`.trim() || e.email || "—" : "—";
@@ -30,6 +29,49 @@ const AVATAR_COLORS = [
 ];
 const avatarBg = (name) => AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
 
+function fmtDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", weekday: "short" });
+}
+
+function fmtTime(dateVal) {
+  if (!dateVal) return "—";
+  const d = new Date(dateVal);
+  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
+function fmtMins(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// Compute approximate absent dates: Mon–Sat working days with no attendance record
+function getAbsentDates(attendanceRecords, month, year) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const presentDates = new Set(attendanceRecords.map(a => a.date));
+  const absentDates = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    if (dateObj > today) break;
+    if (dateObj.getDay() === 0) continue; // Sunday
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (!presentDates.has(dateStr)) absentDates.push(dateStr);
+  }
+  return absentDates;
+}
+
+// Get lunch break duration for an attendance record (longest lunch break in ms)
+function getLunchBreakMs(record) {
+  if (!record?.breaks?.length) return 0;
+  const lunchBreaks = record.breaks.filter(b => b.type === "lunch" && b.start && b.end);
+  if (!lunchBreaks.length) return 0;
+  return lunchBreaks.reduce((sum, b) => sum + (new Date(b.end) - new Date(b.start)), 0);
+}
+
 export default function AdminDeductionWaiver() {
   const today = new Date();
   const [month,        setMonth]        = useState(today.getMonth());
@@ -38,7 +80,7 @@ export default function AdminDeductionWaiver() {
   const [waivers,      setWaivers]      = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [processing,   setProcessing]   = useState(null);
-  const [overrideModal,setOverrideModal]= useState(null); // { empId, empName, key, label, amount }
+  const [overrideModal,setOverrideModal]= useState(null);
   const [remark,       setRemark]       = useState("");
   const [search,       setSearch]       = useState("");
   const [expandedId,   setExpandedId]   = useState(null);
@@ -67,7 +109,6 @@ export default function AdminDeductionWaiver() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Admin directly waives a deduction
   const handleOverride = async () => {
     if (!overrideModal) return;
     setProcessing(`override_${overrideModal.empId}_${overrideModal.key}`);
@@ -93,7 +134,6 @@ export default function AdminDeductionWaiver() {
     finally { setProcessing(null); }
   };
 
-  // Build waiver lookup: "empId_deductionType" → waiver doc
   const waiverMap = {};
   waivers.forEach(w => {
     const empId = w.employee?._id?.toString() || "";
@@ -112,10 +152,10 @@ export default function AdminDeductionWaiver() {
   const withDeductions       = reports.filter(r => (r.deductions?.total || 0) > 0).length;
 
   const STATS = [
-    { label: "Employees",          value: reports.length,                  icon: "bi-people-fill",          color: "#4F46E5", bg: "#EEF2FF", border: "#C7D2FE" },
-    { label: "Total Deductions",   value: `₹${fmt(totalDeductionAllEmp)}`, icon: "bi-dash-circle-fill",     color: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
-    { label: "With Deductions",    value: withDeductions,                  icon: "bi-person-exclamation",   color: "#D97706", bg: "#FEF3C7", border: "#FDE68A" },
-    { label: "Total Waived",       value: `₹${fmt(totalWaivedAllEmp)}`,    icon: "bi-shield-check-fill",    color: "#15803D", bg: "#DCFCE7", border: "#BBF7D0" },
+    { label: "Employees",        value: reports.length,                  icon: "bi-people-fill",        color: "#4F46E5", bg: "#EEF2FF", border: "#C7D2FE" },
+    { label: "Total Deductions", value: `₹${fmt(totalDeductionAllEmp)}`, icon: "bi-dash-circle-fill",   color: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
+    { label: "With Deductions",  value: withDeductions,                  icon: "bi-person-exclamation", color: "#D97706", bg: "#FEF3C7", border: "#FDE68A" },
+    { label: "Total Waived",     value: `₹${fmt(totalWaivedAllEmp)}`,    icon: "bi-shield-check-fill",  color: "#15803D", bg: "#DCFCE7", border: "#BBF7D0" },
   ];
 
   return (
@@ -140,7 +180,7 @@ export default function AdminDeductionWaiver() {
                       z-index:1050; display:flex; align-items:center; justify-content:center; padding:16px; }
         .dw-modal { background:#fff; border-radius:20px; width:100%; max-width:460px;
                     box-shadow:0 24px 64px rgba(0,0,0,.2); overflow:hidden; }
-        .dw-ded-row { display:flex; justify-content:space-between; align-items:center;
+        .dw-ded-row { display:flex; justify-content:space-between; align-items:flex-start;
                       padding:11px 0; border-bottom:1px solid #F3F4F6; gap:10px; }
         .dw-ded-row:last-child { border-bottom:none; }
         .dw-expand-btn { background:none; border:none; cursor:pointer; color:#9CA3AF;
@@ -151,6 +191,10 @@ export default function AdminDeductionWaiver() {
                         border-radius:16px; border:1.5px solid; cursor:default; }
         .override-btn { background:linear-gradient(135deg,#818CF8,#6366F1); color:#fff; }
         .override-btn:hover:not(:disabled) { background:linear-gradient(135deg,#6366F1,#4F46E5); }
+        .dw-detail-list { margin-top:8px; display:flex; flex-direction:column; gap:5px; }
+        .dw-detail-item { display:flex; align-items:center; gap:8px; background:#F8FAFC;
+                          border-radius:8px; padding:6px 10px; font-size:11.5px; color:#374151; }
+        .dw-detail-note { font-size:11px; color:#9CA3AF; margin-top:4px; font-style:italic; }
       `}</style>
       </Head>
 
@@ -188,7 +232,7 @@ export default function AdminDeductionWaiver() {
               ))}
             </div>
 
-            {/* ── Filters + Tabs ── */}
+            {/* ── Filters ── */}
             <div className="dw-card" style={{ padding: "13px 18px", marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
               <select value={month} onChange={e => setMonth(Number(e.target.value))}
                 style={{ padding: "7px 12px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, cursor:"pointer" }}>
@@ -198,7 +242,6 @@ export default function AdminDeductionWaiver() {
                 style={{ padding: "7px 12px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, cursor:"pointer" }}>
                 {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search employee…"
                 style={{ marginLeft: "auto", padding: "8px 14px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 13, minWidth: 180 }}
@@ -225,6 +268,18 @@ export default function AdminDeductionWaiver() {
                   const empWaivers  = waivers.filter(w => w.employee?._id?.toString() === empId);
                   const isExpanded  = expandedId === r._id;
                   const hasWaived   = empWaivers.some(w => w.status === "Approved");
+                  const attRecords  = r.attendanceRecords || [];
+                  const leaveDateMap = r.leaveDateMap || {};
+
+                  // Pre-compute detail data for each deduction type
+                  const lateDays    = attRecords.filter(a => {
+                    if (a.latePenaltyApplied || (a.latePenaltyAmount || 0) > 0) return true;
+                    if (!a.startTime) return false;
+                    const t = new Date(a.startTime);
+                    return t.getHours() > 10 || (t.getHours() === 10 && t.getMinutes() > 10);
+                  });
+                  const lunchDays   = attRecords.filter(a => (a.deductions || 0) > 0);
+                  const absentDates = getAbsentDates(attRecords, month, year);
 
                   return (
                     <div key={r._id} className="dw-row">
@@ -285,30 +340,116 @@ export default function AdminDeductionWaiver() {
 
                             return (
                               <div key={line.key} className="dw-ded-row">
-                                {/* Left: type icon + label */}
-                                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                                  <div style={{ width: 34, height: 34, borderRadius: 9, background: line.bg, flexShrink: 0,
-                                    display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    <i className={`bi ${line.icon}`} style={{ fontSize: 15, color: line.color }} />
+                                {/* Left: type icon + label + detail dates */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <div style={{ width: 34, height: 34, borderRadius: 9, background: line.bg, flexShrink: 0,
+                                      display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                      <i className={`bi ${line.icon}`} style={{ fontSize: 15, color: line.color }} />
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{line.label}</div>
+                                      {isWaived && (
+                                        <span className="dw-badge" style={{ background: "#DCFCE7", color: "#15803D", marginTop: 3 }}>
+                                          <i className="bi bi-shield-check-fill" style={{ fontSize: 9 }} /> Waived by admin
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{line.label}</div>
-                                    {isWaived && (
-                                      <span className="dw-badge" style={{ background: "#DCFCE7", color: "#15803D", marginTop: 3 }}>
-                                        <i className="bi bi-shield-check-fill" style={{ fontSize: 9 }} /> Waived by admin
-                                      </span>
-                                    )}
-                                  </div>
+
+                                  {/* ── Detail rows per deduction type ── */}
+                                  {line.key === "absent" && absentDates.length > 0 && (
+                                    <div className="dw-detail-list">
+                                      {absentDates.map(d => {
+                                        const leave = leaveDateMap[d];
+                                        const leaveColor = leave?.status === "Approved" ? "#15803D"
+                                          : leave?.status === "Rejected" ? "#DC2626"
+                                          : leave?.status === "Pending"  ? "#D97706"
+                                          : null;
+                                        const leaveBg = leave?.status === "Approved" ? "#DCFCE7"
+                                          : leave?.status === "Rejected" ? "#FEE2E2"
+                                          : leave?.status === "Pending"  ? "#FEF3C7"
+                                          : null;
+                                        return (
+                                          <div key={d} className="dw-detail-item">
+                                            <i className="bi bi-calendar-x" style={{ color: "#DC2626", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600 }}>{fmtDate(d)}</span>
+                                            {leave ? (
+                                              <>
+                                                <span style={{ color: "#9CA3AF" }}>—</span>
+                                                <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280" }}>{leave.leaveType}</span>
+                                                <span style={{ padding: "1px 7px", borderRadius: 20, fontSize: 10, fontWeight: 800,
+                                                  background: leaveBg, color: leaveColor }}>
+                                                  {leave.status}
+                                                </span>
+                                              </>
+                                            ) : (
+                                              <span style={{ color: "#9CA3AF" }}>— No check-in</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                      <p className="dw-detail-note">* Excludes Sundays; may include holidays</p>
+                                    </div>
+                                  )}
+
+                                  {line.key === "late" && lateDays.length > 0 && (
+                                    <div className="dw-detail-list">
+                                      {lateDays.map(a => (
+                                        <div key={a._id} className="dw-detail-item">
+                                          <i className="bi bi-alarm" style={{ color: "#D97706", fontSize: 12 }} />
+                                          <span style={{ fontWeight: 600 }}>{fmtDate(a.date)}</span>
+                                          <span style={{ color: "#9CA3AF" }}>— Check-in:</span>
+                                          <span style={{ fontWeight: 700, color: "#D97706" }}>{fmtTime(a.startTime)}</span>
+                                          {(a.latePenaltyAmount || 0) > 0 && (
+                                            <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700 }}>−₹{fmt(a.latePenaltyAmount)}</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {line.key === "lunch" && lunchDays.length > 0 && (
+                                    <div className="dw-detail-list">
+                                      {lunchDays.map(a => {
+                                        const lunchMs = getLunchBreakMs(a);
+                                        const lunchBrk = a.breaks?.find(b => b.type === "lunch" && b.start);
+                                        return (
+                                          <div key={a._id} className="dw-detail-item">
+                                            <i className="bi bi-cup-hot" style={{ color: "#A21CAF", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600 }}>{fmtDate(a.date)}</span>
+                                            {lunchBrk?.start && (
+                                              <>
+                                                <span style={{ color: "#9CA3AF" }}>— Start:</span>
+                                                <span style={{ fontWeight: 700, color: "#A21CAF" }}>{fmtTime(lunchBrk.start)}</span>
+                                              </>
+                                            )}
+                                            {lunchBrk?.end && (
+                                              <>
+                                                <span style={{ color: "#9CA3AF" }}>End:</span>
+                                                <span style={{ fontWeight: 700, color: "#A21CAF" }}>{fmtTime(lunchBrk.end)}</span>
+                                              </>
+                                            )}
+                                            {lunchMs > 0 && (
+                                              <span style={{ color: "#6B7280" }}>({fmtMins(lunchMs)})</span>
+                                            )}
+                                            {(a.deductions || 0) > 0 && (
+                                              <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700 }}>−₹{fmt(a.deductions)}</span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Right: amount + action buttons */}
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0, paddingTop: 4 }}>
                                   <span style={{ fontWeight: 800, fontSize: 15, color: isWaived ? "#9CA3AF" : "#DC2626",
                                     textDecoration: isWaived ? "line-through" : "none" }}>
                                     ₹{fmt(amount)}
                                   </span>
 
-                                  {/* No waiver yet — Waive button */}
                                   {!isWaived && (
                                     <button className="dw-btn override-btn"
                                       disabled={processing === procKey}
@@ -319,7 +460,6 @@ export default function AdminDeductionWaiver() {
                                     </button>
                                   )}
 
-                                  {/* Already waived */}
                                   {isWaived && (
                                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#15803D", fontWeight: 700 }}>
                                       <i className="bi bi-check-circle-fill" style={{ fontSize: 13 }} />

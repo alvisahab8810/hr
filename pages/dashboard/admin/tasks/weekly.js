@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -43,7 +42,6 @@ function fmtShort(date) {
 export default function WeeklyTrackerPage() {
   const router = useRouter();
   const [brands,       setBrands]       = useState([]);
-  const [tasks,        setTasks]        = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [weekOffset,   setWeekOffset]   = useState(0);
   const [brandFilter,  setBrandFilter]  = useState("");
@@ -52,39 +50,17 @@ export default function WeeklyTrackerPage() {
   const weekStart = weekDates[0].date;
   const weekEnd   = weekDates[6].date;
 
-  /* ── Fetch ── */
+  /* ── Fetch brands only ── */
   useEffect(() => {
     fetch("/api/admin/brands", { credentials: "include" })
-      .then(r => r.json()).then(d => { if (d.success) setBrands(d.brands || []); }).catch(() => {});
+      .then(r => r.json())
+      .then(d => { if (d.success) setBrands(d.brands || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    const start = new Date(weekStart); start.setHours(0, 0, 0, 0);
-    const end   = new Date(weekEnd);   end.setHours(23, 59, 59, 999);
-    const q = new URLSearchParams({ limit: 500, dateStart: start.toISOString(), dateEnd: end.toISOString() });
-    if (brandFilter) q.set("brandId", brandFilter);
-
-    fetch(`/api/admin/tasks?${q}`, { credentials: "include" })
-      .then(r => r.json())
-      .then(d => { if (d.success) setTasks(d.tasks || []); })
-      .catch(() => toast.error("Failed to load tasks"))
-      .finally(() => setLoading(false));
-  }, [weekOffset, brandFilter]);
-
-  /* ── Get tasks for a brand on a day from schedule ── */
   const getScheduledContent = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
-
-  /* ── Get actual tasks for a brand on a date ── */
-  const getActualTasks = (brand, date) => {
-    const dateStr = date.toDateString();
-    return tasks.filter(t => {
-      if (t.brandId?._id !== brand._id && t.brandId !== brand._id) return false;
-      const d = t.scheduledFor ? new Date(t.scheduledFor) : t.dueDate ? new Date(t.dueDate) : null;
-      return d && d.toDateString() === dateStr;
-    });
-  };
 
   const displayBrands = brandFilter
     ? brands.filter(b => b._id === brandFilter)
@@ -167,10 +143,6 @@ export default function WeeklyTrackerPage() {
                   <span style={{ width: 12, height: 12, borderRadius: 3, background: "#E5E7EB", display: "inline-block", border: "1.5px dashed #94A3B8" }} />
                   Scheduled (from brand plan)
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#64748B" }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 3, background: "#DCFCE7", display: "inline-block", border: "1.5px solid #10B981" }} />
-                  Actual task
-                </div>
               </div>
 
               {loading ? (
@@ -221,9 +193,8 @@ export default function WeeklyTrackerPage() {
 
                           {/* Day columns */}
                           {weekDates.map(({ label, date }) => {
-                            const isToday  = date.toDateString() === new Date().toDateString();
+                            const isToday   = date.toDateString() === new Date().toDateString();
                             const scheduled = getScheduledContent(brand, label);
-                            const actual    = getActualTasks(brand, date);
 
                             return (
                               <td key={label} className={isToday ? "today-col" : ""}>
@@ -240,24 +211,8 @@ export default function WeeklyTrackerPage() {
                                     );
                                   })}
 
-                                  {/* Actual tasks */}
-                                  {actual.map(t => {
-                                    const ct  = CONTENT_META[t.contentType] || {};
-                                    const sm  = STATUS_META[t.status] || {};
-                                    return (
-                                      <div key={t._id} className="wt-task"
-                                        style={{ background: sm.bg, color: sm.color, borderColor: sm.color + "40" }}
-                                        onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
-                                        <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
-                                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: sm.dot || sm.color, flexShrink: 0 }} />
-                                          {t.nomenclature || t.title}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-
                                   {/* Empty */}
-                                  {scheduled.length === 0 && actual.length === 0 && (
+                                  {scheduled.length === 0 && (
                                     <div style={{ fontSize: 10, color: "#E5E7EB", textAlign: "center", paddingTop: 6 }}>—</div>
                                   )}
                                 </div>

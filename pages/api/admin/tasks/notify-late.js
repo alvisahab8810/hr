@@ -25,7 +25,7 @@ async function sendLateEmail(empEmail, empName, task, stageName, deadline) {
   await transporter.sendMail({
     from:    `"Viralon Team" <info@viralon.in>`,
     to:      empEmail,
-    subject: `⏰ OVERDUE: ${task.nomenclature || task.title} — ${stageName} deadline missed`,
+    subject: `OVERDUE: ${task.nomenclature || task.title} — ${stageName} deadline missed`,
     html: `
 <!DOCTYPE html>
 <html>

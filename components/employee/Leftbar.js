@@ -1,7 +1,7 @@
 // components/employee/Leftbar.js
 "use client";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 export default function EmployeeLeftbar() {
@@ -12,10 +12,13 @@ export default function EmployeeLeftbar() {
     firstName: "", lastName: "", employeeId: "", dept: "", completion: 0,
   });
   const [tmsOpen, setTmsOpen]         = useState(false);
-  const [msgUnread, setMsgUnread]     = useState(0);
-  const [isDmDept, setIsDmDept]       = useState(false);
-  const [isTechDept, setIsTechDept]   = useState(false);
+  const [msgUnread, setMsgUnread]         = useState(0);
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [isDmDept, setIsDmDept]           = useState(false);
+  const [isTechDept, setIsTechDept]       = useState(false);
   const [communityUnread, setCommunityUnread] = useState(0);
+  const msgPollRef = useRef(null);
+  const reqPollRef = useRef(null);
 
   useEffect(() => {
     const token = localStorage.getItem("employeeToken");
@@ -47,11 +50,23 @@ export default function EmployeeLeftbar() {
           setIsDmDept(dm);
           setIsTechDept(tech);
           if (dm) fetchMsgUnread(token);
+          if (dm) fetchPendingRequests(token);
           fetchCommunityUnread(token);
         }
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!isDmDept) return;
+    const token = localStorage.getItem("employeeToken");
+    msgPollRef.current = setInterval(() => fetchMsgUnread(token), 15000);
+    reqPollRef.current = setInterval(() => fetchPendingRequests(token), 15000);
+    return () => {
+      clearInterval(msgPollRef.current);
+      clearInterval(reqPollRef.current);
+    };
+  }, [isDmDept]);
 
   async function fetchCommunityUnread(token) {
     try {
@@ -60,6 +75,16 @@ export default function EmployeeLeftbar() {
       });
       const d = await r.json();
       if (d.success) setCommunityUnread(d.communityUnread || 0);
+    } catch {}
+  }
+
+  async function fetchPendingRequests(token) {
+    try {
+      const r = await fetch("/api/employee/call-requests?count=true", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json();
+      if (d.success) setPendingRequests(d.pending || 0);
     } catch {}
   }
 
@@ -237,34 +262,69 @@ export default function EmployeeLeftbar() {
 
         <div className="menu">
           <ul className="list" style={{ paddingBottom:16 }}>
-            {menu.map((item) => {
+            {menu.map((item, idx) => {
               const active = isActive(item.href);
               const biIcon = BI_ICONS[item.icon] || "bi-circle";
               return (
-                <li key={item.href} className={active ? "active" : ""}>
-                  <Link
-                    href={item.href}
-                    className="waves-effect waves-block"
-                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
-                  >
-                    <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                      <img
-                        src={active ? `/icons/${item.icon}-active.svg` : `/icons/${item.icon}.svg`}
-                        alt="" style={{ width:18, height:18 }}
-                        onError={(e) => {
-                          e.target.style.display = "none";
-                          const next = e.target.nextElementSibling;
-                          if (next) next.style.display = "inline-block";
-                        }}
-                      />
-                      <i
-                        className={`bi ${biIcon}`}
-                        style={{ display:"none", fontSize:15, color: active ? "#818CF8" : "rgba(0, 0, 0, 0.55)" }}
-                      />
-                    </span>
-                    <span>{item.label}</span>
-                  </Link>
-                </li>
+                <>
+                  <li key={item.href} className={active ? "active" : ""}>
+                    <Link
+                      href={item.href}
+                      className="waves-effect waves-block"
+                      style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
+                    >
+                      <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        <img
+                          src={active ? `/icons/${item.icon}-active.svg` : `/icons/${item.icon}.svg`}
+                          alt="" style={{ width:18, height:18 }}
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                            const next = e.target.nextElementSibling;
+                            if (next) next.style.display = "inline-block";
+                          }}
+                        />
+                        <i
+                          className={`bi ${biIcon}`}
+                          style={{ display:"none", fontSize:15, color: active ? "#818CF8" : "rgba(0, 0, 0, 0.55)" }}
+                        />
+                      </span>
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
+                  {/* Client Messages + Meeting Requests right after Home */}
+                  {idx === 0 && isDmDept && (
+                    <>
+                      <li style={{ listStyle:"none" }} className={pathname === "/employee/messages" ? "active" : ""}>
+                        <Link href="/employee/messages" className="waves-effect waves-block"
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}>
+                          <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <i className="bi bi-chat-dots" style={{ fontSize:15, color: pathname === "/employee/messages" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                          </span>
+                          <span style={{ flex:1 }}>Client Messages</span>
+                          {msgUnread > 0 && (
+                            <span style={{ background:"#EF4444", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, minWidth:20, textAlign:"center" }}>
+                              {msgUnread > 99 ? "99+" : msgUnread}
+                            </span>
+                          )}
+                        </Link>
+                      </li>
+                      <li style={{ listStyle:"none" }} className={pathname === "/employee/meeting-requests" ? "active" : ""}>
+                        <Link href="/employee/meeting-requests" className="waves-effect waves-block"
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}>
+                          <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <i className="bi bi-telephone-fill" style={{ fontSize:15, color: pathname === "/employee/meeting-requests" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                          </span>
+                          <span style={{ flex:1 }}>Meeting Requests</span>
+                          {pendingRequests > 0 && (
+                            <span style={{ background:"#F97316", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, minWidth:20, textAlign:"center" }}>
+                              {pendingRequests > 99 ? "99+" : pendingRequests}
+                            </span>
+                          )}
+                        </Link>
+                      </li>
+                    </>
+                  )}
+                </>
               );
             })}
 
@@ -362,29 +422,6 @@ export default function EmployeeLeftbar() {
               </ul>
             </li>
 
-            {/* ── Client Messages (DM dept only) ── */}
-            {isDmDept && (
-              <li style={{ listStyle:"none" }} className={pathname === "/employee/messages" ? "active" : ""}>
-                <Link
-                  href="/employee/messages"
-                  className="waves-effect waves-block"
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}
-                >
-                  <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <i className="bi bi-chat-dots" style={{ fontSize:15, color: pathname === "/employee/messages" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
-                  </span>
-                  <span style={{ flex:1 }}>Client Messages</span>
-                  {msgUnread > 0 && (
-                    <span style={{
-                      background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 700,
-                      padding: "2px 7px", borderRadius: 10, minWidth: 20, textAlign: "center",
-                    }}>
-                      {msgUnread}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            )}
 
             {/* Logout */}
             <li style={{ listStyle:"none", padding:"6px 12px 4px" }}>
