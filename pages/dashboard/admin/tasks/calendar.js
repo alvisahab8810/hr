@@ -14,7 +14,31 @@ const CONTENT_META = {
   story:    { label: "Story",    icon: "bi-phone-fill",        color: "#EC4899" },
 };
 
-const STAGE_COLORS = { S1: "#F59E0B", S2: "#6366F1", S3: "#10B981", S4: "#EC4899" };
+// S1=orange, S2=blue, S3=yellow, S4=green  (matches list & weekly tracker)
+const STAGE_FILL = { S1: "#F97316", S2: "#3B82F6", S3: "#EAB308", S4: "#22C55E" };
+const STAGE_IDX  = { S1: 0, S2: 1, S3: 2, S4: 3 };
+
+function getTaskStageStyle(task) {
+  const stages = task.stages || [];
+  const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
+  // Highest approved stage → filled color
+  for (const key of ["S4","S3","S2","S1"]) {
+    const s = stages[STAGE_IDX[key]];
+    if (s?.approved) {
+      const c = STAGE_FILL[key];
+      return { bg: c + "28", border: c, color: c, key };
+    }
+  }
+  // Highest assigned (not approved) → border only
+  for (const key of ["S4","S3","S2","S1"]) {
+    const s = stages[STAGE_IDX[key]];
+    if (hasAssignee(s) && !s?.approved) {
+      const c = STAGE_FILL[key];
+      return { bg: "#fff", border: c, color: c, key };
+    }
+  }
+  return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF", key: null };
+}
 const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAY_LABELS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -56,12 +80,11 @@ export default function ContentCalendarPage() {
       .then(r => r.json())
       .then(d => {
         if (d.success) {
-          // Show tasks where S1 is approved OR task is completed (covers both new and old approval flows)
-          const approved = (d.tasks || []).filter(t =>
-            (t.taskType === "production" || t.contentType) &&
-            ((t.stages || []).some(s => s.approved) || t.status === "completed")
+          // Show all production/content tasks so every pipeline stage is visible
+          const filtered = (d.tasks || []).filter(t =>
+            t.taskType === "production" || t.contentType
           );
-          setTasks(approved);
+          setTasks(filtered);
         }
       })
       .catch(() => toast.error("Failed to load calendar"))
@@ -163,7 +186,7 @@ export default function ContentCalendarPage() {
                   <button className="cal-btn" onClick={prevMonth}><i className="bi bi-chevron-left" /></button>
                   <div>
                     <h5 className="admin-main-heading" style={{ margin: 0 }}>{MONTHS_FULL[month]} {year}</h5>
-                    <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{tasks.length} approved content task{tasks.length !== 1 ? "s" : ""}</p>
+                    <p style={{ fontSize: 12, color: "#94A3B8", margin: 0 }}>{tasks.length} content task{tasks.length !== 1 ? "s" : ""}</p>
                   </div>
                   <button className="cal-btn" onClick={nextMonth}><i className="bi bi-chevron-right" /></button>
                   <button className="cal-btn" onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}>
@@ -180,16 +203,25 @@ export default function ContentCalendarPage() {
               </div>
 
               {/* Legend */}
-              <div className="cal-legend" style={{ marginBottom: 16 }}>
-                {Object.entries(CONTENT_META).map(([k, v]) => (
-                  <span key={k} className="cal-leg-dot">
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: v.color, display: "inline-block" }} />
-                    {v.label}
+              <div className="cal-legend" style={{ marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                {[
+                  { label: "S1 Assigned", bg: "#fff",     border: "#F97316" },
+                  { label: "S1 Approved", bg: "#F97316",  border: "#F97316" },
+                  { label: "S2 Assigned", bg: "#fff",     border: "#3B82F6" },
+                  { label: "S2 Approved", bg: "#3B82F6",  border: "#3B82F6" },
+                  { label: "S3 Assigned", bg: "#fff",     border: "#EAB308" },
+                  { label: "S3 Approved", bg: "#EAB308",  border: "#EAB308" },
+                  { label: "S4 Assigned", bg: "#fff",     border: "#22C55E" },
+                  { label: "S4 Approved", bg: "#22C55E",  border: "#22C55E" },
+                ].map(l => (
+                  <span key={l.label} className="cal-leg-dot">
+                    <span style={{ width: 18, height: 12, borderRadius: 3, background: l.bg, border: `1.5px solid ${l.border}`, display: "inline-block" }} />
+                    {l.label}
                   </span>
                 ))}
-                <span className="cal-leg-dot" style={{ marginLeft: 10 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 3, border: "2px solid #6366F1", display: "inline-block" }} />
-                  Today
+                <span className="cal-leg-dot" style={{ marginLeft: 6 }}>
+                  <span style={{ width: 18, height: 12, borderRadius: 3, background: "#F1F5F9", border: "1.5px solid #D1D5DB", display: "inline-block" }} />
+                  No stage yet
                 </span>
               </div>
 
@@ -227,14 +259,12 @@ export default function ContentCalendarPage() {
                             <>
                               <div className={`cal-day-num ${isToday ? "today" : ""}`}>{dayNum}</div>
                               {preview.map(t => {
-                                const ct    = CONTENT_META[t.contentType];
-                                const brand = t.brandId;
-                                const color = brand?.color || ct?.color || "#6366F1";
-                                const stageColor = STAGE_COLORS[t.stage] || color;
+                                const ct  = CONTENT_META[t.contentType];
+                                const sty = getTaskStageStyle(t);
                                 return (
                                   <div key={t._id} className="cal-event"
-                                    style={{ background: stageColor + "20", color: stageColor, borderLeft: `3px solid ${stageColor}` }}
-                                    title={`${t.nomenclature || t.title}${brand ? ` · ${brand.name}` : ""}`}>
+                                    style={{ background: sty.bg, color: sty.color, borderLeft: `3px solid ${sty.border}`, border: `1px solid ${sty.border}`, borderLeftWidth: 3 }}
+                                    title={`${t.nomenclature || t.title}${t.brandId ? ` · ${t.brandId.name}` : ""}`}>
                                     {ct && <i className={`bi ${ct.icon}`} style={{ marginRight: 3, fontSize: 9 }} />}
                                     {t.nomenclature || t.title}
                                   </div>
@@ -279,9 +309,12 @@ export default function ContentCalendarPage() {
               const ct    = CONTENT_META[t.contentType];
               const brand = t.brandId;
               const stage = t.stage;
-              const stageColor = STAGE_COLORS[stage] || "#94A3B8";
+              const sty   = getTaskStageStyle(t);
+              const stageColor = sty.color;
               return (
-                <div key={t._id} className="panel-task" onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
+                <div key={t._id} className="panel-task"
+                  style={{ borderLeft: `3px solid ${sty.border}` }}
+                  onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
                     {brand && (
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: (brand.color || "#6366F1") + "20", color: brand.color || "#6366F1" }}>
@@ -294,7 +327,7 @@ export default function ContentCalendarPage() {
                       </span>
                     )}
                     {stage && (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: stageColor + "20", color: stageColor }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: stageColor + "28", color: stageColor }}>
                         {stage}
                       </span>
                     )}

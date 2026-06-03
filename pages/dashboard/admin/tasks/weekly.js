@@ -39,9 +39,33 @@ function fmtShort(date) {
   return `${date.getDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][date.getMonth()]}`;
 }
 
+// S1=orange, S2=blue, S3=yellow, S4=green
+const STAGE_FILL  = ["#F97316", "#3B82F6", "#EAB308", "#22C55E"];
+
+function getTaskStageStyle(task) {
+  const stages = task.stages || [];
+  const hasAssignee = (s) => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
+
+  // Highest approved stage → filled color
+  for (let i = 3; i >= 0; i--) {
+    if (stages[i]?.approved) {
+      return { bg: STAGE_FILL[i], border: STAGE_FILL[i], color: "#fff" };
+    }
+  }
+  // Highest assigned (not approved) stage → border only
+  for (let i = 3; i >= 0; i--) {
+    if (hasAssignee(stages[i]) && !stages[i]?.approved) {
+      return { bg: "#fff", border: STAGE_FILL[i], color: "#000" };
+    }
+  }
+  // Default gray
+  return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF" };
+}
+
 export default function WeeklyTrackerPage() {
   const router = useRouter();
   const [brands,       setBrands]       = useState([]);
+  const [tasks,        setTasks]        = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [weekOffset,   setWeekOffset]   = useState(0);
   const [brandFilter,  setBrandFilter]  = useState("");
@@ -50,7 +74,7 @@ export default function WeeklyTrackerPage() {
   const weekStart = weekDates[0].date;
   const weekEnd   = weekDates[6].date;
 
-  /* ── Fetch brands only ── */
+  /* ── Fetch brands ── */
   useEffect(() => {
     fetch("/api/admin/brands", { credentials: "include" })
       .then(r => r.json())
@@ -59,8 +83,32 @@ export default function WeeklyTrackerPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  /* ── Fetch production tasks for the visible week ── */
+  useEffect(() => {
+    const end = new Date(weekEnd);
+    end.setHours(23, 59, 59, 999);
+    fetch(
+      `/api/admin/tasks?taskType=production&dateStart=${weekStart.toISOString()}&dateEnd=${end.toISOString()}&limit=500`,
+      { credentials: "include" }
+    )
+      .then(r => r.json())
+      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .catch(() => {});
+  }, [weekOffset]);
+
   const getScheduledContent = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
+
+  // Tasks grouped by brandId → dateString
+  const tasksByBrandDay = {};
+  tasks.forEach(t => {
+    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
+    if (!dateKey || !t.brandId) return;
+    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+    if (!tasksByBrandDay[bId]) tasksByBrandDay[bId] = {};
+    if (!tasksByBrandDay[bId][dateKey]) tasksByBrandDay[bId][dateKey] = [];
+    tasksByBrandDay[bId][dateKey].push(t);
+  });
 
   const displayBrands = brandFilter
     ? brands.filter(b => b._id === brandFilter)
@@ -138,10 +186,25 @@ export default function WeeklyTrackerPage() {
               </div>
 
               {/* Legend */}
-              <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, color: "#64748B" }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 3, background: "#E5E7EB", display: "inline-block", border: "1.5px dashed #94A3B8" }} />
-                  Scheduled (from brand plan)
+              <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+                {[
+                  { label: "S1 Assigned",  bg: "#fff",     border: "#F97316", color: "#000" },
+                  { label: "S1 Approved",  bg: "#F97316",  border: "#F97316", color: "#fff" },
+                  { label: "S2 Assigned",  bg: "#fff",     border: "#3B82F6", color: "#000" },
+                  { label: "S2 Approved",  bg: "#3B82F6",  border: "#3B82F6", color: "#fff" },
+                  { label: "S3 Assigned",  bg: "#fff",     border: "#EAB308", color: "#000" },
+                  { label: "S3 Approved",  bg: "#EAB308",  border: "#EAB308", color: "#fff" },
+                  { label: "S4 Assigned",  bg: "#fff",     border: "#22C55E", color: "#000" },
+                  { label: "S4 Approved",  bg: "#22C55E",  border: "#22C55E", color: "#fff" },
+                ].map(l => (
+                  <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
+                    <span style={{ width: 20, height: 14, borderRadius: 3, background: l.bg, border: `1.5px solid ${l.border}`, display: "inline-block" }} />
+                    {l.label}
+                  </div>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 600, color: "#64748B" }}>
+                  <span style={{ width: 20, height: 14, borderRadius: 3, background: "#F8FAFC", border: "1.5px dashed #D1D5DB", display: "inline-block" }} />
+                  Scheduled (plan)
                 </div>
               </div>
 
@@ -195,16 +258,32 @@ export default function WeeklyTrackerPage() {
                           {weekDates.map(({ label, date }) => {
                             const isToday   = date.toDateString() === new Date().toDateString();
                             const scheduled = getScheduledContent(brand, label);
+                            const bId       = String(brand._id);
+                            const dayTasks  = (tasksByBrandDay[bId]?.[date.toDateString()] || []);
 
                             return (
                               <td key={label} className={isToday ? "today-col" : ""}>
                                 <div className="wt-cell">
-                                  {/* Scheduled slots (from brand weekly plan) */}
+                                  {/* Actual production tasks — pipeline stage colors */}
+                                  {dayTasks.map(t => {
+                                    const ct  = CONTENT_META[t.contentType] || {};
+                                    const sty = getTaskStageStyle(t);
+                                    return (
+                                      <div key={t._id} className="wt-task"
+                                        style={{ background: sty.bg, borderColor: sty.border, color: sty.color }}
+                                        onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
+                                        <i className={`bi ${ct.icon || "bi-list-task"}`} style={{ fontSize: 10 }} />
+                                        {ct.label || t.contentType || t.title?.slice(0, 12)}
+                                      </div>
+                                    );
+                                  })}
+
+                                  {/* Planned schedule slots (gray dashed, no actual task yet) */}
                                   {scheduled.map((slot, si) => {
                                     const ct = CONTENT_META[slot.contentType] || {};
                                     return (
                                       <div key={si} className="wt-slot"
-                                        style={{ background: (ct.color || "#94A3B8") + "12", color: ct.color || "#94A3B8", border: `1px dashed ${ct.color || "#94A3B8"}40` }}>
+                                        style={{ background: "#F8FAFC", color: "#94A3B8", border: "1px dashed #D1D5DB" }}>
                                         <i className={`bi ${ct.icon || "bi-dot"}`} style={{ fontSize: 10 }} />
                                         {ct.label || slot.contentType}
                                       </div>
@@ -212,7 +291,7 @@ export default function WeeklyTrackerPage() {
                                   })}
 
                                   {/* Empty */}
-                                  {scheduled.length === 0 && (
+                                  {scheduled.length === 0 && dayTasks.length === 0 && (
                                     <div style={{ fontSize: 10, color: "#E5E7EB", textAlign: "center", paddingTop: 6 }}>—</div>
                                   )}
                                 </div>

@@ -11,6 +11,329 @@ const STAGE_COLORS = ["#F59E0B", "#6366F1", "#10B981", "#EC4899"];
 const STAGE_NAMES  = ["Script/Concept", "Shoot", "Design/Edit/Develop", "Posted/Live"];
 const STAGE_KEYS   = ["S1", "S2", "S3", "S4"];
 
+/* ── Drive helpers ──────────────────────────────────────────────────────── */
+function getDriveFileId(url) {
+  if (!url) return null;
+  let m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function getDriveFolderId(url) {
+  if (!url) return null;
+  const m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function getDriveEmbedUrl(url) {
+  const id = getDriveFileId(url);
+  return id ? `https://drive.google.com/file/d/${id}/preview` : null;
+}
+function getFirstProofUrl(stg, task) {
+  const urls = (stg?.proofUrls || []).filter(Boolean);
+  return urls[urls.length - 1] || task?.proofLink || null;
+}
+
+/* ── Drive folder carousel (admin) ─────────────────────────────────────── */
+function DriveCarousel({ folderId, proofUrl }) {
+  const [files, setFiles] = useState(null);
+  const [idx,   setIdx]   = useState(0);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetch(`/api/client/drive-folder?folderId=${folderId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) { setError(d.message || "Failed to load"); return; }
+        if (d.fallback || d.files.length === 0) { setFiles([]); return; }
+        setFiles(d.files);
+      })
+      .catch(() => setError("Network error"));
+  }, [folderId]);
+
+  if (files === null) return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#94a3b8" }}>
+      <div className="spinner-border spinner-border-sm text-primary" />
+      <span style={{ fontSize: 12 }}>Loading preview…</span>
+    </div>
+  );
+
+  if (error || files.length === 0) return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", position: "relative" }}>
+      <iframe
+        src={`https://drive.google.com/embeddedfolderview?id=${folderId}#grid`}
+        style={{ flex: 1, border: "none", width: "100%" }}
+        title="Drive folder"
+      />
+      {error && (
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,.7)", color: "#fca5a5", fontSize: 11, padding: "6px 12px", textAlign: "center" }}>
+          {error} — showing folder view
+        </div>
+      )}
+      <a href={proofUrl} target="_blank" rel="noreferrer"
+        style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 11, padding: "4px 10px", borderRadius: 6, textDecoration: "none", zIndex: 2 }}>
+        Open folder ↗
+      </a>
+    </div>
+  );
+
+  const file     = files[idx];
+  const embedUrl = `https://drive.google.com/file/d/${file.id}/preview`;
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, position: "relative", background: "#0f172a" }}>
+        <iframe
+          key={file.id}
+          src={embedUrl}
+          style={{ width: "100%", height: "100%", border: "none", position: "absolute", inset: 0 }}
+          allow="autoplay"
+          allowFullScreen
+          title={file.name}
+        />
+        {files.length > 1 && (<>
+          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
+            style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, borderRadius: "50%", background: "rgba(0,0,0,.55)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: idx === 0 ? 0.3 : 1, zIndex: 3 }}>
+            <i className="bi bi-chevron-left" />
+          </button>
+          <button onClick={() => setIdx(i => Math.min(files.length - 1, i + 1))} disabled={idx === files.length - 1}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, borderRadius: "50%", background: "rgba(0,0,0,.55)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: idx === files.length - 1 ? 0.3 : 1, zIndex: 3 }}>
+            <i className="bi bi-chevron-right" />
+          </button>
+          <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, zIndex: 3 }}>
+            {idx + 1} / {files.length}
+          </div>
+        </>)}
+      </div>
+      {files.length > 1 && (
+        <div style={{ display: "flex", gap: 4, padding: "6px 8px", background: "#0f172a", overflowX: "auto", flexShrink: 0 }}>
+          {files.map((f, i) => (
+            <button key={f.id} onClick={() => setIdx(i)}
+              style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 6, border: i === idx ? "2px solid #4F46E5" : "2px solid transparent", background: "#1e293b", cursor: "pointer", overflow: "hidden", padding: 0, position: "relative" }}>
+              {f.thumbnailLink
+                ? <img src={f.thumbnailLink} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: i === idx ? "#4F46E5" : "#64748b", fontSize: 16 }}><i className="bi bi-image" /></div>
+              }
+            </button>
+          ))}
+        </div>
+      )}
+      <a href={proofUrl} target="_blank" rel="noreferrer"
+        style={{ display: "block", textAlign: "center", background: "#1e293b", color: "#94a3b8", fontSize: 11, padding: "5px 0", textDecoration: "none", flexShrink: 0 }}>
+        <i className="bi bi-folder2-open me-1" />Open folder in Drive
+      </a>
+    </div>
+  );
+}
+
+/* ── Admin Preview Modal ────────────────────────────────────────────────── */
+function AdminPreviewModal({ task, stg, stageIdx, type, onClose, onApprove, onReject, readOnly, saving }) {
+  const [rejectMode,   setRejectMode]   = useState(false);
+  const [rejectText,   setRejectText]   = useState("");
+  const [newDeadline,  setNewDeadline]  = useState("");
+
+  const proofUrl  = getFirstProofUrl(stg, task);
+  const folderId  = getDriveFolderId(proofUrl);
+  const embedUrl  = folderId ? null : getDriveEmbedUrl(proofUrl);
+  const isVideo   = ["reel", "story"].includes(task.contentType);
+  const stageName = stageIdx >= 0 ? STAGE_NAMES[stageIdx] : null;
+  const stageColor= stageIdx >= 0 ? STAGE_COLORS[stageIdx] : "#4F46E5";
+
+  function handleApprove() { onApprove(); onClose(); }
+  function handleReject()  {
+    if (!rejectText.trim()) { toast.error("Please enter a rejection reason"); return; }
+    onReject(rejectText, newDeadline);
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 940, maxHeight: "90vh", display: "flex", overflow: "hidden", boxShadow: "0 24px 80px rgba(0,0,0,.25)" }}>
+
+        {/* Left — Drive preview */}
+        <div style={{ flex: "0 0 56%", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", minHeight: 420, overflow: "hidden" }}>
+          {folderId ? (
+            <DriveCarousel folderId={folderId} proofUrl={proofUrl} />
+          ) : embedUrl ? (
+            <iframe
+              src={embedUrl}
+              style={{ width: "100%", height: "100%", border: "none", position: "absolute", inset: 0 }}
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              title={task.nomenclature || task.title}
+            />
+          ) : (
+            <div style={{ textAlign: "center", color: "#64748b", padding: 32 }}>
+              <i className={`bi bi-${isVideo ? "camera-video" : "image"}`} style={{ fontSize: 52, marginBottom: 14, display: "block", opacity: .4 }} />
+              <div style={{ fontSize: 13, marginBottom: 8 }}>No preview available</div>
+              {proofUrl && (
+                <a href={proofUrl} target="_blank" rel="noreferrer"
+                  style={{ color: "#4F46E5", fontSize: 13, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <i className="bi bi-box-arrow-up-right" />Open file
+                </a>
+              )}
+            </div>
+          )}
+          {/* Content type badge */}
+          {!folderId && task.contentType && (
+            <div style={{ position: "absolute", top: 12, left: 12, background: stageColor, color: "#fff", fontSize: 10, fontWeight: 800, padding: "3px 9px", borderRadius: 5, zIndex: 2 }}>
+              {task.contentType.toUpperCase()}
+            </div>
+          )}
+          {/* Drive link for single files */}
+          {!folderId && proofUrl && (
+            <a href={proofUrl} target="_blank" rel="noreferrer"
+              style={{ position: "absolute", bottom: 12, left: 12, background: "rgba(255,255,255,.12)", backdropFilter: "blur(6px)", color: "#fff", fontSize: 11, fontWeight: 600, padding: "5px 10px", borderRadius: 6, textDecoration: "none", border: "1px solid rgba(255,255,255,.2)", zIndex: 2, display: "flex", alignItems: "center", gap: 5 }}>
+              <i className="bi bi-google" />Open in Drive
+            </a>
+          )}
+        </div>
+
+        {/* Right — info + actions */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Header */}
+          <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexShrink: 0 }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 4, maxWidth: 260, wordBreak: "break-word" }}>
+                {task.nomenclature || task.title}
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                {stageName
+                  ? <span>Stage: <strong style={{ color: stageColor }}>{stageName}</strong></span>
+                  : <span>Submitted: {stg?.doneAt ? new Date(stg.doneAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : fmtDate(task.updatedAt || task.createdAt)}</span>
+                }
+              </div>
+              {task.brandId?.name && (
+                <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, background: (task.brandId.color || "#6366F1") + "20", color: task.brandId.color || "#6366F1", borderRadius: 20, padding: "1px 8px" }}>
+                  {task.brandId.name}
+                </span>
+              )}
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 18, padding: "0 4px", flexShrink: 0 }}>
+              <i className="bi bi-x-lg" />
+            </button>
+          </div>
+
+          {/* Scrollable body */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+            {/* Open in Google Drive button */}
+            {proofUrl && (
+              <a href={proofUrl} target="_blank" rel="noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 8, color: "#3B82F6", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16, background: "#EFF6FF", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #BFDBFE" }}>
+                <i className="bi bi-google" style={{ fontSize: 14 }} />Open in Google Drive
+                <i className="bi bi-box-arrow-up-right" style={{ marginLeft: "auto", fontSize: 11 }} />
+              </a>
+            )}
+
+            {/* Stage note */}
+            {stg?.doneNote && (
+              <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 9, padding: "10px 12px", fontSize: 12, color: "#0369A1", marginBottom: 14 }}>
+                <i className="bi bi-chat-text me-2" /><strong>Employee note:</strong> {stg.doneNote}
+              </div>
+            )}
+
+            {/* Caption / description */}
+            {task.caption && (
+              <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#374151", marginBottom: 14, lineHeight: 1.7 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: ".5px" }}>Caption</div>
+                <div style={{ whiteSpace: "pre-wrap" }}>{task.caption}</div>
+              </div>
+            )}
+
+            {/* All proof URLs */}
+            {(stg?.proofUrls || []).filter(Boolean).length > 1 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 }}>All Proof Files</div>
+                {stg.proofUrls.filter(Boolean).map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer"
+                    style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#4F46E5", textDecoration: "none", marginBottom: 4, fontWeight: 600 }}>
+                    <i className="bi bi-link-45deg" />{url.length > 50 ? url.slice(0, 50) + "…" : url}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Decision area */}
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginBottom: 10, textTransform: "uppercase", letterSpacing: ".5px" }}>
+              Your Decision
+            </div>
+
+            {readOnly ? (
+              type === "stage" ? (
+                stg?.approved ? (
+                  <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700, color: "#15803D", display: "flex", alignItems: "center", gap: 6 }}>
+                    <i className="bi bi-check-circle-fill" /> Stage Approved
+                  </div>
+                ) : (
+                  <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", display: "flex", alignItems: "center", gap: 6 }}><i className="bi bi-x-circle-fill" /> Stage Rejected</div>
+                    {stg?.rejectReason && <div style={{ fontSize: 12, color: "#991B1B", marginTop: 4 }}>Reason: {stg.rejectReason}</div>}
+                  </div>
+                )
+              ) : (
+                task.status === "completed" ? (
+                  <div style={{ background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700, color: "#15803D", display: "flex", alignItems: "center", gap: 6 }}>
+                    <i className="bi bi-check-circle-fill" /> Task Approved
+                  </div>
+                ) : (
+                  <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#DC2626", display: "flex", alignItems: "center", gap: 6 }}><i className="bi bi-x-circle-fill" /> Task Rejected</div>
+                    {task.reviewNote && <div style={{ fontSize: 12, color: "#991B1B", marginTop: 4 }}>Reason: {task.reviewNote}</div>}
+                  </div>
+                )
+              )
+            ) : !rejectMode ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleApprove} disabled={saving}
+                  style={{ flex: 1, padding: "11px", border: "2px solid #16A34A", borderRadius: 8, background: "#DCFCE7", color: "#15803D", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                  {saving ? "…" : <><i className="bi bi-check-circle" />Approve</>}
+                </button>
+                <button onClick={() => setRejectMode(true)} disabled={saving}
+                  style={{ flex: 1, padding: "11px", border: "2px solid #E2E8F0", borderRadius: 8, background: "#fff", color: "#64748b", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+                  <i className="bi bi-x-circle" />Reject
+                </button>
+              </div>
+            ) : (
+              <div>
+                <textarea
+                  placeholder="Enter rejection reason…"
+                  value={rejectText}
+                  onChange={e => setRejectText(e.target.value)}
+                  style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #FCA5A5", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "inherit", resize: "vertical", minHeight: 68, marginBottom: 8 }}
+                />
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 4 }}>
+                    New Deadline <span style={{ fontWeight: 400, color: "#94A3B8" }}>(optional)</span>
+                  </label>
+                  <input type="datetime-local" value={newDeadline} onChange={e => setNewDeadline(e.target.value)}
+                    style={{ width: "100%", padding: "7px 10px", border: "1.5px solid #FCA5A5", borderRadius: 8, fontSize: 12, outline: "none", fontFamily: "inherit", background: "#FFF5F5" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={handleReject} disabled={saving || !rejectText.trim()}
+                    style={{ flex: 1, background: "#FEE2E2", color: "#DC2626", border: "1.5px solid #FCA5A5", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    {saving ? "…" : <><i className="bi bi-send me-1" />Send Rejection</>}
+                  </button>
+                  <button onClick={() => { setRejectMode(false); setRejectText(""); setNewDeadline(""); }}
+                    style={{ flex: 1, background: "#F1F5F9", color: "#64748B", border: "none", borderRadius: 8, padding: "9px 0", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: "12px 20px", borderTop: "1px solid #F1F5F9", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+            <button onClick={onClose} style={{ padding: "8px 18px", background: "none", color: "#64748b", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function fmtDateTime(d) {
   if (!d) return "—";
   return new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -22,11 +345,12 @@ function fmtDate(d) {
 
 export default function ApprovalsPage() {
   const router = useRouter();
-  const [allTasks, setAllTasks] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState({});
-  const [expanded, setExpanded] = useState({});
+  const [allTasks,  setAllTasks]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState({});
+  const [expanded,  setExpanded]  = useState({});
   const [statusTab, setStatusTab] = useState("pending"); // pending | approved | rejected | all
+  const [preview,   setPreview]   = useState(null); // { task, stg, stageIdx, type }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -311,6 +635,7 @@ export default function ApprovalsPage() {
                         onApprove={() => approveStage(t, stageIdx)}
                         onReject={(reason, deadline) => rejectStage(t, stageIdx, reason, deadline)}
                         readOnly={stg.approved || stg.rejected}
+                        onPreview={() => setPreview({ task: t, stg, stageIdx, type: "stage" })}
                       />
                     );
                   }
@@ -324,6 +649,7 @@ export default function ApprovalsPage() {
                       onApprove={() => approveTask(t)}
                       onReject={(reason, deadline) => rejectTask(t, reason, deadline)}
                       readOnly={["completed", "blocked"].includes(t.status)}
+                      onPreview={() => setPreview({ task: t, stg: null, stageIdx: -1, type: "task" })}
                     />
                   );
                 })
@@ -332,12 +658,41 @@ export default function ApprovalsPage() {
           </section>
         </div>
       </div>
+
+      {/* Admin Drive Preview Modal */}
+      {preview && (
+        <AdminPreviewModal
+          task={preview.task}
+          stg={preview.stg}
+          stageIdx={preview.stageIdx}
+          type={preview.type}
+          onClose={() => setPreview(null)}
+          readOnly={
+            preview.type === "stage"
+              ? (preview.stg?.approved || preview.stg?.rejected)
+              : ["completed", "blocked"].includes(preview.task.status)
+          }
+          saving={
+            preview.type === "stage"
+              ? (!!saving[`${preview.task._id}_${preview.stageIdx}`] || !!saving[`${preview.task._id}_${preview.stageIdx}_rej`])
+              : (!!saving[`${preview.task._id}_task`] || !!saving[`${preview.task._id}_task_rej`])
+          }
+          onApprove={() => {
+            if (preview.type === "stage") approveStage(preview.task, preview.stageIdx);
+            else approveTask(preview.task);
+          }}
+          onReject={(reason, deadline) => {
+            if (preview.type === "stage") rejectStage(preview.task, preview.stageIdx, reason, deadline);
+            else rejectTask(preview.task, reason, deadline);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /* ── Review Card (non-production tasks with status=review) ─────────────── */
-function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
+function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, readOnly, onPreview }) {
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectText, setRejectText] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
@@ -374,6 +729,10 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={e => { e.stopPropagation(); onPreview(); }}
+            style={{ padding: "6px 12px", background: "#EEF2FF", color: "#4F46E5", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <i className="bi bi-eye" />Preview
+          </button>
           <a href={`/dashboard/admin/tasks/${t._id}`} target="_blank" rel="noreferrer" className="ap-btn-view" onClick={e => e.stopPropagation()}>
             <i className="bi bi-box-arrow-up-right" />View
           </a>
@@ -503,7 +862,7 @@ function ReviewCard({ task: t, isOpen, onToggle, saving, onApprove, onReject, re
 }
 
 /* ── Approval Card ─────────────────────────────────────────────────────── */
-function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onApprove, onReject, readOnly }) {
+function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onApprove, onReject, readOnly, onPreview }) {
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectText, setRejectText] = useState("");
   const [newDeadline, setNewDeadline] = useState("");
@@ -537,6 +896,10 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button onClick={e => { e.stopPropagation(); onPreview(); }}
+            style={{ padding: "6px 12px", background: "#EEF2FF", color: "#4F46E5", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <i className="bi bi-eye" />Preview
+          </button>
           <a href={`/dashboard/admin/tasks/${t._id}`} target="_blank" rel="noreferrer" className="ap-btn-view" onClick={e => e.stopPropagation()}>
             <i className="bi bi-box-arrow-up-right" />View
           </a>

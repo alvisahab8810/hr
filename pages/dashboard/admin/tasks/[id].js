@@ -119,6 +119,7 @@ const fmtDateTimeInput = (d) => {
   const pad = (n) => String(n).padStart(2, "0");
   return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
 };
+const nowForInput = () => fmtDateTimeInput(new Date());
 
 /* ─── Component ─────────────────────────────────────────────────────────── */
 
@@ -150,7 +151,7 @@ export default function TaskDetail() {
   // Stage editor
   const [stageModal,        setStageModal]        = useState(false);
   const [stageIdx,          setStageIdx]          = useState(0);
-  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: "" });
+  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: nowForInput() });
   const [stageSaving,       setStageSaving]       = useState(false);
   const [stageRejectMode,   setStageRejectMode]   = useState(false);
   const [stageRejectReason, setStageRejectReason] = useState("");
@@ -207,7 +208,7 @@ export default function TaskDetail() {
     setStageForm({
       name:       stg?.name || STAGE_NAMES[i],
       assignedTo: normalizeAssignedTo(stg?.assignedTo),
-      deadline:   fmtDateTimeInput(stg?.deadline),
+      deadline:   fmtDateTimeInput(stg?.deadline) || nowForInput(),
     });
     setStageRejectMode(false);
     setStageRejectReason("");
@@ -232,10 +233,12 @@ export default function TaskDetail() {
         rejectReason: cur.rejectReason || "",
         proofUrls:    cur.proofUrls    || [],
       });
+      const patchBody = { stages, performedByName: adminUser?.name || "Admin" };
+      if (stageForm.deadline) patchBody.dueDate = new Date(stageForm.deadline).toISOString();
       const res  = await fetch(`/api/admin/tasks/${id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stages, performedByName: adminUser?.name || "Admin" }),
+        body: JSON.stringify(patchBody),
       });
       const data = await res.json();
       if (data.success) { toast.success("Stage updated"); setStageModal(false); fetchTask(); }
@@ -490,7 +493,13 @@ export default function TaskDetail() {
     : STATUS_META[task.status] || {};
   const pm       = PRIORITY_META[task.priority] || {};
   const tm       = TYPE_META[task.taskType]     || {};
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed";
+  // Use earliest undone stage deadline, fall back to task.dueDate
+  const effectiveDueDate = (() => {
+    const stageDLs = (task.stages || []).filter(s => s.deadline && !s.done).map(s => new Date(s.deadline));
+    if (stageDLs.length) return stageDLs.reduce((a, b) => a < b ? a : b);
+    return task.dueDate ? new Date(task.dueDate) : null;
+  })();
+  const isOverdue = effectiveDueDate && effectiveDueDate < new Date() && task.status !== "completed";
 
   const stages4 = STAGE_NAMES.map((name, i) => task.stages?.[i] || { name, assignedTo: null, deadline: null, done: false });
 
@@ -634,7 +643,7 @@ export default function TaskDetail() {
                   <span className="td-meta-label">Final Deadline</span>
                   <span className="td-meta-val" style={{ fontFamily: "monospace", color: isOverdue ? "#DC2626" : "#1E293B" }}>
                     {isOverdue && <i className="bi bi-exclamation-triangle-fill me-1" style={{ color: "#DC2626" }} />}
-                    {fmtDateTime(task.dueDate)}
+                    {fmtDateTime(effectiveDueDate || task.dueDate)}
                   </span>
                 </div>
                 <div>

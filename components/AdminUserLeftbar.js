@@ -20,7 +20,8 @@ export default function AdminUserLeftbar({ user }) {
   const [tmsOpen, setTmsOpen] = useState(
     () => typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard/admin/tasks")
   );
-  const [communityUnread, setCommunityUnread] = useState(0);
+  const [communityUnread,      setCommunityUnread]      = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   // ref points to <aside> — the actual scroll container (overflow-y: scroll in CSS)
   const sidebarRef = useRef(null);
 
@@ -61,6 +62,19 @@ export default function AdminUserLeftbar({ user }) {
     }
     fetchUnread();
     const t = setInterval(fetchUnread, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    async function fetchApprovalsCount() {
+      try {
+        const r = await fetch("/api/admin/tasks/approvals-count", { credentials: "include" });
+        const d = await r.json();
+        if (d.success) setPendingApprovalsCount(d.count || 0);
+      } catch {}
+    }
+    fetchApprovalsCount();
+    const t = setInterval(fetchApprovalsCount, 60000);
     return () => clearInterval(t);
   }, []);
 
@@ -272,8 +286,14 @@ export default function AdminUserLeftbar({ user }) {
                     </Link>
                   </li>
                   <li className={router.pathname === "/dashboard/admin/tasks/approvals" ? "active" : ""}>
-                    <Link href="/dashboard/admin/tasks/approvals">
-                      <i className="bi bi-check2-square" style={{ marginRight: 6, fontSize: 12 }} />Approvals
+                    <Link href="/dashboard/admin/tasks/approvals" style={{ display: "flex", alignItems: "center" }}>
+                      <i className="bi bi-check2-square" style={{ marginRight: 6, fontSize: 12 }} />
+                      Approvals
+                      {pendingApprovalsCount > 0 && (
+                        <span style={{ marginLeft: "auto", background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 20, padding: "1px 6px", lineHeight: 1.4 }}>
+                          {pendingApprovalsCount}
+                        </span>
+                      )}
                     </Link>
                   </li>
                   <li className={router.pathname === "/dashboard/admin/tasks/team-performance" ? "active" : ""}>

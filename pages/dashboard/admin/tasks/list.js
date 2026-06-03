@@ -35,10 +35,10 @@ const TABS = [
 ];
 
 const STAGE_META = {
-  S1: { label: "Script/Concept", color: "#ffff00", bg: "#fffde0", border: "#ffff00" },
-  S2: { label: "Shoot/Design",   color: "#ff9900", bg: "#fff3e0", border: "#ff9900" },
-  S3: { label: "Edit/Develop",   color: "#00ffff", bg: "#e0fffe", border: "#00ffff" },
-  S4: { label: "Posted/Live",    color: "#00ff00", bg: "#e0ffe0", border: "#00ff00" },
+  S1: { label: "Script/Concept", color: "#F97316", bg: "#FFF7ED", border: "#F97316" },
+  S2: { label: "Shoot/Design",   color: "#3B82F6", bg: "#EFF6FF", border: "#3B82F6" },
+  S3: { label: "Edit/Develop",   color: "#EAB308", bg: "#FEFCE8", border: "#EAB308" },
+  S4: { label: "Posted/Live",    color: "#22C55E", bg: "#F0FDF4", border: "#22C55E" },
 };
 
 const STATUS_META = {
@@ -101,9 +101,9 @@ function nextDateForDay(dayName) {
   return result.toISOString().slice(0, 10);
 }
 const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot","Design/Edit/Develop","Posted/Live"];
-const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: "" }));
+const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: nowForInput() }));
 const EMPTY_PROD_FORM = { brandId: "", contentType: "reel", stages: freshStages() };
-const STAGE_COLORS = ["#ffff00","#ff9900","#00ffff","#00ff00"];
+const STAGE_COLORS = ["#F97316","#3B82F6","#EAB308","#22C55E"];
 // Each stage: { include: [...], exclude: [...] }
 // Inclusion matches department only; exclusion checks both dept + designation
 // Using longer strings (e.g. "content team") avoids false positives from designations
@@ -157,6 +157,11 @@ function fmtDateWithTime(d) {
 function fmtDateTimeInput(d) {
   if (!d) return "";
   return new Date(d).toISOString().slice(0, 16);
+}
+function nowForInput() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function fmtDateTime(d) {
   if (!d) return "—";
@@ -215,7 +220,7 @@ export default function TasksListPage() {
   const [stageModal,        setStageModal]        = useState(false);
   const [stageTask,         setStageTask]         = useState(null);
   const [stageIdx,          setStageIdx]          = useState(0);
-  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: "" });
+  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: nowForInput() });
   const [stageSaving,       setStageSaving]       = useState(false);
   const [stageRejectMode,   setStageRejectMode]   = useState(false);
   const [stageRejectReason, setStageRejectReason] = useState("");
@@ -443,7 +448,7 @@ export default function TasksListPage() {
   const openStageEditor = (task, idx) => {
     const stg = task.stages?.[idx] || {};
     setStageTask(task); setStageIdx(idx);
-    setStageForm({ name: stg.name || STAGE_NAMES_DEFAULT[idx], assignedTo: normalizeAssignedTo(stg.assignedTo), deadline: fmtDateTimeInput(stg.deadline) });
+    setStageForm({ name: stg.name || STAGE_NAMES_DEFAULT[idx], assignedTo: normalizeAssignedTo(stg.assignedTo), deadline: fmtDateTimeInput(stg.deadline) || nowForInput() });
     setStageRejectMode(false); setStageRejectReason(""); setStageModal(true);
   };
 
@@ -463,7 +468,10 @@ export default function TasksListPage() {
     try {
       const cur    = stageTask.stages?.[stageIdx] || {};
       const stages = buildStages(stageTask, stageIdx, { name: stageForm.name, assignedTo: stageForm.assignedTo, deadline: stageForm.deadline || null, done: cur.done || false, doneAt: cur.doneAt || null, approved: cur.approved || false, rejected: cur.rejected || false, rejectReason: cur.rejectReason || "", proofUrls: cur.proofUrls || [] });
-      const res  = await fetch(`/api/admin/tasks/${stageTask._id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stages, performedByName: adminUser?.name || "Admin" }) });
+      // Also sync task.dueDate with the updated stage deadline so "Final Deadline" stays current
+      const patchBody = { stages, performedByName: adminUser?.name || "Admin" };
+      if (stageForm.deadline) patchBody.dueDate = new Date(stageForm.deadline).toISOString();
+      const res  = await fetch(`/api/admin/tasks/${stageTask._id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patchBody) });
       const data = await res.json();
       if (data.success) { toast.success("Stage saved!"); setStageModal(false); fetchTasks(); }
       else toast.error(data.message || "Failed");
@@ -760,13 +768,13 @@ export default function TasksListPage() {
                                       const done       = !!stg.done;
                                       const rejected   = !!stg.rejected;
                                       const pending    = done && !approved && !rejected;
-                                      // Active = this is the current stage AND it has assignees (not just a skip target)
+                                      // Active = has assignees and not yet done (regardless of t.stage)
                                       const hasAssignees = normalizeAssignedTo(stg.assignedTo).length > 0;
-                                      const isActive   = !done && t.stage === key && hasAssignees;
-                                      // Approved → always green. Active → stage color. Else → gray.
-                                      const bg     = rejected ? "#DC2626" : approved ? "#22c55e" : isActive ? meta.color : "#E2E8F0";
-                                      const border = rejected ? "#DC2626" : approved ? "#22c55e" : (isActive || pending) ? meta.color : "#D1D5DB";
-                                      const txtCol = rejected ? "#fff"    : approved ? "#fff"    : (isActive || pending) ? "#000" : "#9CA3AF";
+                                      const isActive   = !done && !rejected && hasAssignees;
+                                      // approved → filled stage color | assigned/pending → border only (white bg) | else → gray
+                                      const bg     = rejected ? "#DC2626" : approved ? meta.color : (isActive || pending) ? "#fff" : "#F1F5F9";
+                                      const border = rejected ? "#DC2626" : approved ? meta.color : (isActive || pending) ? meta.color : "#D1D5DB";
+                                      const txtCol = rejected ? "#fff"    : approved ? "#fff"     : (isActive || pending) ? "#000"  : "#9CA3AF";
                                       return (
                                         <div key={key} className="stage-dot"
                                           style={{ background: bg, borderColor: border, color: txtCol }}

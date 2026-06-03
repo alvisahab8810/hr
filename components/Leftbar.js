@@ -384,7 +384,8 @@ export default function Leftbar({ role = "admin" }) {
     }
     return null;
   });
-  const [communityUnread, setCommunityUnread] = useState(0);
+  const [communityUnread,      setCommunityUnread]      = useState(0);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   // ref points to the <aside> which is the real scroll container (CSS: overflow-y:scroll)
   const sidebarRef = useRef(null);
 
@@ -433,6 +434,19 @@ export default function Leftbar({ role = "admin" }) {
     }
     fetchUnread();
     const t = setInterval(fetchUnread, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    async function fetchApprovalsCount() {
+      try {
+        const r = await fetch("/api/admin/tasks/approvals-count", { credentials: "include" });
+        const d = await r.json();
+        if (d.success) setPendingApprovalsCount(d.count || 0);
+      } catch {}
+    }
+    fetchApprovalsCount();
+    const t = setInterval(fetchApprovalsCount, 60000);
     return () => clearInterval(t);
   }, []);
 
@@ -829,8 +843,14 @@ export default function Leftbar({ role = "admin" }) {
                 </Link>
               </li>
               <li className={pathname === "/dashboard/admin/tasks/approvals" ? "active" : ""}>
-                <Link href="/dashboard/admin/tasks/approvals">
-                  <i className="bi bi-check2-square" style={{ marginRight: 6, fontSize: 12 }} />Approvals
+                <Link href="/dashboard/admin/tasks/approvals" style={{ display: "flex", alignItems: "center" }}>
+                  <i className="bi bi-check2-square" style={{ marginRight: 6, fontSize: 12 }} />
+                  Approvals
+                  {pendingApprovalsCount > 0 && (
+                    <span style={{ marginLeft: "auto", background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 20, padding: "1px 6px", lineHeight: 1.4 }}>
+                      {pendingApprovalsCount}
+                    </span>
+                  )}
                 </Link>
               </li>
               <li className={pathname === "/dashboard/admin/tasks/team-performance" ? "active" : ""}>

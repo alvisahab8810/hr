@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     // 1. Fetch all campaigns in the ad account
     const campaigns = [];
     let campsUrl = `https://graph.facebook.com/v19.0/${accountId}/campaigns` +
-      `?fields=id,name,status,objective,daily_budget,lifetime_budget,adsets{daily_budget,lifetime_budget}` +
+      `?fields=id,name,status,objective,daily_budget,lifetime_budget,is_campaign_budget_optimized,adsets.limit(200){daily_budget,lifetime_budget,status}` +
       `&limit=100&access_token=${token}`;
     while (campsUrl) {
       const d = await fbFetch(campsUrl);
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
     for (let i = 0; i < campaigns.length; i += batchSize) {
       const batch = campaigns.slice(i, i + batchSize).map(c => ({
         method: "GET",
-        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,link_clicks,landing_page_views,actions,action_values&date_preset=maximum`,
+        relative_url: `${c.id}/insights?fields=spend,impressions,clicks,reach,actions,action_values&date_preset=maximum`,
       }));
       const batchRes = await fetch(`https://graph.facebook.com/v19.0/`, {
         method: "POST",
@@ -113,39 +113,69 @@ export default async function handler(req, res) {
     // 3. Upsert each campaign into AdCampaign collection
     let synced = 0;
     for (const c of campaigns) {
-      let rawBudget = Number(c.daily_budget || c.lifetime_budget || 0);
-      if (!rawBudget && c.adsets?.data?.length) {
-        // Budget is set at ad-set level — sum all ad-set daily/lifetime budgets
-        rawBudget = c.adsets.data.reduce((s, as) => s + Number(as.daily_budget || as.lifetime_budget || 0), 0);
+      // Meta has 2 budget types:
+      // 1. CBO (Campaign Budget Optimization) — budget on the campaign object itself
+      // 2. ABO (Ad Set Budget Optimization) — budget on each individual ad set
+      const isCBO = c.is_campaign_budget_optimized === true;
+      let rawBudget = 0;
+
+      if (isCBO || (c.daily_budget || c.lifetime_budget)) {
+        // CBO: campaign-level budget
+        rawBudget = Number(c.daily_budget || c.lifetime_budget || 0);
       }
+
+      if (!rawBudget && c.adsets?.data?.length) {
+        // ABO: sum all active ad-set budgets (skip adsets with no budget set)
+        rawBudget = c.adsets.data.reduce((sum, adset) => {
+          const b = Number(adset.daily_budget || adset.lifetime_budget || 0);
+          return sum + b;
+        }, 0);
+      }
+
       const budget = Math.round(rawBudget / 100);
 
-      // Base fields always updated (campaign meta-data)
+      // Determine budget type label for display
+      const budgetType = isCBO || (c.daily_budget || c.lifetime_budget) ? "cbo"
+                       : c.adsets?.data?.some(as => as.daily_budget || as.lifetime_budget) ? "abo"
+                       : "";
+
+      // Base fields — budget only written when > 0 so ended/paused campaigns
+      // don't overwrite the last known budget stored in the DB with null/0.
       const setFields = {
         name:           c.name,
         platform:       "meta",
         status:         mapStatus(c.status),
-        budget,
         externalId:     c.id,
         externalSource: "meta",
       };
+      if (budget > 0) {
+        setFields.budget     = budget;
+        setFields.budgetType = budgetType;
+      } else if (budgetType) {
+        setFields.budgetType = budgetType;
+      }
 
-      // Only update performance metrics when insights actually returned data
-      // This prevents overwriting good historical data with zeros on a failed API call
+      // Update performance only when the batch API returned actual insight fields.
+      // We check "spend" key existence (not value > 0) so campaigns with genuine
+      // zero spend (new/paused) also get their metrics properly initialized.
       const ins = insightsMap[c.id];
-      if (ins !== null && ins !== undefined) {
-        const spend  = Number(ins.spend || 0);
-        const convs  = sumConversions(ins.actions);
-        const convVal= sumConvValue(ins.action_values);
+      if (ins !== null && ins !== undefined && "spend" in ins) {
+        const spend  = Number(ins.spend  || 0);
         const impr   = Number(ins.impressions || 0);
         const clicks = Number(ins.clicks || 0);
-        const reach  = Number(ins.reach || 0);
-        const roas   = spend > 0 && convVal > 0 ? Math.round((convVal / spend) * 100) / 100 : null;
-        const cpa    = convs > 0 ? Math.round(spend / convs) : null;
-        const ctr    = impr > 0 ? Math.round((clicks / impr) * 10000) / 100 : null;
+        const reach  = Number(ins.reach  || 0);
+        const convs  = sumConversions(ins.actions);
+        const convVal= sumConvValue(ins.action_values);
 
-        const linkClicks  = Number(ins.link_clicks || 0);
-        const lpViews     = Number(ins.landing_page_views || 0);
+        // link_clicks and landing_page_views are extracted from the actions array
+        // (requesting them as direct fields at campaign-level causes Meta to return
+        //  zeroed-out insights objects, which is what was wiping all performance data)
+        const linkClicks = Number((ins.actions || []).find(a => a.action_type === "link_click")?.value || 0);
+        const lpViews    = Number((ins.actions || []).find(a => a.action_type === "landing_page_view")?.value || 0);
+
+        const roas = spend > 0 && convVal > 0 ? Math.round((convVal / spend) * 100) / 100 : null;
+        const cpa  = convs > 0 ? Math.round(spend / convs) : null;
+        const ctr  = impr  > 0 ? Math.round((clicks / impr) * 10000) / 100 : null;
 
         setFields["performance.spent"]            = spend;
         setFields["performance.impressions"]      = impr;

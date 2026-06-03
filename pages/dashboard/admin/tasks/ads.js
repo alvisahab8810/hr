@@ -100,7 +100,6 @@ export default function AdCampaignsPage() {
     const adSource    = params.get("adSource");
 
     if (adConnected) {
-      setAlert({ type: "success", msg: `Ad account connected successfully! Syncing campaigns…` });
       window.history.replaceState({}, "", window.location.pathname);
       load(); loadAllBrands();
     } else if (adError) {
@@ -157,6 +156,7 @@ export default function AdCampaignsPage() {
   const syncAds = async (brandId, source) => {
     const key = `${brandId}_${source}`;
     setSyncing(p => ({ ...p, [key]: true }));
+    setAlert({ type: "info", msg: `Syncing ${source === "meta" ? "Meta" : "Google"} Ads… fetching all campaign data from API, please wait.` });
     try {
       const r = await fetch(`/api/admin/brands/${brandId}/${source}-ads/sync`, { method: "POST" });
       const d = await r.json();
@@ -173,27 +173,32 @@ export default function AdCampaignsPage() {
 
   const finalizeMetaSelect = async () => {
     if (!metaSelect || !selectedAcct) return;
-    const r = await fetch(`/api/admin/brands/${metaSelect.brandId}/meta-ads/finalize`, {
+    const brandId = metaSelect.brandId;
+    const r = await fetch(`/api/admin/brands/${brandId}/meta-ads/finalize`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accountId: selectedAcct }),
     });
     const d = await r.json();
     if (d.success) {
-      setAlert({ type: "success", msg: `${d.accountName} connected! Syncing campaigns…` });
-      setMetaSelect(null); load(); loadAllBrands();
+      setMetaSelect(null);
+      loadAllBrands();
+      // Auto-sync immediately — this sets the progress alert and loads campaigns on completion
+      syncAds(brandId, "meta");
     } else setAlert({ type: "error", msg: d.message });
   };
 
   const finalizeGoogleSelect = async () => {
     if (!googleSelect || !selectedAcct) return;
-    const r = await fetch(`/api/admin/brands/${googleSelect.brandId}/google-ads/finalize`, {
+    const brandId = googleSelect.brandId;
+    const r = await fetch(`/api/admin/brands/${brandId}/google-ads/finalize`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ customerId: selectedAcct }),
     });
     const d = await r.json();
     if (d.success) {
-      setAlert({ type: "success", msg: `${d.customerName} connected! Syncing campaigns…` });
-      setGoogleSelect(null); load(); loadAllBrands();
+      setGoogleSelect(null);
+      loadAllBrands();
+      syncAds(brandId, "google");
     } else setAlert({ type: "error", msg: d.message });
   };
 
@@ -240,6 +245,17 @@ export default function AdCampaignsPage() {
   const deleteCampaign = async (id) => {
     if (!confirm("Delete this campaign?")) return;
     await fetch(`/api/admin/campaigns/${id}`, { method: "DELETE" });
+    load();
+  };
+
+  const setBudgetManually = async (campId) => {
+    const val = prompt("Enter daily budget (₹) for this campaign:");
+    if (!val || isNaN(Number(val)) || Number(val) <= 0) return;
+    await fetch(`/api/admin/campaigns/${campId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ budget: Math.round(Number(val)) }),
+    });
     load();
   };
 
@@ -350,6 +366,9 @@ export default function AdCampaignsPage() {
           .alert-box{padding:12px 16px;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:10px;margin-bottom:16px;}
           .alert-success{background:#DCFCE7;border:1px solid #86EFAC;color:#15803D;}
           .alert-error{background:#FEF2F2;border:1px solid #FECACA;color:#DC2626;}
+          .alert-info{background:#EEF2FF;border:1px solid #C7D2FE;color:#4338CA;}
+          @keyframes spin{to{transform:rotate(360deg)}}
+          .sync-spinner{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
         `}</style>
       </Head>
 
@@ -373,9 +392,14 @@ export default function AdCampaignsPage() {
               {/* Alert banner */}
               {alert && (
                 <div className={`alert-box alert-${alert.type}`}>
-                  <i className={`bi ${alert.type === "success" ? "bi-check-circle-fill" : "bi-exclamation-circle-fill"}`} style={{ flexShrink: 0 }} />
+                  {alert.type === "info"
+                    ? <div className="sync-spinner" />
+                    : <i className={`bi ${alert.type === "success" ? "bi-check-circle-fill" : "bi-exclamation-circle-fill"}`} style={{ flexShrink: 0 }} />
+                  }
                   {alert.msg}
-                  <button onClick={() => setAlert(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", opacity: .6, fontSize: 16 }}>×</button>
+                  {alert.type !== "info" && (
+                    <button onClick={() => setAlert(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", opacity: .6, fontSize: 16 }}>×</button>
+                  )}
                 </div>
               )}
 
@@ -496,9 +520,11 @@ export default function AdCampaignsPage() {
                               const cplp  = lpViews > 0 ? parseFloat((spent / lpViews).toFixed(2)) : null;
                               const budgetLabel = c.budget ? `${fmtINR(c.budget)} Daily` : "—";
                               const spentPct = c.budget > 0 ? Math.min(100, Math.round((spent / c.budget) * 100)) : 0;
+                              // No delivery = synced campaign that returned no insights data from Meta at all
+                              const noDelivery = c.externalSource === "meta" && spent === 0 && impr === 0 && reach === 0 && convs === 0;
 
                               return (
-                                <tr key={c._id}>
+                                <tr key={c._id} style={{ opacity: noDelivery ? 0.65 : 1 }}>
                                   {/* Campaign name */}
                                   <td style={{ minWidth: 180 }}>
                                     <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B", marginBottom: 2 }}>{c.name}</div>
@@ -507,6 +533,11 @@ export default function AdCampaignsPage() {
                                         <i className={`bi ${pm.icon}`} style={{ fontSize: 8 }} /> {pm.label}
                                       </span>
                                       <span className="ad-badge" style={{ background: sm.bg, color: sm.color, fontSize: 9 }}>{sm.label}</span>
+                                      {noDelivery && (
+                                        <span className="ad-badge" style={{ background: "#F8FAFC", color: "#94A3B8", fontSize: 9, border: "1px solid #E2E8F0" }}>
+                                          No delivery
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
                                   {/* Brand */}
@@ -518,66 +549,90 @@ export default function AdCampaignsPage() {
                                   </td>
 
                                   {/* Budget */}
-                                  <td>
-                                    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{budgetLabel}</div>
-                                    {c.budget > 0 && (
-                                      <div style={{ marginTop: 4, height: 3, width: 70, background: "#F1F5F9", borderRadius: 4 }}>
-                                        <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#6366F1", borderRadius: 4 }} />
-                                      </div>
+                                  <td style={{ minWidth: 110 }}>
+                                    {c.budget > 0 ? (
+                                      <>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                          <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{budgetLabel}</span>
+                                          {c.budgetType === "cbo" && (
+                                            <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4, background: "#EEF2FF", color: "#4F46E5" }}>CBO</span>
+                                          )}
+                                          {c.budgetType === "abo" && (
+                                            <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4, background: "#FFF7ED", color: "#EA580C" }}>ABO</span>
+                                          )}
+                                        </div>
+                                        <div style={{ marginTop: 4, height: 3, width: 70, background: "#F1F5F9", borderRadius: 4 }}>
+                                          <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#6366F1", borderRadius: 4 }} />
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <button onClick={() => setBudgetManually(c._id)}
+                                        style={{ fontSize: 11, fontWeight: 600, color: "#6366F1", background: "#EEF2FF", border: "1.5px dashed #A5B4FC", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" }}>
+                                        + Set ₹
+                                      </button>
                                     )}
                                   </td>
-                                  {/* Results */}
-                                  <td style={{ fontWeight: 700, color: convs > 0 ? "#10B981" : "#94A3B8" }}>
-                                    {convs > 0 ? (
-                                      <>
-                                        <div style={{ fontSize: 14 }}>{convs.toLocaleString()}</div>
-                                        <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Leads (Form)</div>
-                                      </>
-                                    ) : "—"}
-                                  </td>
-                                  {/* Reach */}
-                                  <td style={{ fontWeight: 600, color: "#374151" }}>{reach > 0 ? fmtNum(reach) : "—"}</td>
-                                  {/* Frequency */}
-                                  <td style={{ color: "#374151" }}>{freq}</td>
-                                  {/* Cost / Result */}
-                                  <td style={{ fontWeight: 700, color: cpr ? "#F59E0B" : "#94A3B8" }}>
-                                    {cpr ? (
-                                      <>
-                                        <div>₹{cpr.toFixed(2)}</div>
-                                        <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Per lead</div>
-                                      </>
-                                    ) : "—"}
-                                  </td>
-                                  {/* Link Clicks */}
-                                  <td style={{ fontWeight: 600, color: linkClicks > 0 ? "#374151" : "#94A3B8" }}>
-                                    {linkClicks > 0 ? fmtNum(linkClicks) : "—"}
-                                  </td>
-                                  {/* Amount Spent */}
-                                  <td>
-                                    <div style={{ fontWeight: 800, fontSize: 13, color: spent > 0 ? "#1E293B" : "#94A3B8" }}>
-                                      {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
-                                    </div>
-                                  </td>
-                                  {/* CPM */}
-                                  <td style={{ fontWeight: 600, color: cpm ? "#374151" : "#94A3B8" }}>
-                                    {cpm ? `₹${cpm.toFixed(2)}` : "—"}
-                                  </td>
-                                  {/* CTR */}
-                                  <td style={{ fontWeight: 600, color: ctr ? "#374151" : "#94A3B8" }}>
-                                    {ctr != null ? `${ctr.toFixed(2)}%` : "—"}
-                                  </td>
-                                  {/* Landing Page Views */}
-                                  <td style={{ fontWeight: 600, color: lpViews > 0 ? "#374151" : "#94A3B8" }}>
-                                    {lpViews > 0 ? fmtNum(lpViews) : "—"}
-                                  </td>
-                                  {/* Cost per LP View */}
-                                  <td style={{ fontWeight: 700, color: cplp ? "#7C3AED" : "#94A3B8" }}>
-                                    {cplp ? `₹${cplp.toFixed(2)}` : "—"}
-                                  </td>
-                                  {/* Status */}
-                                  <td>
-                                    <span className="ad-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
-                                  </td>
+
+                                  {noDelivery ? (
+                                    <td colSpan={11} style={{ padding: "12px 14px", color: "#CBD5E1", fontSize: 12, fontStyle: "italic" }}>
+                                      No delivery data — campaign has no recorded impressions or spend in Meta
+                                    </td>
+                                  ) : (
+                                    <>
+                                      {/* Results */}
+                                      <td style={{ fontWeight: 700, color: convs > 0 ? "#10B981" : "#94A3B8" }}>
+                                        {convs > 0 ? (
+                                          <>
+                                            <div style={{ fontSize: 14 }}>{convs.toLocaleString()}</div>
+                                            <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Leads (Form)</div>
+                                          </>
+                                        ) : "—"}
+                                      </td>
+                                      {/* Reach */}
+                                      <td style={{ fontWeight: 600, color: "#374151" }}>{reach > 0 ? fmtNum(reach) : "—"}</td>
+                                      {/* Frequency */}
+                                      <td style={{ color: "#374151" }}>{freq}</td>
+                                      {/* Cost / Result */}
+                                      <td style={{ fontWeight: 700, color: cpr ? "#F59E0B" : "#94A3B8" }}>
+                                        {cpr ? (
+                                          <>
+                                            <div>₹{cpr.toFixed(2)}</div>
+                                            <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Per lead</div>
+                                          </>
+                                        ) : "—"}
+                                      </td>
+                                      {/* Link Clicks */}
+                                      <td style={{ fontWeight: 600, color: linkClicks > 0 ? "#374151" : "#94A3B8" }}>
+                                        {linkClicks > 0 ? fmtNum(linkClicks) : "—"}
+                                      </td>
+                                      {/* Amount Spent */}
+                                      <td>
+                                        <div style={{ fontWeight: 800, fontSize: 13, color: spent > 0 ? "#1E293B" : "#94A3B8" }}>
+                                          {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                                        </div>
+                                      </td>
+                                      {/* CPM */}
+                                      <td style={{ fontWeight: 600, color: cpm ? "#374151" : "#94A3B8" }}>
+                                        {cpm ? `₹${cpm.toFixed(2)}` : "—"}
+                                      </td>
+                                      {/* CTR */}
+                                      <td style={{ fontWeight: 600, color: ctr ? "#374151" : "#94A3B8" }}>
+                                        {ctr != null ? `${ctr.toFixed(2)}%` : "—"}
+                                      </td>
+                                      {/* Landing Page Views */}
+                                      <td style={{ fontWeight: 600, color: lpViews > 0 ? "#374151" : "#94A3B8" }}>
+                                        {lpViews > 0 ? fmtNum(lpViews) : "—"}
+                                      </td>
+                                      {/* Cost per LP View */}
+                                      <td style={{ fontWeight: 700, color: cplp ? "#7C3AED" : "#94A3B8" }}>
+                                        {cplp ? `₹${cplp.toFixed(2)}` : "—"}
+                                      </td>
+                                      {/* Status */}
+                                      <td>
+                                        <span className="ad-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
+                                      </td>
+                                    </>
+                                  )}
 
                                 </tr>
                               );

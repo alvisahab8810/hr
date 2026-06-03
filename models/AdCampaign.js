@@ -23,7 +23,8 @@ const AdCampaignSchema = new mongoose.Schema({
   externalId:     { type: String, default: "" },   // Meta campaign ID or Google campaign ID
   externalSource: { type: String, enum: ["manual", "meta", "google"], default: "manual" },
   platform: { type: String, enum: ["meta", "google", "youtube", "linkedin"], default: "meta" },
-  budget:   { type: Number, default: 0 },
+  budget:     { type: Number, default: 0 },
+  budgetType: { type: String, enum: ["cbo", "abo", "manual", ""], default: "" },
   agenda:   { type: String, default: "" },
   status:   { type: String, enum: ["planned", "active", "paused", "completed"], default: "planned" },
   stages:   { type: [StageSchema], default: () => ([

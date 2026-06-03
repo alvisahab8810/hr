@@ -41,7 +41,11 @@
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(Select-Object Name)",
       "Bash(git -C d:\\\\viralon-payroll diff --stat HEAD)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(cd /d \"d:\\\\viralon-payroll\")",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const fs = require\\('fs'\\); const code = fs.readFileSync\\('pages/client/[brand]/index.js', 'utf8'\\); console.log\\('File size:', code.length, 'chars'\\); console.log\\('Lines:', code.split\\('\\\\n'\\).length\\);\")",
+      "Bash(git log *)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

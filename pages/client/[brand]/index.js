@@ -1676,13 +1676,20 @@ function ApprovalsView({ overview, onRefresh }) {
 }
 
 /* ─── Content calendar view ──────────────────────────────────────────────── */
+// S1=orange, S2=blue, S3=yellow, S4=green — matches admin list/weekly/calendar
+const CAL_STAGE_FILL = ["#F97316", "#3B82F6", "#EAB308", "#22C55E"];
+function getCalStageStyle(task) {
+  const stages = task?.stages || [];
+  const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
+  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: c + "28", border: c, color: c }; } }
+  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: "#fff", border: c, color: c }; } }
+  return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF" };
+}
+
 function CalendarView({ overview }) {
   const { allTasks = [] } = overview || {};
-  // Only approved/completed production tasks — client sees the approved content plan
-  const content = allTasks.filter(t =>
-    (t.taskType === "production" || t.contentType) &&
-    ((t.stages || []).some(s => s.approved) || t.status === "completed")
-  );
+  // Show all production/content tasks — pipeline colors show stage progress
+  const content = allTasks.filter(t => t.taskType === "production" || t.contentType);
 
   const todayReal = new Date();
   const [year,  setYear]  = useState(todayReal.getFullYear());
@@ -1744,12 +1751,15 @@ function CalendarView({ overview }) {
             </button>
           </div>
           {/* Legend */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {Object.entries(CTYPE_COLOR2).map(([k,v]) => (
-              <span key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: v }}>
-                <span style={{ width: 8, height: 8, borderRadius: 2, background: v, display: "inline-block" }} />{k}
-              </span>
-            ))}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+              <span key={l+"a"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+                <span style={{ width:16, height:10, borderRadius:2, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l}
+              </span>,
+              <span key={l+"d"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+                <span style={{ width:16, height:10, borderRadius:2, background:c+"28", border:`1.5px solid ${c}`, display:"inline-block" }} />{l}✓
+              </span>,
+            ])}
           </div>
         </div>
       </div>
@@ -1773,10 +1783,10 @@ function CalendarView({ overview }) {
                   <>
                     <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 500, color: isToday ? "#5A57FB" : "#94a3b8", marginBottom: 3 }}>{dayNum}</div>
                     {dayTs.slice(0, 2).map(t => {
-                      const bc = CTYPE_COLOR2[t.contentType] || t.brandId?.color || "#5A57FB";
+                      const sty = getCalStageStyle(t);
                       return (
                         <div key={t._id} onClick={() => setSelTask(t)}
-                          style={{ fontSize: 9, background: bc + "20", color: bc, borderRadius: 3, padding: "2px 5px", marginBottom: 2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
+                          style={{ fontSize: 9, background: sty.bg, color: sty.color, border: `1px solid ${sty.border}`, borderLeft: `3px solid ${sty.border}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
                           title={t.nomenclature || t.title}>
                           {t.contentType?.toUpperCase() || "TASK"} · {(t.nomenclature || t.title || "").slice(0, 12)}
                         </div>
@@ -2536,11 +2546,24 @@ function GscSparkline({ data, dataKey, color }) {
 }
 
 function SeoView({ brandSlug }) {
+  const [seoTab,  setSeoTab]  = useState("performance"); // "performance" | "tasks"
   const [gscData, setGscData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
   const [days,    setDays]    = useState(28);
-  const [chart,   setChart]   = useState("clicks"); // clicks | impressions | ctr | position
+  const [chart,   setChart]   = useState("clicks");
+  const [seoTasks,     setSeoTasks]     = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+
+  useEffect(() => {
+    if (seoTab !== "tasks") return;
+    setTasksLoading(true);
+    fetch(`/api/client/seo-tasks?brandSlug=${brandSlug}`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setSeoTasks(d.tasks || []); })
+      .catch(() => {})
+      .finally(() => setTasksLoading(false));
+  }, [brandSlug, seoTab]);
 
   useEffect(() => {
     setLoading(true);
@@ -2555,42 +2578,119 @@ function SeoView({ brandSlug }) {
       .finally(() => setLoading(false));
   }, [brandSlug, days]);
 
+  // Tab switcher — shown at top regardless of GSC state
+  const tabBar = (
+    <div style={{ display:"flex", borderBottom:"2px solid #E2E8F0", marginBottom:22, gap:0 }}>
+      {[{ key:"performance", label:"SEO Performance", icon:"bi-graph-up-arrow" }, { key:"tasks", label:"SEO Tasks", icon:"bi-list-check" }].map(t => (
+        <button key={t.key} onClick={() => setSeoTab(t.key)}
+          style={{ padding:"10px 20px", fontSize:13, fontWeight:700, cursor:"pointer", border:"none", background:"none", fontFamily:"inherit",
+            color: seoTab === t.key ? "#16A34A" : "#64748b",
+            borderBottom: seoTab === t.key ? "2.5px solid #16A34A" : "2.5px solid transparent",
+            display:"flex", alignItems:"center", gap:6 }}>
+          <i className={`bi ${t.icon}`} />{t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (seoTab === "tasks") {
+    const SEO_CAT_COLOR = { blog:"#3B82F6", technical:"#8B5CF6", local:"#F59E0B", ecommerce:"#EC4899", general:"#64748b" };
+    const STATUS_COLOR  = { todo:"#64748b", in_progress:"#1D4ED8", review:"#B45309", completed:"#15803D", blocked:"#DC2626" };
+    const STATUS_BG     = { todo:"#F1F5F9", in_progress:"#DBEAFE", review:"#FEF3C7", completed:"#DCFCE7", blocked:"#FEE2E2" };
+    return (
+      <div>
+        {tabBar}
+        {tasksLoading ? (
+          <div style={{ display:"flex", justifyContent:"center", padding:48 }}><div className="cp-spinner" /></div>
+        ) : seoTasks.length === 0 ? (
+          <div className="cp-card" style={{ textAlign:"center", padding:"48px 24px" }}>
+            <i className="bi bi-search" style={{ fontSize:36, color:"#CBD5E1", display:"block", marginBottom:12 }} />
+            <div style={{ fontSize:15, fontWeight:700, color:"#94a3b8" }}>No SEO tasks yet</div>
+            <div style={{ fontSize:13, color:"#94a3b8", marginTop:4 }}>Your assigned SEO tasks will appear here</div>
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {seoTasks.map(t => {
+              const cat = t.seoCategory || "general";
+              const catColor = SEO_CAT_COLOR[cat] || "#64748b";
+              const stColor  = STATUS_COLOR[t.status]  || "#64748b";
+              const stBg     = STATUS_BG[t.status]     || "#F1F5F9";
+              const overdue  = t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
+              return (
+                <div key={t._id} style={{ background:"#fff", border:"1.5px solid #E2E8F0", borderRadius:12, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:6, background:catColor+"18", color:catColor, textTransform:"capitalize" }}>
+                        {cat}
+                      </span>
+                      {t.taskId && <span style={{ fontSize:10, color:"#94a3b8", fontFamily:"monospace" }}>{t.taskId}</span>}
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#0f172a", marginBottom:4 }}>{t.title}</div>
+                    {t.dueDate && (
+                      <div style={{ fontSize:12, color: overdue ? "#DC2626" : "#64748b" }}>
+                        {overdue && <i className="bi bi-exclamation-circle-fill me-1" />}
+                        Due: {new Date(t.dueDate).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                      </div>
+                    )}
+                  </div>
+                  <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:700, background:stBg, color:stColor, whiteSpace:"nowrap" }}>
+                    {t.statusLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Performance tab — existing flow below
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 320 }}>
-        <div className="cp-spinner" />
+      <div>
+        {tabBar}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280 }}>
+          <div className="cp-spinner" />
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="cp-card" style={{ textAlign: "center", padding: "48px 24px" }}>
-        <i className="bi bi-exclamation-triangle" style={{ fontSize: 36, color: "#EF4444", marginBottom: 12, display: "block" }} />
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Could not load GSC data</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>{error}</div>
+      <div>
+        {tabBar}
+        <div className="cp-card" style={{ textAlign: "center", padding: "48px 24px" }}>
+          <i className="bi bi-exclamation-triangle" style={{ fontSize: 36, color: "#EF4444", marginBottom: 12, display: "block" }} />
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>Could not load GSC data</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>{error}</div>
+        </div>
       </div>
     );
   }
 
   if (!gscData?.configured) {
     return (
-      <div className="cp-card" style={{ textAlign: "center", padding: "56px 32px", maxWidth: 520, margin: "0 auto" }}>
-        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#F0FDF4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
-          <i className="bi bi-graph-up-arrow" style={{ fontSize: 28, color: "#16A34A" }} />
-        </div>
-        <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>Google Search Console</div>
-        <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.7 }}>
-          Your SEO performance dashboard will appear here once your Google Search Console is connected by the Viralon team.
-        </div>
-        <div style={{ marginTop: 20, background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "14px 18px", textAlign: "left" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginBottom: 8 }}>What you will see here:</div>
-          {["Total Clicks & Impressions trends","Average CTR & Position","Top performing keywords","Top landing pages"].map(item => (
-            <div key={item} style={{ fontSize: 12, color: "#166534", display: "flex", gap: 8, marginBottom: 4 }}>
-              <i className="bi bi-check2-circle" style={{ color: "#16A34A", flexShrink: 0, marginTop: 1 }} />
-              {item}
-            </div>
-          ))}
+      <div>
+        {tabBar}
+        <div className="cp-card" style={{ textAlign: "center", padding: "56px 32px", maxWidth: 520, margin: "0 auto" }}>
+          <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#F0FDF4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
+            <i className="bi bi-graph-up-arrow" style={{ fontSize: 28, color: "#16A34A" }} />
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>Google Search Console</div>
+          <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.7 }}>
+            Your SEO performance dashboard will appear here once your Google Search Console is connected by the Viralon team.
+          </div>
+          <div style={{ marginTop: 20, background: "#F0FDF4", border: "1.5px solid #BBF7D0", borderRadius: 10, padding: "14px 18px", textAlign: "left" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#15803D", marginBottom: 8 }}>What you will see here:</div>
+            {["Total Clicks & Impressions trends","Average CTR & Position","Top performing keywords","Top landing pages"].map(item => (
+              <div key={item} style={{ fontSize: 12, color: "#166534", display: "flex", gap: 8, marginBottom: 4 }}>
+                <i className="bi bi-check2-circle" style={{ color: "#16A34A", flexShrink: 0, marginTop: 1 }} />
+                {item}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -2628,6 +2728,7 @@ function SeoView({ brandSlug }) {
 
   return (
     <>
+      {tabBar}
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
         <div>
@@ -3904,77 +4005,75 @@ function AdCampaignsView({ brandSlug }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading,   setLoading]   = useState(true);
 
-  useEffect(() => {
+  const loadCampaigns = useCallback(() => {
     if (!brandSlug) return;
+    setLoading(true);
     fetch(`/api/client/campaigns?brandSlug=${brandSlug}`)
       .then(r => r.json())
       .then(d => { if (d.success) setCampaigns(d.campaigns || []); })
       .finally(() => setLoading(false));
   }, [brandSlug]);
 
+  useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
+
   const PLATFORM_LABEL = { meta: "Meta", google: "Google", youtube: "YouTube", linkedin: "LinkedIn" };
   const PLATFORM_COLOR = { meta: "#1877F2", google: "#EA4335", youtube: "#FF0000", linkedin: "#0A66C2" };
-  const STATUS_LABEL   = { planned: "Planned", active: "Active", paused: "Paused", completed: "Completed" };
   const STATUS_BG      = { planned: "#EEF2FF", active: "#DCFCE7", paused: "#FFFBEB", completed: "#F1F5F9" };
   const STATUS_COLOR   = { planned: "#4F46E5", active: "#15803D", paused: "#B45309", completed: "#475569" };
+  const STATUS_LABEL   = { planned: "Planned", active: "Active", paused: "Paused", completed: "Completed" };
 
+  function fmtINRFull(n) {
+    if (!n) return "₹0";
+    return "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
   function fmtINR(n) {
     if (!n) return "₹0";
     if (n >= 100000) return "₹" + (n / 100000).toFixed(2) + "L";
-    if (n >= 1000)   return "₹" + (n / 1000).toFixed(0) + "K";
+    if (n >= 1000)   return "₹" + (n / 1000).toFixed(1) + "K";
     return "₹" + n;
   }
   function fmtNum(n) {
-    if (!n && n !== 0) return "—";
+    if (!n) return "—";
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000)    return (n / 1000).toFixed(1) + "K";
     return String(n);
   }
 
-  const active      = campaigns.filter(c => c.status === "active");
-  const totalSpent  = campaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
-  const totalImpr   = campaigns.reduce((s, c) => s + (c.performance?.impressions || 0), 0);
-  const totalClicks = campaigns.reduce((s, c) => s + (c.performance?.clicks || 0), 0);
-  const totalConv   = campaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
-  const roasVals    = campaigns.filter(c => c.performance?.roas).map(c => c.performance.roas);
-  const avgRoas     = roasVals.length ? (roasVals.reduce((a, b) => a + b, 0) / roasVals.length).toFixed(1) : null;
-  const totalBudget = campaigns.reduce((s, c) => s + (c.budget || 0), 0);
-  const avgCpa      = totalConv > 0 ? Math.round(totalSpent / totalConv) : null;
-  const ctr         = totalImpr > 0 ? ((totalClicks / totalImpr) * 100).toFixed(1) : null;
+  const activeCampaigns = campaigns.filter(c => c.status === "active");
+  const totalSpent      = campaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
+  const totalImpr       = campaigns.reduce((s, c) => s + (c.performance?.impressions || 0), 0);
+  const totalClicks     = campaigns.reduce((s, c) => s + (c.performance?.linkClicks || 0), 0);
+  const totalConv       = campaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
+  const totalReach      = campaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
+  const totalLpViews    = campaigns.reduce((s, c) => s + (c.performance?.landingPageViews || 0), 0);
+  const totalBudget     = activeCampaigns.reduce((s, c) => s + (c.budget || 0), 0);
+  const avgCpa          = totalConv > 0 ? Math.round(totalSpent / totalConv) : null;
+  const overallCtr      = totalImpr > 0 ? ((totalClicks / totalImpr) * 100).toFixed(2) : null;
 
   if (loading) return <div className="cp-loading"><div className="cp-spinner" /></div>;
-
-  const totalReach  = campaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
 
   if (campaigns.length === 0) {
     return (
       <div className="cp-empty-state" style={{ padding: 60 }}>
         <i className="bi bi-megaphone" style={{ fontSize: 42 }} />
         <div style={{ marginTop: 12, fontWeight: 700, color: "#1e293b", fontSize: 16 }}>Ad Campaigns</div>
-        <div style={{ marginTop: 6 }}>ROAS, spend and conversion reports will appear here once campaigns are set up.</div>
+        <div style={{ marginTop: 6 }}>Campaign performance data will appear here once synced.</div>
       </div>
     );
   }
 
   return (
     <div>
-      {/* ROAS banner */}
-      {avgRoas && (
-        <div style={{ background: "linear-gradient(135deg,#78350f,#b45309)", borderRadius: 12, padding: "12px 18px", marginBottom: 20, color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          <i className="bi bi-graph-up-arrow" style={{ marginRight: 8, color: "#FCD34D" }} />
-          ROAS <strong style={{ color: "#FCD34D" }}>{avgRoas}x</strong> across all paid channels this month.{" "}
-          {fmtINR(totalSpent)} spent of {fmtINR(totalBudget)} budget · {totalConv} conversions logged.
-        </div>
-      )}
-
-      {/* 5 summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 20 }}>
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Total Spend",  value: fmtINR(totalSpent),  sub: `of ${fmtINR(totalBudget)} budget`, color: "#F97316", icon: "bi-credit-card" },
-          { label: "Reach",        value: fmtNum(totalReach),  sub: totalReach ? "unique people" : "no data yet", color: "#8B5CF6", icon: "bi-eye" },
-          { label: "Impressions",  value: fmtNum(totalImpr),   sub: totalImpr  ? "this month" : "no data yet",    color: "#0EA5E9", icon: "bi-bar-chart" },
-          { label: "Leads",        value: fmtNum(totalConv),   sub: totalConv  ? "total logged" : "no data yet",  color: "#10B981", icon: "bi-person-check" },
-          { label: "Total Clicks", value: fmtNum(totalClicks), sub: ctr        ? `CTR ${ctr}%` : "no data yet",   color: "#6366F1", icon: "bi-cursor" },
+          { label: "Total Spend",       value: fmtINRFull(totalSpent),   sub: activeCampaigns.length > 0 ? `₹${totalBudget.toLocaleString("en-IN")} active budget` : "no active campaigns", color: "#F97316", icon: "bi-credit-card" },
+          { label: "Reach",             value: fmtNum(totalReach),        sub: totalReach ? "unique people" : "no data yet",  color: "#8B5CF6", icon: "bi-eye" },
+          { label: "Impressions",       value: fmtNum(totalImpr),         sub: totalImpr  ? "total impressions" : "no data yet", color: "#0EA5E9", icon: "bi-bar-chart" },
+          { label: "Leads / Results",   value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", sub: totalConv ? "total conversions" : "no data yet", color: "#10B981", icon: "bi-person-check" },
+          { label: "Link Clicks",       value: fmtNum(totalClicks),       sub: overallCtr ? `CTR ${overallCtr}%` : "no data yet", color: "#6366F1", icon: "bi-cursor" },
+          { label: "Landing Page Views",value: fmtNum(totalLpViews),      sub: totalLpViews ? "total LP views" : "no data yet",  color: "#7C3AED", icon: "bi-box-arrow-in-right" },
+          { label: "Cost Per Lead",     value: avgCpa ? fmtINR(avgCpa) : "—", sub: "avg across campaigns",                    color: "#EF4444", icon: "bi-tag" },
         ].map(s => (
           <div key={s.label} className="cp-card" style={{ padding: "16px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -3983,97 +4082,144 @@ function AdCampaignsView({ brandSlug }) {
               </div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5 }}>{s.label}</div>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1.1 }}>{s.value}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: s.color, lineHeight: 1.1 }}>{s.value}</div>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* Campaign-wise details table */}
+      {/* Campaign details table */}
       <div className="cp-card" style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
           <i className="bi bi-broadcast" style={{ color: "#F97316" }} />
-          <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>Active campaigns</span>
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>{active.length} live · {campaigns.length} total</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>All Campaigns</span>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>{activeCampaigns.length} live · {campaigns.length} total</span>
+          <button onClick={loadCampaigns} style={{ marginLeft: "auto", padding: "4px 12px", border: "1.5px solid #E2E8F0", borderRadius: 7, background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", gap: 5 }}>
+            <i className="bi bi-arrow-clockwise" /> Refresh
+          </button>
         </div>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1300 }}>
             <thead>
               <tr style={{ background: "#FAFAFA" }}>
-                {["Campaign", "Result", "Reach", "CPR", "Budget", "Amount Spent", "Link Clicks", "CTR"].map(h => (
+                {["Campaign", "Budget", "Results", "Reach", "Frequency", "Cost / Result", "Link Clicks", "Amount Spent", "CPM", "CTR", "LP Views", "Cost / LP View", "Status"].map(h => (
                   <th key={h} style={{ padding: "9px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #F1F5F9", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {campaigns.map(c => {
-                const p       = c.performance || {};
-                const synced  = c.externalSource === "meta" || c.externalSource === "google";
-                const dash    = v => (synced ? fmtNum(v) : (v > 0 ? fmtNum(v) : "—"));
-                const cpr     = p.conversions > 0 ? Math.round((p.spent || 0) / p.conversions) : null;
-                const spentPct = c.budget ? Math.min(100, Math.round(((p.spent || 0) / c.budget) * 100)) : 0;
+                const p        = c.performance || {};
+                const spent    = p.spent || 0;
+                const impr     = p.impressions || 0;
+                const reach    = p.reach || 0;
+                const convs    = p.conversions || 0;
+                const lc       = p.linkClicks || 0;
+                const lpv      = p.landingPageViews || 0;
+                const freq     = reach > 0 ? (impr / reach).toFixed(2) : "—";
+                const cpr      = convs > 0 ? parseFloat((spent / convs).toFixed(2)) : null;
+                const cpm      = impr  > 0 ? parseFloat(((spent / impr) * 1000).toFixed(2)) : null;
+                const ctr      = p.ctr != null ? parseFloat(p.ctr.toFixed(2)) : null;
+                const cplp     = lpv   > 0 ? parseFloat((spent / lpv).toFixed(2)) : null;
+                const spentPct = c.budget > 0 ? Math.min(100, Math.round((spent / c.budget) * 100)) : 0;
                 return (
                   <tr key={c._id} style={{ borderBottom: "1px solid #F8FAFC" }}>
-                    {/* Campaign name + platform + status */}
-                    <td style={{ padding: "12px 14px", minWidth: 180 }}>
+                    {/* Campaign */}
+                    <td style={{ padding: "12px 14px", minWidth: 200 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{c.name}</div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "#F1F5F9", color: PLATFORM_COLOR[c.platform] || "#64748b" }}>{PLATFORM_LABEL[c.platform] || c.platform}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: STATUS_BG[c.status] || "#F1F5F9", color: STATUS_COLOR[c.status] || "#64748b" }}>{STATUS_LABEL[c.status] || c.status}</span>
-                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "#F1F5F9", color: PLATFORM_COLOR[c.platform] || "#64748b" }}>
+                        {PLATFORM_LABEL[c.platform] || c.platform}
+                      </span>
                     </td>
-                    {/* Result (conversions/leads) */}
-                    <td style={{ padding: "12px 14px", fontWeight: 700, color: p.conversions > 0 ? "#10B981" : "#94a3b8", fontSize: 14 }}>
-                      {p.conversions > 0 ? p.conversions : (synced ? 0 : "—")}
+                    {/* Budget */}
+                    <td style={{ padding: "12px 14px", minWidth: 110 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{c.budget ? fmtINR(c.budget) + " Daily" : "—"}</div>
+                      {c.budget > 0 && (
+                        <div style={{ marginTop: 4, height: 3, width: 70, background: "#F1F5F9", borderRadius: 4 }}>
+                          <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#F97316", borderRadius: 4 }} />
+                        </div>
+                      )}
+                    </td>
+                    {/* Results */}
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: convs > 0 ? "#10B981" : "#94a3b8" }}>
+                      {convs > 0 ? (<><div style={{ fontSize: 14 }}>{convs.toLocaleString()}</div><div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>Leads (Form)</div></>) : "—"}
                     </td>
                     {/* Reach */}
-                    <td style={{ padding: "12px 14px", color: "#374151", fontSize: 13 }}>
-                      {dash(p.reach)}
-                    </td>
-                    {/* CPR - cost per result */}
-                    <td style={{ padding: "12px 14px", color: "#374151", fontSize: 13, fontWeight: 600 }}>
-                      {cpr ? fmtINR(cpr) : "—"}
-                    </td>
-                    {/* Budget with spend bar */}
-                    <td style={{ padding: "12px 14px", minWidth: 110 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>{fmtINR(c.budget || 0)}</div>
-                      <div style={{ height: 4, background: "#F1F5F9", borderRadius: 10 }}>
-                        <div style={{ height: "100%", borderRadius: 10, width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#F97316" }} />
-                      </div>
-                    </td>
-                    {/* Amount Spent */}
-                    <td style={{ padding: "12px 14px", fontWeight: 700, color: p.spent > 0 ? "#F97316" : "#94a3b8", fontSize: 13 }}>
-                      {p.spent > 0 ? fmtINR(p.spent) : (synced ? "₹0" : "—")}
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: reach > 0 ? "#374151" : "#94a3b8" }}>{reach > 0 ? fmtNum(reach) : "—"}</td>
+                    {/* Frequency */}
+                    <td style={{ padding: "12px 14px", color: "#374151" }}>{freq}</td>
+                    {/* Cost/Result */}
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: cpr ? "#F59E0B" : "#94a3b8" }}>
+                      {cpr ? (<><div>₹{cpr.toFixed(2)}</div><div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>per lead</div></>) : "—"}
                     </td>
                     {/* Link Clicks */}
-                    <td style={{ padding: "12px 14px", color: p.clicks > 0 ? "#6366F1" : "#94a3b8", fontSize: 13, fontWeight: 600 }}>
-                      {dash(p.clicks)}
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: lc > 0 ? "#6366F1" : "#94a3b8" }}>{lc > 0 ? fmtNum(lc) : "—"}</td>
+                    {/* Amount Spent */}
+                    <td style={{ padding: "12px 14px", fontWeight: 800, color: spent > 0 ? "#F97316" : "#94a3b8" }}>
+                      {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                     </td>
+                    {/* CPM */}
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: cpm ? "#374151" : "#94a3b8" }}>{cpm ? `₹${cpm.toFixed(2)}` : "—"}</td>
                     {/* CTR */}
-                    <td style={{ padding: "12px 14px", color: "#64748b", fontSize: 13 }}>
-                      {p.ctr > 0 ? p.ctr.toFixed(2) + "%" : "—"}
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: ctr != null ? "#374151" : "#94a3b8" }}>{ctr != null ? `${ctr.toFixed(2)}%` : "—"}</td>
+                    {/* LP Views */}
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: lpv > 0 ? "#7C3AED" : "#94a3b8" }}>{lpv > 0 ? fmtNum(lpv) : "—"}</td>
+                    {/* Cost / LP View */}
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: cplp ? "#7C3AED" : "#94a3b8" }}>{cplp ? `₹${cplp.toFixed(2)}` : "—"}</td>
+                    {/* Status */}
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: STATUS_BG[c.status] || "#F1F5F9", color: STATUS_COLOR[c.status] || "#64748b" }}>
+                        {STATUS_LABEL[c.status] || c.status}
+                      </span>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
+            {/* Totals row */}
+            <tfoot>
+              <tr style={{ background: "#FAFAFA", borderTop: "2px solid #F1F5F9" }}>
+                <td style={{ padding: "10px 14px", fontWeight: 700, fontSize: 11, color: "#94a3b8", textTransform: "uppercase" }}>
+                  {campaigns.length} campaigns
+                </td>
+                <td style={{ padding: "10px 14px", fontWeight: 700, color: "#374151", fontSize: 12 }}>
+                  {activeCampaigns.length > 0 ? fmtINR(totalBudget) + " /day" : "—"}
+                </td>
+                <td style={{ padding: "10px 14px", fontWeight: 800, color: "#10B981" }}>{totalConv > 0 ? totalConv.toLocaleString() : "—"}</td>
+                <td style={{ padding: "10px 14px", fontWeight: 700 }}>{fmtNum(totalReach)}</td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+                <td style={{ padding: "10px 14px", fontWeight: 700 }}>{fmtNum(totalClicks)}</td>
+                <td style={{ padding: "10px 14px", fontWeight: 800, color: "#F97316" }}>
+                  {totalSpent > 0 ? `₹${totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                </td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+                <td style={{ padding: "10px 14px", fontWeight: 700 }}>{fmtNum(totalLpViews)}</td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* CPA + ROAS summary row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div className="cp-card" style={{ padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Cost Per Acquisition</div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "#F97316" }}>{avgCpa ? fmtINR(avgCpa) : "—"}</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>avg across all campaigns</div>
+      {/* CPA summary */}
+      {avgCpa && (
+        <div className="cp-card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 20 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Cost Per Acquisition</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#F97316" }}>{fmtINR(avgCpa)}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>avg across all campaigns</div>
+          </div>
+          <div style={{ width: 1, height: 60, background: "#F1F5F9" }} />
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Total All-time Spend</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{fmtINRFull(totalSpent)}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{totalConv} total conversions · {fmtNum(totalReach)} reach</div>
+          </div>
         </div>
-        <div className="cp-card" style={{ padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Return on Ad Spend</div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: "#10B981" }}>{avgRoas ? avgRoas + "x" : "—"}</div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{avgRoas ? "avg ROAS this month" : "no data yet"}</div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

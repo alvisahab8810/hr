@@ -134,6 +134,30 @@ export default function AdminDeductionWaiver() {
     finally { setProcessing(null); }
   };
 
+  // Waive a single instance (one late day, one lunch day, one absent day)
+  const handleInstanceWaive = async ({ empId, empName, key, label, instanceAmount, existingWaived, totalRemaining }) => {
+    const procKey = `inst_${empId}_${key}_${instanceAmount}`;
+    setProcessing(procKey);
+    const originalTotal = totalRemaining + existingWaived;
+    const newTotal = Math.min(existingWaived + instanceAmount, originalTotal);
+    try {
+      const res = await fetch("/api/admin/deduction-waiver/override", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeId: empId, month, year,
+          deductionType: key,
+          amount: newTotal,
+          adminRemark: `Admin waived 1 ${label} instance`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) { toast.success(`1 ${label} instance waived for ${empName}`); fetchData(); }
+      else toast.error(data.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setProcessing(null); }
+  };
+
   const waiverMap = {};
   waivers.forEach(w => {
     const empId = w.employee?._id?.toString() || "";
@@ -333,10 +357,29 @@ export default function AdminDeductionWaiver() {
                           {activeLines.length === 0 ? (
                             <p style={{ fontSize: 13, color: "#9CA3AF" }}>No deductions applied this month.</p>
                           ) : activeLines.map(line => {
-                            const amount   = deductions[line.key] || 0;
-                            const waiver   = waiverMap[`${empId}_${line.key}`];
-                            const isWaived = waiver?.status === "Approved";
-                            const procKey  = `override_${empId}_${line.key}`;
+                            const amount        = deductions[line.key] || 0;
+                            const waiver        = waiverMap[`${empId}_${line.key}`];
+                            const existingWaived = (waiver?.status === "Approved" ? waiver.amount : 0) || 0;
+                            const procKey       = `override_${empId}_${line.key}`;
+
+                            // Per-instance coverage (greedy oldest-first)
+                            const PER_LATE = 250;
+                            const coveredLateCount = Math.min(Math.floor(existingWaived / PER_LATE), lateDays.length);
+
+                            let lunchAcc = 0;
+                            const lunchCovered = new Set();
+                            [...lunchDays].sort((a, b) => a.date > b.date ? 1 : -1).forEach(a => {
+                              if (lunchAcc + (a.deductions || 0) <= existingWaived + 0.5) {
+                                lunchAcc += (a.deductions || 0);
+                                lunchCovered.add(a._id?.toString());
+                              }
+                            });
+
+                            const originalAbsentTotal = amount + existingWaived;
+                            const perAbsent = absentDates.length > 0 ? Math.round(originalAbsentTotal / absentDates.length) : 0;
+                            const coveredAbsentCount = perAbsent > 0 ? Math.min(Math.floor(existingWaived / perAbsent), absentDates.length) : 0;
+
+                            const instArgs = { empId, empName: name, key: line.key, label: line.label, existingWaived, totalRemaining: amount };
 
                             return (
                               <div key={line.key} className="dw-ded-row">
@@ -347,44 +390,39 @@ export default function AdminDeductionWaiver() {
                                       display: "flex", alignItems: "center", justifyContent: "center" }}>
                                       <i className={`bi ${line.icon}`} style={{ fontSize: 15, color: line.color }} />
                                     </div>
-                                    <div>
-                                      <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{line.label}</div>
-                                      {isWaived && (
-                                        <span className="dw-badge" style={{ background: "#DCFCE7", color: "#15803D", marginTop: 3 }}>
-                                          <i className="bi bi-shield-check-fill" style={{ fontSize: 9 }} /> Waived by admin
-                                        </span>
-                                      )}
-                                    </div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>{line.label}</div>
                                   </div>
 
-                                  {/* ── Detail rows per deduction type ── */}
+                                  {/* ── Absent detail rows ── */}
                                   {line.key === "absent" && absentDates.length > 0 && (
                                     <div className="dw-detail-list">
-                                      {absentDates.map(d => {
+                                      {absentDates.map((d, i) => {
                                         const leave = leaveDateMap[d];
-                                        const leaveColor = leave?.status === "Approved" ? "#15803D"
-                                          : leave?.status === "Rejected" ? "#DC2626"
-                                          : leave?.status === "Pending"  ? "#D97706"
-                                          : null;
-                                        const leaveBg = leave?.status === "Approved" ? "#DCFCE7"
-                                          : leave?.status === "Rejected" ? "#FEE2E2"
-                                          : leave?.status === "Pending"  ? "#FEF3C7"
-                                          : null;
+                                        const leaveColor = leave?.status === "Approved" ? "#15803D" : leave?.status === "Rejected" ? "#DC2626" : "#D97706";
+                                        const leaveBg   = leave?.status === "Approved" ? "#DCFCE7" : leave?.status === "Rejected" ? "#FEE2E2"  : "#FEF3C7";
+                                        const isCovered = i < coveredAbsentCount;
+                                        const instProcKey = `inst_${empId}_absent_${d}`;
                                         return (
-                                          <div key={d} className="dw-detail-item">
-                                            <i className="bi bi-calendar-x" style={{ color: "#DC2626", fontSize: 12 }} />
-                                            <span style={{ fontWeight: 600 }}>{fmtDate(d)}</span>
+                                          <div key={d} className="dw-detail-item" style={{ background: isCovered ? "#F0FDF4" : "#F8FAFC" }}>
+                                            <i className="bi bi-calendar-x" style={{ color: isCovered ? "#15803D" : "#DC2626", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600, textDecoration: isCovered ? "line-through" : "none", color: isCovered ? "#9CA3AF" : "#374151" }}>{fmtDate(d)}</span>
                                             {leave ? (
                                               <>
                                                 <span style={{ color: "#9CA3AF" }}>—</span>
                                                 <span style={{ fontSize: 11, fontWeight: 700, color: "#6B7280" }}>{leave.leaveType}</span>
-                                                <span style={{ padding: "1px 7px", borderRadius: 20, fontSize: 10, fontWeight: 800,
-                                                  background: leaveBg, color: leaveColor }}>
-                                                  {leave.status}
-                                                </span>
+                                                <span style={{ padding: "1px 7px", borderRadius: 20, fontSize: 10, fontWeight: 800, background: leaveBg, color: leaveColor }}>{leave.status}</span>
                                               </>
                                             ) : (
                                               <span style={{ color: "#9CA3AF" }}>— No check-in</span>
+                                            )}
+                                            {perAbsent > 0 && <span style={{ marginLeft: "auto", color: isCovered ? "#9CA3AF" : "#DC2626", fontWeight: 700, textDecoration: isCovered ? "line-through" : "none", fontSize: 11 }}>−₹{fmt(perAbsent)}</span>}
+                                            {isCovered ? (
+                                              <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
+                                            ) : (
+                                              <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: perAbsent })}>
+                                                {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
+                                              </button>
                                             )}
                                           </div>
                                         );
@@ -393,48 +431,56 @@ export default function AdminDeductionWaiver() {
                                     </div>
                                   )}
 
+                                  {/* ── Late detail rows ── */}
                                   {line.key === "late" && lateDays.length > 0 && (
                                     <div className="dw-detail-list">
-                                      {lateDays.map(a => (
-                                        <div key={a._id} className="dw-detail-item">
-                                          <i className="bi bi-alarm" style={{ color: "#D97706", fontSize: 12 }} />
-                                          <span style={{ fontWeight: 600 }}>{fmtDate(a.date)}</span>
-                                          <span style={{ color: "#9CA3AF" }}>— Check-in:</span>
-                                          <span style={{ fontWeight: 700, color: "#D97706" }}>{fmtTime(a.startTime)}</span>
-                                          {(a.latePenaltyAmount || 0) > 0 && (
-                                            <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700 }}>−₹{fmt(a.latePenaltyAmount)}</span>
-                                          )}
-                                        </div>
-                                      ))}
+                                      {lateDays.map((a, i) => {
+                                        const isCovered = i < coveredLateCount;
+                                        const instProcKey = `inst_${empId}_late_${a.date}`;
+                                        return (
+                                          <div key={a._id} className="dw-detail-item" style={{ background: isCovered ? "#F0FDF4" : "#F8FAFC" }}>
+                                            <i className="bi bi-alarm" style={{ color: isCovered ? "#15803D" : "#D97706", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600, textDecoration: isCovered ? "line-through" : "none", color: isCovered ? "#9CA3AF" : "#374151" }}>{fmtDate(a.date)}</span>
+                                            <span style={{ color: "#9CA3AF" }}>— Check-in:</span>
+                                            <span style={{ fontWeight: 700, color: isCovered ? "#9CA3AF" : "#D97706" }}>{fmtTime(a.startTime)}</span>
+                                            <span style={{ marginLeft: "auto", color: isCovered ? "#9CA3AF" : "#DC2626", fontWeight: 700, textDecoration: isCovered ? "line-through" : "none", fontSize: 11 }}>−₹{fmt(PER_LATE)}</span>
+                                            {isCovered ? (
+                                              <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
+                                            ) : (
+                                              <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: PER_LATE })}>
+                                                {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
 
+                                  {/* ── Lunch detail rows ── */}
                                   {line.key === "lunch" && lunchDays.length > 0 && (
                                     <div className="dw-detail-list">
                                       {lunchDays.map(a => {
-                                        const lunchMs = getLunchBreakMs(a);
+                                        const lunchMs  = getLunchBreakMs(a);
                                         const lunchBrk = a.breaks?.find(b => b.type === "lunch" && b.start);
+                                        const isCovered = lunchCovered.has(a._id?.toString());
+                                        const instProcKey = `inst_${empId}_lunch_${a.date}`;
                                         return (
-                                          <div key={a._id} className="dw-detail-item">
-                                            <i className="bi bi-cup-hot" style={{ color: "#A21CAF", fontSize: 12 }} />
-                                            <span style={{ fontWeight: 600 }}>{fmtDate(a.date)}</span>
-                                            {lunchBrk?.start && (
-                                              <>
-                                                <span style={{ color: "#9CA3AF" }}>— Start:</span>
-                                                <span style={{ fontWeight: 700, color: "#A21CAF" }}>{fmtTime(lunchBrk.start)}</span>
-                                              </>
-                                            )}
-                                            {lunchBrk?.end && (
-                                              <>
-                                                <span style={{ color: "#9CA3AF" }}>End:</span>
-                                                <span style={{ fontWeight: 700, color: "#A21CAF" }}>{fmtTime(lunchBrk.end)}</span>
-                                              </>
-                                            )}
-                                            {lunchMs > 0 && (
-                                              <span style={{ color: "#6B7280" }}>({fmtMins(lunchMs)})</span>
-                                            )}
-                                            {(a.deductions || 0) > 0 && (
-                                              <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700 }}>−₹{fmt(a.deductions)}</span>
+                                          <div key={a._id} className="dw-detail-item" style={{ background: isCovered ? "#F0FDF4" : "#F8FAFC" }}>
+                                            <i className="bi bi-cup-hot" style={{ color: isCovered ? "#15803D" : "#A21CAF", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600, textDecoration: isCovered ? "line-through" : "none", color: isCovered ? "#9CA3AF" : "#374151" }}>{fmtDate(a.date)}</span>
+                                            {lunchBrk?.start && <><span style={{ color: "#9CA3AF" }}>— Start:</span><span style={{ fontWeight: 700, color: isCovered ? "#9CA3AF" : "#A21CAF" }}>{fmtTime(lunchBrk.start)}</span></>}
+                                            {lunchBrk?.end  && <><span style={{ color: "#9CA3AF" }}>End:</span><span style={{ fontWeight: 700, color: isCovered ? "#9CA3AF" : "#A21CAF" }}>{fmtTime(lunchBrk.end)}</span></>}
+                                            {lunchMs > 0 && <span style={{ color: "#6B7280" }}>({fmtMins(lunchMs)})</span>}
+                                            <span style={{ marginLeft: "auto", color: isCovered ? "#9CA3AF" : "#DC2626", fontWeight: 700, textDecoration: isCovered ? "line-through" : "none", fontSize: 11 }}>−₹{fmt(a.deductions)}</span>
+                                            {isCovered ? (
+                                              <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
+                                            ) : (
+                                              <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: a.deductions || 0 })}>
+                                                {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
+                                              </button>
                                             )}
                                           </div>
                                         );
@@ -443,29 +489,16 @@ export default function AdminDeductionWaiver() {
                                   )}
                                 </div>
 
-                                {/* Right: amount + action buttons */}
+                                {/* Right: total remaining amount + Waive All button */}
                                 <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexShrink: 0, paddingTop: 4 }}>
-                                  <span style={{ fontWeight: 800, fontSize: 15, color: isWaived ? "#9CA3AF" : "#DC2626",
-                                    textDecoration: isWaived ? "line-through" : "none" }}>
-                                    ₹{fmt(amount)}
-                                  </span>
-
-                                  {!isWaived && (
-                                    <button className="dw-btn override-btn"
-                                      disabled={processing === procKey}
-                                      onClick={() => { setOverrideModal({ empId, empName: name, key: line.key, label: line.label, amount }); setRemark(""); }}>
-                                      {processing === procKey
-                                        ? <span className="spinner-border spinner-border-sm" />
-                                        : <><i className="bi bi-shield-check" /> Waive</>}
-                                    </button>
-                                  )}
-
-                                  {isWaived && (
-                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#15803D", fontWeight: 700 }}>
-                                      <i className="bi bi-check-circle-fill" style={{ fontSize: 13 }} />
-                                      Waived
-                                    </span>
-                                  )}
+                                  <span style={{ fontWeight: 800, fontSize: 15, color: "#DC2626" }}>₹{fmt(amount)}</span>
+                                  <button className="dw-btn override-btn"
+                                    disabled={!!processing}
+                                    onClick={() => { setOverrideModal({ empId, empName: name, key: line.key, label: line.label, amount }); setRemark(""); }}>
+                                    {processing === procKey
+                                      ? <span className="spinner-border spinner-border-sm" />
+                                      : <><i className="bi bi-shield-check" /> Waive All</>}
+                                  </button>
                                 </div>
                               </div>
                             );

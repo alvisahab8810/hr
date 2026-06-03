@@ -78,6 +78,15 @@ const ROLE_CONFIG = {
 
 const STATUS_MAP   = { todo: { label: "To Do", cls: "tms-badge-todo" }, in_progress: { label: "In Progress", cls: "tms-badge-inprogress" }, review: { label: "In Review", cls: "tms-badge-review" }, completed: { label: "Completed", cls: "tms-badge-completed" }, blocked: { label: "Rejected", cls: "tms-badge-blocked" } };
 const STAGE_COLOR  = { S1: "#7C3AED", S2: "#1D4ED8", S3: "#B45309", S4: "#065F46" };
+// Pipeline stage fill colors — S1=orange, S2=blue, S3=yellow, S4=green
+const STAGE_FILL   = ["#F97316", "#3B82F6", "#EAB308", "#22C55E"];
+function getTaskStageStyle(task) {
+  const stages = task?.stages || [];
+  const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
+  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: c + "28", border: c, color: c }; } }
+  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: "#fff", border: c, color: c }; } }
+  return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF" };
+}
 const STAGE_LABEL  = { S1: "Script/Concept", S2: "Shoot/Design", S3: "Edit/Develop", S4: "Posted/Live" };
 const CTYPE_COLOR  = { reel: "#7C3AED", post: "#1D4ED8", carousel: "#B45309", story: "#065F46", blog: "#DB2777" };
 const PILLAR_OPTS  = ["Education", "Entertainment", "Inspiration", "Promotion", "Behind the Scenes", "Testimonial", "Product Feature"];
@@ -1044,6 +1053,17 @@ function WeeklyTrackerTab() {
   const getScheduled = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
 
+  // Group tasks by brandId → dateString
+  const tasksByBrandDay = {};
+  tasks.forEach(t => {
+    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
+    if (!dateKey || !t.brandId) return;
+    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+    if (!tasksByBrandDay[bId]) tasksByBrandDay[bId] = {};
+    if (!tasksByBrandDay[bId][dateKey]) tasksByBrandDay[bId][dateKey] = [];
+    tasksByBrandDay[bId][dateKey].push(t);
+  });
+
   const displayBrands = brandFilter ? brands.filter(b => b._id?.toString() === brandFilter) : brands;
 
   return (
@@ -1056,7 +1076,7 @@ function WeeklyTrackerTab() {
         .emp-wt-table tr:hover td { background:#FAFBFF; }
         .emp-wt-cell { min-height:50px; }
         .emp-wt-slot { border-radius:7px; padding:3px 6px; margin-bottom:3px; font-size:10px; font-weight:700; display:flex; align-items:center; gap:3px; }
-        .emp-wt-task { border-radius:7px; padding:3px 6px; margin-bottom:3px; font-size:10px; font-weight:600; border:1px solid; cursor:default; }
+        .emp-wt-task { border-radius:7px; padding:3px 6px; margin-bottom:3px; font-size:10px; font-weight:600; border:1.5px solid; cursor:default; }
         .emp-today-col { background:#F5F3FF !important; }
       `}</style>
 
@@ -1095,11 +1115,18 @@ function WeeklyTrackerTab() {
       </div>
 
       {/* Legend */}
-      <div style={{ display:"flex", gap:14, marginBottom:12, flexWrap:"wrap" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, fontWeight:600, color:"#64748B" }}>
-          <span style={{ width:12, height:12, borderRadius:3, background:"#E5E7EB", display:"inline-block", border:"1.5px dashed #94A3B8" }} />
-          Scheduled (from brand plan)
-        </div>
+      <div style={{ display:"flex", gap:10, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
+        {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+          <span key={l+"a"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748B" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Assigned
+          </span>,
+          <span key={l+"d"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748B" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Approved
+          </span>,
+        ])}
+        <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748B" }}>
+          <span style={{ width:18, height:12, borderRadius:3, background:"#F8FAFC", border:"1.5px dashed #D1D5DB", display:"inline-block" }} />Scheduled (plan)
+        </span>
       </div>
 
       {loading ? (
@@ -1144,20 +1171,33 @@ function WeeklyTrackerTab() {
                   {weekDates.map(({ label, date }) => {
                     const isToday   = date.toDateString() === new Date().toDateString();
                     const scheduled = getScheduled(brand, label);
+                    const bId       = String(brand._id);
+                    const dayTasks  = tasksByBrandDay[bId]?.[date.toDateString()] || [];
                     return (
                       <td key={label} className={isToday ? "emp-today-col" : ""}>
                         <div className="emp-wt-cell">
+                          {dayTasks.map(t => {
+                            const ct  = WT_CONTENT_META[t.contentType] || {};
+                            const sty = getTaskStageStyle(t);
+                            return (
+                              <div key={t._id} className="emp-wt-task"
+                                style={{ background:sty.bg, borderColor:sty.border, color:sty.color }}>
+                                <i className={`bi ${ct.icon||"bi-list-task"}`} style={{ fontSize:9, marginRight:2 }} />
+                                {ct.label || t.contentType || t.title?.slice(0,10)}
+                              </div>
+                            );
+                          })}
                           {scheduled.map((slot, si) => {
                             const ct = WT_CONTENT_META[slot.contentType] || {};
                             return (
                               <div key={si} className="emp-wt-slot"
-                                style={{ background:(ct.color || "#94A3B8")+"12", color:ct.color||"#94A3B8", border:`1px dashed ${ct.color||"#94A3B8"}40` }}>
+                                style={{ background:"#F8FAFC", color:"#94A3B8", border:"1px dashed #D1D5DB" }}>
                                 <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
                                 {ct.label || slot.contentType}
                               </div>
                             );
                           })}
-                          {scheduled.length === 0 && (
+                          {scheduled.length === 0 && dayTasks.length === 0 && (
                             <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
                           )}
                         </div>
@@ -1320,11 +1360,8 @@ function MyCalendarTab({ tasks }) {
   const today     = new Date();
   const DAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  // Show tasks where any stage is approved OR task is completed (covers both old and new approval flows)
-  const myTasks = tasks.filter(t =>
-    (t.taskType === "production" || t.contentType) &&
-    ((t.stages || []).some(s => s.approved) || t.status === "completed")
-  );
+  // Show all production/content tasks — pipeline colors reflect stage progress
+  const myTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
 
   // All brands from my tasks
   const brands = [...new Map(myTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
@@ -1408,13 +1445,13 @@ function MyCalendarTab({ tasks }) {
                 style={{ minHeight: 100, padding: "7px 6px", borderBottom: "1px solid #F9F9F9", borderRight: "1px solid #F9F9F9", background: isToday ? "#FFFBEB" : hasTasks ? "#FAFBFF" : "#fff", cursor: hasTasks ? "pointer" : "default", transition: "background .1s" }}>
                 <div style={{ width: 26, height: 26, borderRadius: "50%", marginBottom: 5, display: "flex", alignItems: "center", justifyContent: "center", background: isToday ? "#D97706" : "transparent", fontSize: 12, fontWeight: isToday ? 800 : 400, color: isToday ? "#fff" : "#374151" }}>{day}</div>
                 {dt.slice(0, 3).map(t => {
-                  const brandColor = t.brandId?.color || "#7C3AED";
-                  const od = (() => { const dl = getStageDeadline(t); return dl ? isOverdue(dl) && t.status !== "completed" : false; })();
+                  const od  = (() => { const dl = getStageDeadline(t); return dl ? isOverdue(dl) && t.status !== "completed" : false; })();
+                  const sty = od ? { bg:"#FEE2E2", border:"#DC2626", color:"#DC2626" } : getTaskStageStyle(t);
                   return (
                     <div key={t._id}
                       onClick={e => { e.stopPropagation(); setSelectedTask(t); }}
                       title={`${t.nomenclature || t.title}\n${t.brandId?.name || ""}`}
-                      style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, marginBottom: 3, background: od ? "#FEE2E2" : brandColor + "20", color: od ? "#DC2626" : brandColor, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer", borderLeft: `2px solid ${od ? "#DC2626" : brandColor}` }}>
+                      style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, marginBottom: 3, background: sty.bg, color: sty.color, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer", border:`1px solid ${sty.border}`, borderLeft:`3px solid ${sty.border}` }}>
                       {od && "⚠ "}{t.contentType ? `[${t.contentType}] ` : ""}{t.nomenclature || t.title}
                     </div>
                   );
@@ -2510,7 +2547,7 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
   const hasClientFeedback = task.status === "todo" && task.reviewNote && task.reviewNote.trim();
   const isRejected = !hasClientFeedback && myStageIdx >= 0 && myStage?.rejected === true;
   const isDone     = !isRejected && !hasClientFeedback && (myStageIdx >= 0
-    ? (myStage?.done === true || curIdx > myStageIdx)
+    ? myStage?.done === true
     : task.status === "completed");
 
   const barIdx = myStageIdx >= 0 ? myStageIdx : curIdx;
@@ -2723,14 +2760,21 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
   }, []);
 
   const now      = new Date(); now.setHours(0,0,0,0);
-  const overdue  = localTasks.filter(t => isOverdue(t.dueDate) && t.status !== "completed");
-  const dueToday = localTasks.filter(t => isDueToday(t.dueDate) && t.status !== "completed");
+  // Use stage deadline when available (for production tasks), fall back to task dueDate
+  function effectiveDL(t) {
+    const sd = getStageDeadline(t);
+    return sd || (t.dueDate ? new Date(t.dueDate) : null);
+  }
+  const overdue  = localTasks.filter(t => { const d = effectiveDL(t); return d && isOverdue(d) && t.status !== "completed"; });
+  const dueToday = localTasks.filter(t => { const d = effectiveDL(t); return d && isDueToday(d) && t.status !== "completed"; });
   const doneWeek = localTasks.filter(t => t.status === "completed" && new Date(t.updatedAt) >= new Date(Date.now() - 7*86400000));
   const active   = localTasks.filter(t => t.status !== "completed");
   const upcoming = localTasks.filter(t => {
-    if (!t.dueDate || t.status === "completed") return false;
-    const d = new Date(t.dueDate); d.setHours(0,0,0,0);
-    const diff = Math.round((d - now) / 86400000);
+    if (t.status === "completed") return false;
+    const d = effectiveDL(t);
+    if (!d) return false;
+    const dc = new Date(d); dc.setHours(0,0,0,0);
+    const diff = Math.round((dc - now) / 86400000);
     return diff > 0 && diff <= 7;
   });
   const grade      = calcGrade(localTasks);
@@ -2915,7 +2959,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   const monthTasks = localTasks.filter(inSelectedMonth);
 
   const byTab = monthTasks.filter(t => {
-    if (tab === "today")    return isDueToday(t.dueDate);
+    if (tab === "today") { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }
     if (tab === "week")     { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }
     if (tab === "overdue")  return isOverdue(t.dueDate) && t.status !== "completed";
     if (tab === "rejected") return (t.stages||[]).some(s => s.rejected === true && !s.done);
@@ -2932,7 +2976,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 
   const counts = {
     all:      monthTasks.length,
-    today:    monthTasks.filter(t => isDueToday(t.dueDate)).length,
+    today:    monthTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }).length,
     week:     monthTasks.filter(t => { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }).length,
     overdue:  monthTasks.filter(t => isOverdue(t.dueDate) && t.status !== "completed").length,
     rejected: monthTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
@@ -3009,6 +3053,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 function PortalThisWeekView() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [wtBrands,     setWtBrands]     = useState([]);
+  const [wtTasks,      setWtTasks]      = useState([]);
   const [wtLoading,    setWtLoading]    = useState(true);
   const [brandFilter,  setBrandFilter]  = useState("");
 
@@ -3025,7 +3070,7 @@ function PortalThisWeekView() {
     const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
     fetch(`/api/employee/weekly-tracker?${q}`, { headers: authH() })
       .then(r => r.json())
-      .then(d => { if (d.success) setWtBrands(d.brands || []); })
+      .then(d => { if (d.success) { setWtBrands(d.brands || []); setWtTasks(d.tasks || []); } })
       .catch(() => {})
       .finally(() => setWtLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3033,6 +3078,17 @@ function PortalThisWeekView() {
 
   const getScheduled = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
+
+  // Group portal weekly tasks by brandId → dateString
+  const portalTasksByBrandDay = {};
+  wtTasks.forEach(t => {
+    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
+    if (!dateKey || !t.brandId) return;
+    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+    if (!portalTasksByBrandDay[bId]) portalTasksByBrandDay[bId] = {};
+    if (!portalTasksByBrandDay[bId][dateKey]) portalTasksByBrandDay[bId][dateKey] = [];
+    portalTasksByBrandDay[bId][dateKey].push(t);
+  });
 
   const displayBrands = brandFilter ? wtBrands.filter(b => b._id?.toString() === brandFilter) : wtBrands;
 
@@ -3108,19 +3164,32 @@ function PortalThisWeekView() {
                   {weekDates.map(({ label, date }) => {
                     const isToday   = date.toDateString() === new Date().toDateString();
                     const scheduled = getScheduled(brand, label);
+                    const bId       = String(brand._id);
+                    const dayT      = portalTasksByBrandDay[bId]?.[date.toDateString()] || [];
                     return (
                       <td key={label} style={{ padding:"6px 4px", verticalAlign:"top", background:isToday?"#F5F3FF":"transparent", minWidth:80 }}>
+                        {dayT.map(t => {
+                          const ct  = WT_CONTENT_META[t.contentType] || {};
+                          const sty = getTaskStageStyle(t);
+                          return (
+                            <div key={t._id} style={{ borderRadius:7, padding:"3px 6px", marginBottom:3, fontSize:10, fontWeight:600, display:"flex", alignItems:"center", gap:3,
+                              background:sty.bg, color:sty.color, border:`1.5px solid ${sty.border}` }}>
+                              <i className={`bi ${ct.icon||"bi-list-task"}`} style={{ fontSize:9 }} />
+                              {ct.label||t.contentType||t.title?.slice(0,10)}
+                            </div>
+                          );
+                        })}
                         {scheduled.map((slot, si) => {
                           const ct = WT_CONTENT_META[slot.contentType] || {};
                           return (
                             <div key={si} style={{ borderRadius:7, padding:"3px 6px", marginBottom:3, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", gap:3,
-                              background:(ct.color||"#94A3B8")+"12", color:ct.color||"#94A3B8", border:`1px dashed ${ct.color||"#94A3B8"}40` }}>
+                              background:"#F8FAFC", color:"#94A3B8", border:"1px dashed #D1D5DB" }}>
                               <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
                               {ct.label||slot.contentType}
                             </div>
                           );
                         })}
-                        {scheduled.length === 0 && (
+                        {scheduled.length === 0 && dayT.length === 0 && (
                           <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
                         )}
                       </td>
@@ -3535,12 +3604,18 @@ function PortalCalendarView() {
       </div>
 
       {/* Legend */}
-      <div style={{ display:"flex", gap:12, marginBottom:14, flexWrap:"wrap" }}>
-        {Object.entries(CAL_CTYPE).map(([k,v]) => (
-          <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600, color:"#64748b" }}>
-            <span style={{ width:10, height:10, borderRadius:3, background:v.color, display:"inline-block" }} />{v.label}
-          </span>
-        ))}
+      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+        {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+          <span key={l+"a"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Assigned
+          </span>,
+          <span key={l+"d"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:c+"28", border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Approved
+          </span>,
+        ])}
+        <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+          <span style={{ width:18, height:12, borderRadius:3, background:"#F1F5F9", border:"1.5px solid #D1D5DB", display:"inline-block" }} />No stage
+        </span>
       </div>
 
       {loading ? (
@@ -3563,11 +3638,11 @@ function PortalCalendarView() {
                 <div key={day} style={{ minHeight:90, padding:"7px 6px", borderBottom:"1px solid #f9f9f9", borderRight:"1px solid #f9f9f9", background:isToday?"#FFFBEB":"#fff" }}>
                   <div style={{ width:26, height:26, borderRadius:"50%", marginBottom:5, display:"flex", alignItems:"center", justifyContent:"center", background:isToday?"#5A57FB":"transparent", fontSize:12, fontWeight:isToday?800:400, color:isToday?"#fff":"#374151" }}>{day}</div>
                   {dt.slice(0,3).map(t => {
-                    const ct = CAL_CTYPE[t.contentType];
-                    const color = t.brandId?.color || ct?.color || "#5A57FB";
+                    const ct  = CAL_CTYPE[t.contentType];
+                    const sty = getTaskStageStyle(t);
                     return (
                       <div key={t._id} onClick={() => setSelectedTask(t)} title={t.nomenclature||t.title}
-                        style={{ fontSize:10, padding:"2px 5px", borderRadius:4, marginBottom:2, background:color+"22", color, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"pointer", borderLeft:`3px solid ${color}` }}>
+                        style={{ fontSize:10, padding:"2px 5px", borderRadius:4, marginBottom:2, background:sty.bg, color:sty.color, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"pointer", border:`1px solid ${sty.border}`, borderLeft:`3px solid ${sty.border}` }}>
                         {ct && <i className={`bi ${ct.icon}`} style={{ marginRight:2, fontSize:9 }} />}{t.nomenclature||t.title}
                       </div>
                     );
