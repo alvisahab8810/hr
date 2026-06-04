@@ -101,7 +101,7 @@ function nextDateForDay(dayName) {
   return result.toISOString().slice(0, 10);
 }
 const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot","Design/Edit/Develop","Posted/Live"];
-const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: nowForInput() }));
+const freshStages = () => STAGE_NAMES_DEFAULT.map(name => ({ name, assignedTo: [], deadline: "" }));
 const EMPTY_PROD_FORM = { brandId: "", contentType: "reel", stages: freshStages() };
 const STAGE_COLORS = ["#F97316","#3B82F6","#EAB308","#22C55E"];
 // Each stage: { include: [...], exclude: [...] }
@@ -222,7 +222,7 @@ export default function TasksListPage() {
   const [stageModal,        setStageModal]        = useState(false);
   const [stageTask,         setStageTask]         = useState(null);
   const [stageIdx,          setStageIdx]          = useState(0);
-  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: nowForInput() });
+  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: "" });
   const [stageSaving,       setStageSaving]       = useState(false);
   const [stageRejectMode,   setStageRejectMode]   = useState(false);
   const [stageRejectReason, setStageRejectReason] = useState("");
@@ -455,7 +455,7 @@ export default function TasksListPage() {
   const openStageEditor = (task, idx) => {
     const stg = task.stages?.[idx] || {};
     setStageTask(task); setStageIdx(idx);
-    setStageForm({ name: stg.name || STAGE_NAMES_DEFAULT[idx], assignedTo: normalizeAssignedTo(stg.assignedTo), deadline: fmtDateTimeInput(stg.deadline) || nowForInput() });
+    setStageForm({ name: stg.name || STAGE_NAMES_DEFAULT[idx], assignedTo: normalizeAssignedTo(stg.assignedTo), deadline: fmtDateTimeInput(stg.deadline) || "" });
     setStageRejectMode(false); setStageRejectReason(""); setStageModal(true);
   };
 

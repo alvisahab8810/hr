@@ -188,6 +188,149 @@ function TaskRow({ task }) {
 function DashboardTab({ employee, tasks, role, switchTab }) {
   const config  = ROLE_CONFIG[role];
   const now     = new Date(); now.setHours(0, 0, 0, 0);
+
+  // ── Content-team portal-style Today view ────────────────────────────────────
+  if (role === "content") {
+    function effDL(t) { const sd = getStageDeadline(t); return sd || (t.dueDate ? new Date(t.dueDate) : null); }
+    const overdue   = tasks.filter(t => { const d = effDL(t); return d && isOverdue(d) && t.status !== "completed"; });
+    const dueToday  = tasks.filter(t => { const d = effDL(t); return d && isDueToday(d) && t.status !== "completed"; });
+    const doneWeek  = tasks.filter(t => t.status === "completed" && new Date(t.updatedAt) >= new Date(Date.now() - 7*86400000));
+    const active    = tasks.filter(t => t.status !== "completed");
+    const upcoming  = tasks.filter(t => {
+      if (t.status === "completed") return false;
+      const d = effDL(t); if (!d) return false;
+      const dc = new Date(d); dc.setHours(0,0,0,0);
+      const diff = Math.round((dc - now) / 86400000);
+      return diff > 0 && diff <= 7;
+    });
+    const grade     = calcGrade(tasks);
+    const todayList = [...new Map([...overdue, ...dueToday].map(t => [t._id, t])).values()];
+
+    const CTASK_STATUS = { todo:"To Do", in_progress:"In Progress", review:"Under Review", completed:"Approved", blocked:"Rejected" };
+    const CTASK_COLOR  = { todo:"#6B7280", in_progress:"#1D4ED8", review:"#B45309", completed:"#16A34A", blocked:"#DC2626" };
+    const CTASK_BG     = { todo:"#F3F4F6", in_progress:"#DBEAFE", review:"#FEF3C7", completed:"#DCFCE7", blocked:"#FEE2E2" };
+
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+        {/* Hero gradient banner */}
+        <div style={{ background:"linear-gradient(135deg,#1e1b4b 0%,#4F46E5 55%,#7C3AED 100%)", borderRadius:16, padding:"28px 32px", position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:-80, right:-80, width:260, height:260, background:"radial-gradient(circle,rgba(90,87,251,.3),transparent 70%)", pointerEvents:"none" }} />
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.6)", marginBottom:6 }}>{getGreeting()}, {employee?.personal?.firstName || "there"} 👋</div>
+          <div style={{ fontSize:26, fontWeight:800, color:"#fff", letterSpacing:"-.01em", lineHeight:1.2, marginBottom:10 }}>
+            You're at <span style={{ background:"linear-gradient(90deg,#FF6F61,#FBA065)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>{grade.letter}</span> this month
+          </div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.7)", marginBottom:22, lineHeight:1.55 }}>
+            You have <strong style={{ color:"#fff" }}>{todayList.length} task{todayList.length!==1?"s":""} today</strong>
+            {overdue.length>0 && <> including <strong style={{ color:"#fca5a5" }}>{overdue.length} overdue</strong></>}.
+            {" "}Submit on time to lock in your grade.
+          </div>
+          {/* Stats row */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+            {[
+              { lbl:"Today's Tasks",  val:todayList.length, trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : null, color:"#fff" },
+              { lbl:"Active Tasks",   val:active.length,    trend:<span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>in progress</span>, color:"#fff" },
+              { lbl:"On-Time Rate",   val:`${grade.rate}%`, trend:<span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span>, color:grade.color },
+              { lbl:"Done This Week", val:doneWeek.length,  trend:<span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>submissions</span>, color:"#86efac" },
+            ].map(s => (
+              <div key={s.lbl} style={{ background:"rgba(255,255,255,.1)", borderRadius:10, padding:"12px 14px", backdropFilter:"blur(8px)" }}>
+                <div style={{ fontSize:9, color:"rgba(255,255,255,.6)", textTransform:"uppercase", letterSpacing:".06em", fontWeight:600, marginBottom:6 }}>{s.lbl}</div>
+                <div style={{ fontSize:22, fontWeight:800, color:s.color, lineHeight:1 }}>{s.val}</div>
+                <div style={{ marginTop:4 }}>{s.trend}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Overdue alert */}
+        {overdue.length > 0 && (
+          <div style={{ background:"#FFF7ED", border:"1.5px solid #FED7AA", borderRadius:10, padding:"12px 18px", display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:18 }}>⚠️</span>
+            <div style={{ flex:1, fontSize:13, color:"#92400E" }}>
+              <strong>"{overdue[0].nomenclature || overdue[0].title}"</strong> is overdue.
+              {overdue[0].brandId?.name && ` ${overdue[0].brandId.name} needs this — submit now to minimize grade impact.`}
+            </div>
+            <button onClick={() => switchTab("editor")}
+              style={{ background:"none", border:"1.5px solid #D97706", borderRadius:7, padding:"5px 14px", fontSize:12, fontWeight:700, color:"#B45309", cursor:"pointer" }}>
+              Submit Now
+            </button>
+          </div>
+        )}
+
+        {/* Today's Tasks */}
+        <div>
+          <div style={{ fontWeight:800, fontSize:15, color:"#0f172a", marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
+            📌 Today's Tasks <span style={{ background:"#EEF2FF", color:"#4F46E5", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}>{todayList.length}</span>
+          </div>
+          {todayList.length === 0 ? (
+            <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, padding:"32px", textAlign:"center", color:"#9CA3AF" }}>
+              <i className="bi bi-check2-all" style={{ fontSize:32, display:"block", marginBottom:10 }} />
+              No tasks due today — great work!
+            </div>
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+              {todayList.map(t => {
+                const od = isOverdue(effDL(t));
+                const dl = effDL(t);
+                return (
+                  <div key={t._id} style={{ background:"#fff", border:`1.5px solid ${od?"#FCA5A5":"#E5E7EB"}`, borderRadius:12, padding:"16px 18px", display:"flex", flexDirection:"column", gap:10 }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8 }}>
+                      <span style={{ fontFamily:"monospace", fontSize:10, color:"#7C3AED", fontWeight:700 }}>#{t._id?.slice(-4)}</span>
+                      {t.brandId && <span style={{ padding:"2px 9px", borderRadius:20, background:(t.brandId.color||"#6366F1")+"20", color:t.brandId.color||"#6366F1", fontSize:10, fontWeight:700 }}>{t.brandId.name}</span>}
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#111", lineHeight:1.3 }}>{t.nomenclature || t.title}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                      {t.contentType && <span style={{ fontSize:11, background:"#F3F4F6", color:"#6B7280", padding:"2px 8px", borderRadius:6, fontWeight:600, textTransform:"capitalize", display:"flex", alignItems:"center", gap:4 }}>
+                        <i className="bi bi-camera-video-fill" style={{ fontSize:9 }} />{t.contentType}
+                      </span>}
+                      {dl && <span style={{ fontSize:11, color:od?"#DC2626":"#6B7280", fontWeight:od?700:400, display:"flex", alignItems:"center", gap:4 }}>
+                        <i className="bi bi-clock" style={{ fontSize:9 }} />{od ? `${Math.abs(Math.round((now-dl)/86400000))}d overdue` : fmtD(dl)}
+                      </span>}
+                    </div>
+                    <div style={{ padding:"10px 14px", borderRadius:8, background:CTASK_BG[t.status]||"#F3F4F6", textAlign:"center", fontSize:12, fontWeight:700, color:CTASK_COLOR[t.status]||"#6B7280", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                      {t.status === "review" && <i className="bi bi-hourglass-split" style={{ fontSize:11 }} />}
+                      {t.status === "completed" && <i className="bi bi-check-circle-fill" style={{ fontSize:11 }} />}
+                      {CTASK_STATUS[t.status] || t.status}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Coming Up This Week */}
+        {upcoming.length > 0 && (
+          <div>
+            <div style={{ fontWeight:800, fontSize:15, color:"#0f172a", marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
+              📅 Coming Up This Week <span style={{ background:"#EEF2FF", color:"#4F46E5", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}>{upcoming.length}</span>
+            </div>
+            <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, overflow:"hidden" }}>
+              {upcoming.map((t, i) => {
+                const dl = effDL(t);
+                const diff = dl ? Math.round((new Date(dl).setHours(0,0,0,0) - now) / 86400000) : null;
+                return (
+                  <div key={t._id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", borderBottom: i < upcoming.length-1 ? "1px solid #F3F4F6" : "none" }}>
+                    <div style={{ width:36, height:36, borderRadius:9, background:"#EEF2FF", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <i className="bi bi-calendar3" style={{ color:"#4F46E5", fontSize:14 }} />
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:600, fontSize:13, color:"#1E293B", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.nomenclature || t.title}</div>
+                      {t.brandId && <div style={{ fontSize:11, color:"#9CA3AF" }}>{t.brandId.name}</div>}
+                    </div>
+                    {diff !== null && <span style={{ fontSize:11, fontWeight:700, color:"#4F46E5", background:"#EEF2FF", padding:"3px 10px", borderRadius:20, whiteSpace:"nowrap" }}>
+                      {diff === 1 ? "Tomorrow" : `In ${diff}d`}
+                    </span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  // ── End content-team portal view ─────────────────────────────────────────────
+
   const todayT  = tasks.filter(t => { if (!t.dueDate) return false; const d = new Date(t.dueDate); d.setHours(0,0,0,0); return d.getTime() === now.getTime() && t.status !== "completed"; });
   const overdue = tasks.filter(t => { if (!t.dueDate) return false; const d = new Date(t.dueDate); d.setHours(0,0,0,0); return d < now && t.status !== "completed"; });
   const active  = tasks.filter(t => t.status === "in_progress");
@@ -476,6 +619,8 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
   async function submitForReview() {
     if (!task) return;
+    // Script/Content is mandatory before submitting
+    if (!script.trim()) { toast.error("Script / Content is required before submitting."); return; }
     const isProduction = task.taskType === "production" && (task.stages?.length > 0);
     const s0 = task.stages?.[0];
     // Already submitted check
@@ -587,48 +732,8 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {(() => {
-                  const s0 = task.stages?.[0];
-                  const isProd = task.taskType === "production";
-                  const s1Pending = isProd && s0?.done && !s0?.approved && !s0?.rejected;
-                  const s1Approved = isProd && s0?.approved;
-                  const isUnderReview = s1Pending || task.status === "review";
-                  const isApproved = s1Approved || task.status === "completed";
-                  const isRejected = task.status === "blocked" || (s0?.rejected && !s0?.done);
-                  const lockDraft = saving || isUnderReview || isApproved;
-                  const lockSubmit = submitting || isUnderReview || isApproved;
-                  return (<>
-                <button onClick={() => saveTask(false)} disabled={lockDraft} style={{ padding: "8px 18px", borderRadius: 8, background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, opacity: lockDraft ? 0.5 : 1 }}>
-                  <i className="bi bi-floppy" />{saving ? "Saving…" : "Save Draft"}
-                </button>
-                <button
-                  onClick={submitForReview}
-                  disabled={lockSubmit}
-                  style={{
-                    padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700,
-                    cursor: lockSubmit ? "default" : "pointer",
-                    display: "flex", alignItems: "center", gap: 6, opacity: submitting ? 0.7 : 1,
-                    background: isUnderReview ? "#FFFBEB" : isApproved ? "#F0FDF4" : "#7C3AED",
-                    color:      isUnderReview ? "#B45309" : isApproved ? "#16A34A" : "#fff",
-                  }}>
-                  <i className={`bi ${isUnderReview ? "bi-hourglass-split" : isApproved ? "bi-check-circle-fill" : isRejected ? "bi-send-fill" : "bi-send"}`} />
-                  {submitting ? "Submitting…" : isUnderReview ? "Under Review" : isApproved ? "Approved ✓" : isRejected ? "Resubmit for Review" : "Submit for Review"}
-                </button>
-                  </>);
-                })()}
-              </div>
             </div>
 
-            {/* Stage progress row */}
-            {task.stage && (
-              <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid #F0F0F0", display: "flex", alignItems: "center", gap: 12 }}>
-                <StageDots stage={task.stage} size={26} />
-                <span style={{ fontSize: 12.5, color: "#6B7280" }}>
-                  Currently at <strong style={{ color: STAGE_COLOR[task.stage] }}>Stage {task.stage.replace("S", "")} — {STAGE_LABEL[task.stage]}</strong>
-                </span>
-              </div>
-            )}
 
             {/* Status banners */}
             {(task.status === "review" || (task.stages?.[0]?.done && !task.stages?.[0]?.approved && !task.stages?.[0]?.rejected)) && (
@@ -818,13 +923,40 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
           </>);
           })()}
 
-          {/* Footer */}
-          <div className="tms-card" style={{ padding: "12px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "#9CA3AF" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: lastSaved ? "#22c55e" : "#D1D5DB" }} />
-              {lastSaved ? `Auto-saved at ${lastSaved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Not saved yet"}
-            </div>
-          </div>
+          {/* Action buttons — below the form */}
+          {task && (() => {
+            const s0 = task.stages?.[0];
+            const isProd = task.taskType === "production";
+            const s1Pending = isProd && s0?.done && !s0?.approved && !s0?.rejected;
+            const s1Approved = isProd && s0?.approved;
+            const isUnderReview = s1Pending || task.status === "review";
+            const isApproved = s1Approved || task.status === "completed";
+            const isRejected = task.status === "blocked" || (s0?.rejected && !s0?.done);
+            const lockDraft  = saving || isUnderReview || isApproved;
+            const lockSubmit = submitting || isUnderReview || isApproved;
+            return (
+              <div className="tms-card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => saveTask(false)} disabled={lockDraft}
+                  style={{ width: "100%", padding: "11px 18px", borderRadius: 9, background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", fontSize: 14, fontWeight: 700, cursor: lockDraft ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: lockDraft ? 0.5 : 1 }}>
+                  <i className="bi bi-floppy" />{saving ? "Saving…" : "Save Draft"}
+                </button>
+                <button onClick={submitForReview} disabled={lockSubmit}
+                  style={{
+                    width: "100%", padding: "11px 18px", borderRadius: 9, border: "none", fontSize: 14, fontWeight: 700,
+                    cursor: lockSubmit ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: submitting ? 0.7 : 1,
+                    background: isUnderReview ? "#FFFBEB" : isApproved ? "#F0FDF4" : "#7C3AED",
+                    color:      isUnderReview ? "#B45309" : isApproved ? "#16A34A" : "#fff",
+                  }}>
+                  <i className={`bi ${isUnderReview ? "bi-hourglass-split" : isApproved ? "bi-check-circle-fill" : isRejected ? "bi-send-fill" : "bi-send"}`} />
+                  {submitting ? "Submitting…" : isUnderReview ? "Under Review" : isApproved ? "Approved ✓" : isRejected ? "Resubmit for Review" : "Submit for Review"}
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "#9CA3AF", justifyContent: "center" }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: lastSaved ? "#22c55e" : "#D1D5DB" }} />
+                  {lastSaved ? `Auto-saved at ${lastSaved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : "Not saved yet"}
+                </div>
+              </div>
+            );
+          })()}
         </>)}
       </div>
 
@@ -3033,6 +3165,69 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
             <i className="bi bi-check2-all" style={{ fontSize:32, color:"#22c55e", display:"block", marginBottom:8 }} />
             <div style={{ color:"#64748b" }}>No tasks due today — you're all caught up!</div>
           </div>
+        ) : getTMSRole(emp) === "content" ? (
+          // Content team — table format matching My Tasks
+          <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, overflow:"hidden", marginBottom:22 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid #F0F0F0" }}>
+                  {["#","Task","Brand","Type","Stage","Deadline","Status","Action"].map(h => (
+                    <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:".4px", whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {todayTasks.map((t, ri) => {
+                  const dl  = effectiveDL(t);
+                  const od  = dl && isOverdue(dl) && t.status !== "completed";
+                  const sm  = STATUS_MAP[t.status] || STATUS_MAP.todo;
+                  const STAGE_COLORS = { S1:"#F97316", S2:"#3B82F6", S3:"#EAB308", S4:"#22C55E" };
+                  const CTYPE_COLORS = { reel:"#7C3AED", post:"#1D4ED8", carousel:"#B45309", story:"#065F46" };
+                  return (
+                    <tr key={t._id} style={{ borderBottom:"1px solid #F9F9F9" }}>
+                      <td style={{ padding:"11px 14px", color:"#9CA3AF", fontSize:11, fontFamily:"monospace" }}>{String(ri+1).padStart(3,"0")}</td>
+                      <td style={{ padding:"11px 14px", fontWeight:600, fontSize:12, maxWidth:160, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.nomenclature || t.title || "—"}</td>
+                      <td style={{ padding:"11px 14px" }}>
+                        {t.brandId && <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:6, background:(t.brandId.color||"#6366F1")+"18", color:t.brandId.color||"#6366F1", fontSize:11.5, fontWeight:700 }}>
+                          <span style={{ width:6, height:6, borderRadius:"50%", background:t.brandId.color||"#6366F1", display:"inline-block" }} />{t.brandId.name}
+                        </span>}
+                      </td>
+                      <td style={{ padding:"11px 14px" }}>
+                        {t.contentType && <span style={{ padding:"2px 8px", borderRadius:5, background:(CTYPE_COLORS[t.contentType]||"#6366F1")+"18", color:CTYPE_COLORS[t.contentType]||"#6366F1", fontSize:11, fontWeight:700, textTransform:"capitalize" }}>{t.contentType}</span>}
+                      </td>
+                      <td style={{ padding:"11px 14px" }}>
+                        <div style={{ display:"flex", gap:4 }}>
+                          {["S1","S2","S3","S4"].map(s => {
+                            const stg = t.stages?.find(x => x.name?.includes(s.replace("S","")) || (s==="S1"&&(x.name?.toLowerCase().includes("script")||x.name?.toLowerCase().includes("concept"))));
+                            const active = t.stage === s;
+                            const done = stg?.approved || stg?.done;
+                            return (
+                              <div key={s} style={{ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, background: done ? STAGE_COLORS[s] : active ? STAGE_COLORS[s]+"33" : "#F1F5F9", color: done ? "#fff" : active ? STAGE_COLORS[s] : "#9CA3AF", border: active&&!done ? `1.5px solid ${STAGE_COLORS[s]}` : "none" }}>
+                                {s.replace("S","")}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td style={{ padding:"11px 14px", whiteSpace:"nowrap" }}>
+                        {od && <span style={{ background:"#FEE2E2", color:"#DC2626", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, marginRight:5 }}>LATE</span>}
+                        <span style={{ fontSize:11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400 }}>{dl ? fmtDT(dl) : "—"}</span>
+                      </td>
+                      <td style={{ padding:"11px 14px" }}>
+                        <span className={`tms-badge ${sm.cls}`} style={{ fontSize:10 }}>{sm.label}</span>
+                      </td>
+                      <td style={{ padding:"11px 14px" }}>
+                        <button onClick={() => window.dispatchEvent(new CustomEvent("openInEditor", { detail: t }))}
+                          style={{ background:"none", border:"1.5px solid #7C3AED", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#7C3AED", cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
+                          View →
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="ep-tgrid" style={{ marginBottom:22 }}>
             {todayTasks.map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}
@@ -3045,9 +3240,44 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
           <div className="ep-sec-hd">
             <div className="ep-sec-title">📅 Coming Up This Week <span className="ep-sec-count">{upcoming.length}</span></div>
           </div>
-          <div className="ep-tgrid" style={{ marginBottom:22 }}>
-            {upcoming.slice(0,4).map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}
-          </div>
+          {getTMSRole(emp) === "content" ? (
+            <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, overflow:"hidden", marginBottom:22 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                <tbody>
+                  {upcoming.slice(0,6).map((t, ri) => {
+                    const dl = effectiveDL(t); const sm = STATUS_MAP[t.status] || STATUS_MAP.todo;
+                    const CTYPE_COLORS = { reel:"#7C3AED", post:"#1D4ED8", carousel:"#B45309", story:"#065F46" };
+                    return (
+                      <tr key={t._id} style={{ borderBottom:"1px solid #F9F9F9" }}>
+                        <td style={{ padding:"11px 14px", color:"#9CA3AF", fontSize:11, fontFamily:"monospace" }}>{String(ri+1).padStart(3,"0")}</td>
+                        <td style={{ padding:"11px 14px", fontWeight:600, fontSize:12 }}>{t.nomenclature || t.title || "—"}</td>
+                        <td style={{ padding:"11px 14px" }}>
+                          {t.brandId && <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:6, background:(t.brandId.color||"#6366F1")+"18", color:t.brandId.color||"#6366F1", fontSize:11.5, fontWeight:700 }}>
+                            <span style={{ width:6, height:6, borderRadius:"50%", background:t.brandId.color||"#6366F1", display:"inline-block" }} />{t.brandId.name}
+                          </span>}
+                        </td>
+                        <td style={{ padding:"11px 14px" }}>
+                          {t.contentType && <span style={{ padding:"2px 8px", borderRadius:5, background:(CTYPE_COLORS[t.contentType]||"#6366F1")+"18", color:CTYPE_COLORS[t.contentType]||"#6366F1", fontSize:11, fontWeight:700, textTransform:"capitalize" }}>{t.contentType}</span>}
+                        </td>
+                        <td style={{ padding:"11px 14px", fontSize:11, color:"#374151" }}>{dl ? fmtDT(dl) : "—"}</td>
+                        <td style={{ padding:"11px 14px" }}><span className={`tms-badge ${sm.cls}`} style={{ fontSize:10 }}>{sm.label}</span></td>
+                        <td style={{ padding:"11px 14px" }}>
+                          <button onClick={() => window.dispatchEvent(new CustomEvent("openInEditor", { detail: t }))}
+                            style={{ background:"none", border:"1.5px solid #7C3AED", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#7C3AED", cursor:"pointer" }}>
+                            View →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="ep-tgrid" style={{ marginBottom:22 }}>
+              {upcoming.slice(0,4).map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}
+            </div>
+          )}
         </>
       )}
 
@@ -4059,10 +4289,11 @@ function PortalCalendarView() {
 // ─── DARK PORTAL (non-content roles) ─────────────────────────────────────────
 function DarkPortal() {
   const router  = useRouter();
-  const [employee, setEmployee] = useState(null);
-  const [tasks,    setTasks]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [view,     setView]     = useState("today");
+  const [employee,   setEmployee]   = useState(null);
+  const [tasks,      setTasks]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [view,       setView]       = useState("today");
+  const [editorTask, setEditorTask] = useState(null);
   const empRole = getTMSRole(employee);
 
   useEffect(() => {
@@ -4088,17 +4319,36 @@ function DarkPortal() {
   }, []);
   useTaskSync(refreshTasks, { empId: employee?._id || null });
 
+  const isContent = empRole === "content";
+
+  // Listen for "View →" clicks from content-team Today/Upcoming table rows
+  useEffect(() => {
+    const handler = e => { setEditorTask(e.detail); setView("editor"); };
+    window.addEventListener("openInEditor", handler);
+    return () => window.removeEventListener("openInEditor", handler);
+  }, []);
+
   const NAV = [
     { key:"today",       label:"Today",            icon:"bi-house" },
     { key:"tasks",       label:"My Tasks",          icon:"bi-check2-square" },
-    { key:"week",        label:"Weekly Tracker",     icon:"bi-calendar-week" },
+    ...(isContent ? [{ key:"editor",  label:"Content Editor",  icon:"bi-pencil-square" }] : []),
+    { key:"week",        label:"Weekly Tracker",    icon:"bi-calendar-week" },
     { key:"history",     label:"History",           icon:"bi-clock-history" },
     ...(empRole !== "developer" ? [{ key:"calendar", label:"Content Calendar", icon:"bi-calendar3" }] : []),
+    ...(isContent ? [
+      { key:"library",     label:"Script Library",   icon:"bi-journal-text" },
+      { key:"submissions", label:"Submissions",       icon:"bi-send" },
+    ] : []),
     { key:"grades",      label:"Grades",            icon:"bi-award" },
     { key:"notifs",      label:"Notifications",     icon:"bi-bell" },
     { key:"performance", label:"My Stats",          icon:"bi-graph-up-arrow" },
   ];
-  const TITLES = { today:"Today", tasks:"My Tasks", week:"Weekly Tracker", history:"History", calendar:"Content Calendar", grades:"Grades", notifs:"Notifications", performance:"My Stats", profile:"Profile" };
+  const TITLES = {
+    today:"Today", tasks:"My Tasks", week:"Weekly Tracker", history:"History",
+    calendar:"Content Calendar", grades:"Grades", notifs:"Notifications",
+    performance:"My Stats", profile:"Profile",
+    editor:"Content Editor", library:"Script Library", submissions:"Submissions",
+  };
 
   function logout() { localStorage.removeItem("employeeToken"); router.push("/employee/login"); }
 
@@ -4163,7 +4413,10 @@ function DarkPortal() {
           </div>
 
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
-          {view === "tasks"       && <PortalMyTasksView       tasks={tasks} loading={loading} empId={employee?._id} />}
+          {view === "tasks"       && (isContent
+            ? <div className="ep-content"><MyTasksTab tasks={tasks} openInEditor={t => { setEditorTask(t); setView("editor"); }} /></div>
+            : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} />
+          )}
           {view === "week"        && <PortalThisWeekView />}
           {view === "history"     && <PortalHistoryView       tasks={tasks} loading={loading} />}
           {view === "calendar"    && <PortalCalendarView />}
@@ -4171,6 +4424,21 @@ function DarkPortal() {
           {view === "notifs"      && <PortalNotificationsView tasks={tasks} loading={loading} />}
           {view === "performance" && <PortalPerformanceView   tasks={tasks} loading={loading} emp={employee} />}
           {view === "profile"     && <PortalProfileView       emp={employee} empRole={empRole} loading={loading} />}
+          {view === "editor"      && (
+            <div className="ep-content">
+              <ContentEditorTab tasks={tasks} initialTask={editorTask} onBack={() => setView("tasks")} />
+            </div>
+          )}
+          {view === "library"     && (
+            <div className="ep-content">
+              <ScriptLibraryTab tasks={tasks} />
+            </div>
+          )}
+          {view === "submissions" && (
+            <div className="ep-content">
+              <SubmissionsTab tasks={tasks} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -4236,8 +4504,8 @@ export default function EmployeeTasksDashboard() {
 
   const role = getTMSRole(employee);
 
-  // Non-content roles → full dark portal (self-fetching)
-  if (!loading && role !== "content") {
+  // All roles → dark portal (self-fetching, handles content-specific tabs internally)
+  if (!loading) {
     return <DarkPortal />;
   }
 
