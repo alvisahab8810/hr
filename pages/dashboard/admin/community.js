@@ -666,10 +666,9 @@ export default function AdminCommunity() {
                     <>
                       <div className="ac-dm-hd">
                         {selectedEmp ? (
-                          {selectedEmp.avatar
+                          selectedEmp.avatar
                             ? <img src={selectedEmp.avatar} alt="avatar" className="ac-dm-hd-av" style={{ objectFit:"cover", padding:0 }} />
                             : <div className="ac-dm-hd-av" style={{ background: avColor(selectedEmp.name) }}>{nameInitials(selectedEmp.name)}</div>
-                          }
                         ) : (
                           <div className="ac-dm-hd-av" style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}>
                             <i className="bi bi-person-lines-fill" style={{ fontSize: 16, color: "#fff" }} />
@@ -711,10 +710,9 @@ export default function AdminCommunity() {
                                 return (
                                   <div key={m._id} className={`dm-brow ${isAdminMsg ? "dm-sent" : "dm-recv"}`}>
                                     {!isAdminMsg && (
-                                      {selectedEmp?.avatar
+                                      selectedEmp?.avatar
                                         ? <img src={selectedEmp.avatar} alt="av" className="dm-av-sm" style={{ objectFit:"cover", padding:0 }} />
                                         : <div className="dm-av-sm" style={{ background: avColor(m.senderName) }}>{nameInitials(m.senderName)}</div>
-                                      }
                                     )}
                                     <div className="dm-bwrap">
                                       <div className="dm-bname">{isAdminMsg ? "You" : m.senderName}</div>
