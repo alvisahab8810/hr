@@ -64,6 +64,14 @@ function getAbsentDates(attendanceRecords, month, year) {
   return absentDates;
 }
 
+// Compute half-day absent dates: attendance records with isHalfDay=true and no startTime
+function getHalfDayDates(attendanceRecords) {
+  return attendanceRecords
+    .filter(a => a.isHalfDay && !a.startTime)
+    .map(a => a.date)
+    .sort();
+}
+
 // Get lunch break duration for an attendance record (longest lunch break in ms)
 function getLunchBreakMs(record) {
   if (!record?.breaks?.length) return 0;
@@ -302,8 +310,9 @@ export default function AdminDeductionWaiver() {
                     const t = new Date(a.startTime);
                     return t.getHours() > 10 || (t.getHours() === 10 && t.getMinutes() > 10);
                   });
-                  const lunchDays   = attRecords.filter(a => (a.deductions || 0) > 0);
-                  const absentDates = getAbsentDates(attRecords, month, year);
+                  const lunchDays    = attRecords.filter(a => (a.deductions || 0) > 0);
+                  const absentDates  = getAbsentDates(attRecords, month, year);
+                  const halfDayDates = getHalfDayDates(attRecords);
 
                   return (
                     <div key={r._id} className="dw-row">
@@ -428,6 +437,38 @@ export default function AdminDeductionWaiver() {
                                         );
                                       })}
                                       <p className="dw-detail-note">* Excludes Sundays; may include holidays</p>
+                                    </div>
+                                  )}
+
+                                  {/* ── Half Day detail rows ── */}
+                                  {line.key === "halfDay" && halfDayDates.length > 0 && (
+                                    <div className="dw-detail-list">
+                                      {halfDayDates.map((d, i) => {
+                                        const hdWaiver = waiverMap[`${empId}_halfDay`];
+                                        const hdWaived = (hdWaiver?.status === "Approved" ? hdWaiver.amount : 0) || 0;
+                                        const originalHdTotal = (deductions.halfDay || 0) + hdWaived;
+                                        const perHalfDay = halfDayDates.length > 0 ? Math.round(originalHdTotal / halfDayDates.length) : 0;
+                                        const coveredHdCount = perHalfDay > 0 ? Math.min(Math.floor(hdWaived / perHalfDay), halfDayDates.length) : 0;
+                                        const isCovered = i < coveredHdCount;
+                                        const instProcKey = `inst_${empId}_halfDay_${d}`;
+                                        return (
+                                          <div key={d} className="dw-detail-item" style={{ background: isCovered ? "#F0FDF4" : "#F8FAFC" }}>
+                                            <i className="bi bi-calendar-half" style={{ color: isCovered ? "#15803D" : "#1D4ED8", fontSize: 12 }} />
+                                            <span style={{ fontWeight: 600, textDecoration: isCovered ? "line-through" : "none", color: isCovered ? "#9CA3AF" : "#374151" }}>{fmtDate(d)}</span>
+                                            <span style={{ color: "#9CA3AF" }}>— Half day absent</span>
+                                            {perHalfDay > 0 && <span style={{ marginLeft: "auto", color: isCovered ? "#9CA3AF" : "#DC2626", fontWeight: 700, textDecoration: isCovered ? "line-through" : "none", fontSize: 11 }}>−₹{fmt(perHalfDay)}</span>}
+                                            {isCovered ? (
+                                              <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
+                                            ) : (
+                                              <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: perHalfDay })}>
+                                                {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                      <p className="dw-detail-note">* Half day absent — 50% day deduction</p>
                                     </div>
                                   )}
 

@@ -156,7 +156,9 @@ function fmtDateWithTime(d) {
 }
 function fmtDateTimeInput(d) {
   if (!d) return "";
-  return new Date(d).toISOString().slice(0, 16);
+  const dt = new Date(d);
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
 function nowForInput() {
   const d = new Date();
@@ -199,7 +201,7 @@ export default function TasksListPage() {
   const [pagination, setPagination] = useState({});
   const [page,       setPage]       = useState(1);
 
-  const [filters, setFilters] = useState({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "" });
+  const [filters, setFilters] = useState({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "", priority: "", contentType: "", stage: "", sortOrder: "desc", overdue: false });
   const [hideCompleted, setHideCompleted] = useState(false);
 
   /* Create form state */
@@ -412,17 +414,22 @@ export default function TasksListPage() {
     setLoading(true);
     try {
       const q = new URLSearchParams({ page, limit: 25 });
-      if (filters.search)    q.set("search",    filters.search);
-      if (filters.brandId)   q.set("brandId",   filters.brandId);
-      if (filters.status)    q.set("status",    filters.status);
-      if (filters.assignedTo) q.set("assignedTo", filters.assignedTo);
-      if (filters.dateFrom)   q.set("dateStart", new Date(filters.dateFrom).toISOString());
-      if (filters.dateTo)     q.set("dateEnd",   new Date(filters.dateTo + "T23:59:59").toISOString());
-      if (hideCompleted)     q.set("hideCompleted", "true");
+      if (filters.search)      q.set("search",      filters.search);
+      if (filters.brandId)     q.set("brandId",     filters.brandId);
+      if (filters.status)      q.set("status",      filters.status);
+      if (filters.assignedTo)  q.set("assignedTo",  filters.assignedTo);
+      if (filters.dateFrom)    q.set("dateStart",   new Date(filters.dateFrom).toISOString());
+      if (filters.dateTo)      q.set("dateEnd",     new Date(filters.dateTo + "T23:59:59").toISOString());
+      if (filters.priority)    q.set("priority",    filters.priority);
+      if (filters.contentType) q.set("contentType", filters.contentType);
+      if (filters.stage)       q.set("stage",       filters.stage);
+      if (filters.overdue)     q.set("overdue",     "true");
+      if (hideCompleted)       q.set("hideCompleted", "true");
+      q.set("sortOrder", filters.sortOrder || "desc");
       // Tab-specific filter
-      if (activeTab === "smm")      q.set("taskType", "production");
-      else if (activeTab === "seo") q.set("tags", "seo");
-      else if (activeTab === "ads") q.set("tags", "ads");
+      if (activeTab === "smm")           q.set("taskType", "production");
+      else if (activeTab === "seo")      q.set("tags", "seo");
+      else if (activeTab === "ads")      q.set("tags", "ads");
       else if (activeTab === "branding") q.set("tags", "branding");
 
       const res  = await fetch(`/api/admin/tasks?${q}`, { credentials: "include" });
@@ -441,7 +448,7 @@ export default function TasksListPage() {
   function switchTab(tab) {
     setActiveTab(tab);
     setPage(1);
-    setFilters({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "" });
+    setFilters({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "", priority: "", contentType: "", stage: "", sortOrder: "desc", overdue: false });
   }
 
   /* Stage editor helpers */
@@ -546,6 +553,7 @@ export default function TasksListPage() {
           .tl-badge { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
           .tl-btn { border:none; cursor:pointer; border-radius:10px; padding:7px 14px; font-size:13px; font-weight:600; transition:all .15s; display:inline-flex; align-items:center; gap:5px; }
           .tl-btn-primary { background:#4F46E5; color:#fff; }
+          .tl-btn-primary:hover { background:#4338CA; }
           .tl-btn-ghost { background:#F1F5F9; color:#475569; }
           .tl-btn-ghost:hover { background:#E2E8F0; }
           .tl-input { padding:7px 11px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:13px; outline:none; background:#fff; }
@@ -616,7 +624,7 @@ export default function TasksListPage() {
                     <i className={`bi ${hideCompleted ? "bi-eye" : "bi-eye-slash"}`} />
                     {hideCompleted ? "Show completed" : "Hide completed"}
                   </button>
-                  <button className="invite-btn tl-btn-primary"
+                  <button className="tl-btn tl-btn-primary"
                     onClick={() => setShowCreate(true)}>
                     <i className="bi bi-plus-circle" /> New Task
                   </button>
@@ -645,22 +653,33 @@ export default function TasksListPage() {
 
               {/* ── Filters ── */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+                {/* Search */}
                 <div style={{ position: "relative" }}>
                   <i className="bi bi-search" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#94A3B8", fontSize: 13 }} />
                   <input className="tl-input" style={{ paddingLeft: 28, width: 190 }}
                     placeholder="Search tasks…" value={filters.search}
                     onChange={e => { setFilters(f => ({ ...f, search: e.target.value })); setPage(1); }} />
                 </div>
+
+                {/* Brand */}
                 <select className="tl-select" value={filters.brandId}
                   onChange={e => { setFilters(f => ({ ...f, brandId: e.target.value })); setPage(1); }}>
                   <option value="">All Brands</option>
                   {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                 </select>
+
+                {/* Status */}
                 <select className="tl-select" value={filters.status}
                   onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1); }}>
                   <option value="">All Status</option>
-                  {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  <option value="todo">To Do</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="review">Pending Review</option>
+                  <option value="completed">Done</option>
+                  <option value="blocked">Rejected</option>
                 </select>
+
+                {/* Assignees */}
                 <select className="tl-select" value={filters.assignedTo}
                   onChange={e => { setFilters(f => ({ ...f, assignedTo: e.target.value })); setPage(1); }}>
                   <option value="">All Assignees</option>
@@ -669,15 +688,66 @@ export default function TasksListPage() {
                     return <option key={emp._id} value={emp._id}>{n}</option>;
                   })}
                 </select>
+
+                {/* Priority */}
+                <select className="tl-select" value={filters.priority}
+                  onChange={e => { setFilters(f => ({ ...f, priority: e.target.value })); setPage(1); }}>
+                  <option value="">All Priorities</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+
+                {/* Content Type — SMM tab only */}
+                {activeTab === "smm" && (
+                  <select className="tl-select" value={filters.contentType}
+                    onChange={e => { setFilters(f => ({ ...f, contentType: e.target.value })); setPage(1); }}>
+                    <option value="">All Types</option>
+                    {Object.entries(CONTENT_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                )}
+
+                {/* Pipeline Stage — SMM tab only */}
+                {activeTab === "smm" && (
+                  <select className="tl-select" value={filters.stage}
+                    onChange={e => { setFilters(f => ({ ...f, stage: e.target.value })); setPage(1); }}>
+                    <option value="">All Stages</option>
+                    <option value="S1">S1 — Script/Concept</option>
+                    <option value="S2">S2 — Shoot/Design</option>
+                    <option value="S3">S3 — Edit/Develop</option>
+                    <option value="S4">S4 — Posted/Live</option>
+                  </select>
+                )}
+
+                {/* Date From */}
                 <input type="date" className="tl-select" style={{ cursor: "pointer" }} value={filters.dateFrom}
                   onChange={e => { setFilters(f => ({ ...f, dateFrom: e.target.value })); setPage(1); }}
                   title="From date" />
+
+                {/* Date To */}
                 <input type="date" className="tl-select" style={{ cursor: "pointer" }} value={filters.dateTo}
                   onChange={e => { setFilters(f => ({ ...f, dateTo: e.target.value })); setPage(1); }}
                   title="To date" />
-                {(Object.values(filters).some(Boolean) || hideCompleted) && (
+
+                {/* Sort order */}
+                <select className="tl-select" value={filters.sortOrder}
+                  onChange={e => { setFilters(f => ({ ...f, sortOrder: e.target.value })); setPage(1); }}>
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+
+                {/* Overdue toggle */}
+                <button className="tl-btn" style={{ fontSize: 12, background: filters.overdue ? "#FEE2E2" : "#F1F5F9", color: filters.overdue ? "#DC2626" : "#475569", border: filters.overdue ? "1.5px solid #FCA5A5" : "1.5px solid #E5E7EB" }}
+                  onClick={() => { setFilters(f => ({ ...f, overdue: !f.overdue })); setPage(1); }}>
+                  <i className={`bi ${filters.overdue ? "bi-alarm-fill" : "bi-alarm"}`} />
+                  Overdue
+                </button>
+
+                {/* Clear */}
+                {(Object.entries(filters).some(([k, v]) => k !== "sortOrder" && (v === true || (typeof v === "string" && v))) || hideCompleted) && (
                   <button className="tl-btn tl-btn-ghost" style={{ fontSize: 12 }}
-                    onClick={() => { setFilters({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "" }); setHideCompleted(false); setPage(1); }}>
+                    onClick={() => { setFilters({ search: "", brandId: "", status: "", assignedTo: "", dateFrom: "", dateTo: "", priority: "", contentType: "", stage: "", sortOrder: "desc", overdue: false }); setHideCompleted(false); setPage(1); }}>
                     <i className="bi bi-x-circle" /> Clear
                   </button>
                 )}

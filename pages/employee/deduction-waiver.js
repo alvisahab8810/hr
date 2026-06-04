@@ -29,6 +29,7 @@ export default function EmployeeDeductionDetail() {
   const years = Array.from({ length: 3 }, (_, i) => today.getFullYear() - i);
 
   const [isLive, setIsLive] = useState(false);
+  const [showBasicSalary, setShowBasicSalary] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,7 +98,7 @@ export default function EmployeeDeductionDetail() {
   ].filter(Boolean);
 
   const summaryCards = report ? [
-    { label: "Basic Salary",     value: `₹${fmt(report.basicSalary)}`,        icon: "bi-wallet2",          bg: "#EEF2FF", color: "#4F46E5" },
+    { label: "Basic Salary",     value: showBasicSalary ? `₹${fmt(report.basicSalary)}` : "₹ ••••••", icon: "bi-wallet2",          bg: "#EEF2FF", color: "#4F46E5", toggleable: true },
     { label: "Earned Salary",    value: `₹${fmt(report.earnedSalary)}`,        icon: "bi-graph-up",         bg: "#F0FDF4", color: "#15803D" },
     { label: "Total Deductions", value: `₹${fmt(ded.total)}`,                  icon: "bi-dash-circle-fill", bg: "#FEE2E2", color: "#DC2626" },
     { label: "Net Pay",          value: `₹${fmt(report.netPay)}`,              icon: "bi-cash-stack",       bg: "#ECFDF5", color: "#059669" },
@@ -190,8 +191,19 @@ export default function EmployeeDeductionDetail() {
                           display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <i className={`bi ${s.icon}`} style={{ fontSize: 18, color: s.color }} />
                         </div>
-                        <div>
-                          <div style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>{s.value}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>{s.value}</div>
+                            {s.toggleable && (
+                              <button
+                                onClick={() => setShowBasicSalary(v => !v)}
+                                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "#6B7280", lineHeight: 1 }}
+                                title={showBasicSalary ? "Hide" : "Show"}
+                              >
+                                <i className={`bi ${showBasicSalary ? "bi-eye-slash" : "bi-eye"}`} style={{ fontSize: 15 }} />
+                              </button>
+                            )}
+                          </div>
                           <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{s.label}</div>
                         </div>
                       </div>

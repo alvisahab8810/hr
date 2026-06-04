@@ -36,6 +36,9 @@ const AttendanceSchema = new mongoose.Schema(
     /* ---------- DEDUCTIONS ---------- */
     deductions: { type: Number, default: 0 },        // lunch / others
 
+    /* ---------- HALF DAY ---------- */
+    isHalfDay: { type: Boolean, default: false },
+
     /* ---------- LUNCH REMINDER ---------- */
 
 

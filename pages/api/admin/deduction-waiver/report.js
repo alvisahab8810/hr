@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     Attendance.find({
       employee: { $in: empIds },
       date: { $gte: dateFrom, $lte: dateTo },
-    }).select("employee date startTime endTime isLate lateMarked latePenaltyApplied latePenaltyAmount deductions breaks").lean(),
+    }).select("employee date startTime endTime isLate lateMarked latePenaltyApplied latePenaltyAmount deductions breaks isHalfDay").lean(),
     LeaveApplication.find({
       employee: { $in: empIds },
       status: { $in: ["Pending", "Approved", "Rejected"] },

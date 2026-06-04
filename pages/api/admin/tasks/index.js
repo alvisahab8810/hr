@@ -38,16 +38,16 @@ export default async function handler(req, res) {
         hideCompleted,
         dateStart,
         dateEnd,
+        sortBy = "createdAt",
+        sortOrder = "desc",
         page = 1,
         limit = 20,
       } = req.query;
 
       const q = {};
 
-      if (status)      q.status      = status;
       if (priority)    q.priority    = priority;
       if (taskType)    q.taskType    = taskType;
-      if (assignedTo)  q.assignedTo  = assignedTo;
       if (projectId)   q.projectId   = projectId;
       if (sprintId)    q.sprintId    = sprintId;
       if (clientId)    q.clientId    = clientId;
@@ -57,19 +57,55 @@ export default async function handler(req, res) {
       if (req.query.seoCategory) q.seoCategory = req.query.seoCategory;
       if (req.query.tags) q.tags = { $in: Array.isArray(req.query.tags) ? req.query.tags : [req.query.tags] };
 
-      if (hideCompleted === "true") q.status = { $nin: ["completed"] };
+      // Collect multi-field OR conditions into $and so they don't overwrite each other
+      const andClauses = [];
+
+      // Status filter — "review" and "blocked" also check stage-level state,
+      // because task.status may still be "in_progress" even when a stage is pending
+      // review or rejected (the employee submit flow doesn't always update task.status).
+      if (status === "review") {
+        // Match tasks in review status OR tasks where any stage is submitted but not yet approved/rejected
+        andClauses.push({ $or: [
+          { status: "review" },
+          {
+            status: { $nin: ["completed"] },
+            stages: { $elemMatch: { done: true, approved: { $ne: true }, rejected: { $ne: true } } },
+          },
+        ]});
+      } else if (status === "blocked") {
+        // Match tasks in blocked status OR tasks where any stage was rejected
+        andClauses.push({ $or: [
+          { status: "blocked" },
+          {
+            status: { $nin: ["completed"] },
+            stages: { $elemMatch: { rejected: true } },
+          },
+        ]});
+      } else if (status) {
+        q.status = status;
+      } else if (hideCompleted === "true") {
+        q.status = { $nin: ["completed"] };
+      }
 
       if (overdue === "true") {
         q.dueDate = { $lt: new Date() };
         if (!q.status) q.status = { $nin: ["completed"] };
       }
 
-      /* date range filter — matches scheduledFor, dueDate, stage deadline, stage doneAt, submittedAt, updatedAt, or createdAt */
+      // Assignee: match top-level assignedTo OR any stage's assignedTo (for production tasks)
+      if (assignedTo) {
+        andClauses.push({ $or: [
+          { assignedTo: assignedTo },
+          { "stages.assignedTo": assignedTo },
+        ]});
+      }
+
+      // Date range: match any date field
       if (dateStart || dateEnd) {
         const range = {};
         if (dateStart) range.$gte = new Date(dateStart);
         if (dateEnd)   range.$lte = new Date(dateEnd);
-        q.$or = [
+        andClauses.push({ $or: [
           { scheduledFor: range },
           { dueDate: range },
           { "stages.deadline": range },
@@ -77,25 +113,31 @@ export default async function handler(req, res) {
           { submittedAt: range },
           { updatedAt: range },
           { createdAt: range },
-        ];
+        ]});
       }
 
+      // Search: title, description, nomenclature, and task ID
       if (search) {
-        const searchOr = [
+        andClauses.push({ $or: [
           { title:        { $regex: search, $options: "i" } },
           { description:  { $regex: search, $options: "i" } },
           { nomenclature: { $regex: search, $options: "i" } },
-        ];
-        if (q.$or) {
-          q.$and = [{ $or: q.$or }, { $or: searchOr }];
-          delete q.$or;
-        } else {
-          q.$or = searchOr;
-        }
+          { taskId:       { $regex: search, $options: "i" } },
+        ]});
+      }
+
+      if (andClauses.length === 1) {
+        q.$or = andClauses[0].$or;
+      } else if (andClauses.length > 1) {
+        q.$and = andClauses;
       }
 
       const skip  = (Number(page) - 1) * Number(limit);
       const total = await Task.countDocuments(q);
+
+      const ALLOWED_SORT = ["createdAt", "updatedAt", "dueDate", "priority", "title"];
+      const sortField = ALLOWED_SORT.includes(sortBy) ? sortBy : "createdAt";
+      const sortDir   = sortOrder === "asc" ? 1 : -1;
 
       const tasks = await Task.find(q)
         .populate("assignedTo", "firstName lastName personal professional")
@@ -103,7 +145,7 @@ export default async function handler(req, res) {
         .populate("sprintId",   "name status")
         .populate("clientId",   "name company")
         .populate("brandId",    "name color")
-        .sort({ createdAt: -1 })
+        .sort({ [sortField]: sortDir })
         .skip(skip)
         .limit(Number(limit))
         .lean();

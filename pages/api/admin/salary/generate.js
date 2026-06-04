@@ -258,6 +258,8 @@ export default async function handler(req, res) {
           if (rec.deductions && rec.deductions > 0) {
             lunchPenalty += rec.deductions;
           }
+        } else if (rec?.isHalfDay) {
+          halfDayCount++;
         } else {
           absentDays++;
         }
