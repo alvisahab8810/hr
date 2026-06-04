@@ -23,42 +23,28 @@ export default async function handler(req, res) {
   try {
     const { brandId, dateStart, dateEnd } = req.query;
 
-    const query = {
-      taskType: "production",
-      // Only show approved or completed content on the calendar
-      $or: [
-        { "stages.approved": true },
-        { status: "completed" },
-      ],
-    };
+    const query = { taskType: "production" };
     if (brandId) query.brandId = brandId;
     if (dateStart || dateEnd) {
       const range = {
         ...(dateStart ? { $gte: new Date(dateStart) } : {}),
         ...(dateEnd   ? { $lte: new Date(dateEnd)   } : {}),
       };
-      // Combine approval filter with date range using $and so both apply
-      query.$and = [
-        { $or: query.$or },
-        {
-          $or: [
-            { scheduledFor:      range },
-            { dueDate:           range },
-            { "stages.deadline": range },
-            { "stages.doneAt":   range },
-            { submittedAt:       range },
-            { updatedAt:         range },
-            { createdAt:         range },
-          ],
-        },
+      query.$or = [
+        { scheduledFor:      range },
+        { dueDate:           range },
+        { "stages.deadline": range },
+        { "stages.doneAt":   range },
+        { submittedAt:       range },
+        { updatedAt:         range },
+        { createdAt:         range },
       ];
-      delete query.$or;
     }
 
     const tasks = await Task.find(query)
       .populate("assignedTo", "firstName lastName personal")
-      .populate("brandId", "name color slug")
-      .sort({ scheduledFor: 1, dueDate: 1, createdAt: -1 })
+      .populate("brandId",    "name color slug weeklySchedule")
+      .sort({ taskId: 1 })
       .limit(500)
       .lean();
 

@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     if (!client) return res.status(404).json({ success: false, message: "Client not found" });
 
     const brands = await Brand.find({ clientId: client._id })
-      .select("name slug color logo services monthlyDeliverables")
+      .select("name slug color logo services monthlyDeliverables weeklySchedule")
       .lean();
 
     const { password: _, ...safe } = client;

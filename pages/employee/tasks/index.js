@@ -83,8 +83,8 @@ const STAGE_FILL   = ["#F97316", "#3B82F6", "#EAB308", "#22C55E"];
 function getTaskStageStyle(task) {
   const stages = task?.stages || [];
   const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
-  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: c + "28", border: c, color: c }; } }
-  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: "#fff", border: c, color: c }; } }
+  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: c, border: c, color: "#fff" }; } }
+  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = STAGE_FILL[i]; return { bg: "#fff", border: c, color: "#1E293B" }; } }
   return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF" };
 }
 const STAGE_LABEL  = { S1: "Script/Concept", S2: "Shoot/Design", S3: "Edit/Develop", S4: "Posted/Live" };
@@ -1038,13 +1038,25 @@ function WeeklyTrackerTab() {
   useEffect(() => {
     const token = localStorage.getItem("employeeToken") || "";
     setLoading(true);
-    const start = new Date(weekStart); start.setHours(0, 0, 0, 0);
-    const end   = new Date(weekEnd);   end.setHours(23, 59, 59, 999);
-    const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
+    // Fetch the full month so the brand-schedule placement has all tasks
+    const firstDay = weekDates[0].date;
+    const lastDay  = weekDates[6].date;
+    const monthStart = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1);
+    const monthEnd   = new Date(lastDay.getFullYear(),  lastDay.getMonth()  + 1, 0, 23, 59, 59, 999);
+    const q = new URLSearchParams({ dateStart: monthStart.toISOString(), dateEnd: monthEnd.toISOString() });
     fetch(`/api/employee/weekly-tracker?${q}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => {
-        if (d.success) { setTasks(d.tasks || []); setBrands(d.brands || []); }
+        if (d.success) {
+          setTasks(d.tasks || []);
+          const bs = d.brands || [];
+          setBrands(bs);
+          setBrandFilter(prev => {
+            if (prev && bs.find(b => b._id?.toString() === prev)) return prev;
+            const viralon = bs.find(b => /viralon/i.test(b.name));
+            return String(viralon?._id || bs[0]?._id || "");
+          });
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -1053,16 +1065,76 @@ function WeeklyTrackerTab() {
   const getScheduled = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
 
-  // Group tasks by brandId → dateString
-  const tasksByBrandDay = {};
-  tasks.forEach(t => {
-    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
-    if (!dateKey || !t.brandId) return;
-    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
-    if (!tasksByBrandDay[bId]) tasksByBrandDay[bId] = {};
-    if (!tasksByBrandDay[bId][dateKey]) tasksByBrandDay[bId][dateKey] = [];
-    tasksByBrandDay[bId][dateKey].push(t);
-  });
+  // Count how many times contentType was scheduled from month-start up to and
+  // including date (0-based). Same algorithm as admin weekly tracker.
+  function wtMonthSlotIndex(date, contentType, weeklySchedule) {
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+    let count = 0;
+    const cur = new Date(monthStart);
+    while (cur <= date) {
+      const label = DAY_NAMES[cur.getDay()];
+      count += weeklySchedule.filter(s => s.day === label && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1;
+  }
+
+  // Place tasks using brand schedule — mirrors admin weekly tracker exactly
+  const tasksByBrandDay = (() => {
+    const result = {};
+
+    // Group by brandId → contentType → monthKey so June tasks never bleed into July columns
+    const taskGroups = {};
+    tasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      const ct  = t.contentType || "__unknown";
+      const d   = t.dueDate      ? new Date(t.dueDate)
+                : t.scheduledFor ? new Date(t.scheduledFor)
+                : t.createdAt    ? new Date(t.createdAt)
+                : null;
+      if (!d) return;
+      const mk = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!taskGroups[bId])         taskGroups[bId] = {};
+      if (!taskGroups[bId][ct])     taskGroups[bId][ct] = {};
+      if (!taskGroups[bId][ct][mk]) taskGroups[bId][ct][mk] = [];
+      taskGroups[bId][ct][mk].push(t);
+    });
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(byMonth =>
+        Object.values(byMonth).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")))
+      )
+    );
+
+    const EMP_DLVR_KEY_MAP = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+    brands.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+      if (!schedule.length) return;
+      weekDates.forEach(({ label, date }) => {
+        const mk = `${date.getFullYear()}-${date.getMonth()}`;
+        schedule.filter(s => s.day === label).forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct]?.[mk]; // this month only
+          if (!ctTasks || ctTasks.length === 0) return;
+          const idx = wtMonthSlotIndex(date, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+          const dlvrKey = EMP_DLVR_KEY_MAP[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+          const dateKey = date.toDateString();
+          if (!result[bId]) result[bId] = {};
+          if (!result[bId][dateKey]) result[bId][dateKey] = [];
+          result[bId][dateKey].push(ctTasks[idx]);
+        });
+      });
+    });
+    return result;
+  })();
 
   const displayBrands = brandFilter ? brands.filter(b => b._id?.toString() === brandFilter) : brands;
 
@@ -1108,8 +1180,7 @@ function WeeklyTrackerTab() {
         <select
           value={brandFilter}
           onChange={e => setBrandFilter(e.target.value)}
-          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, outline:"none", background:"#fff" }}>
-          <option value="">All Brands</option>
+          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, fontWeight:600, outline:"none", background:"#fff" }}>
           {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
         </select>
       </div>
@@ -1164,7 +1235,7 @@ function WeeklyTrackerTab() {
                       <div style={{ width:6, height:30, borderRadius:4, background:brand.color || "#6366F1", flexShrink:0 }} />
                       <div>
                         <div style={{ fontWeight:700, fontSize:12, color:"#1E293B" }}>{brand.name}</div>
-                        <div style={{ fontSize:10, color:"#94A3B8" }}>{(brand.weeklySchedule || []).length} post/wk</div>
+                        <div style={{ fontSize:10, color:"#1E293B" }}>{(brand.weeklySchedule || []).length} post/wk</div>
                       </div>
                     </div>
                   </td>
@@ -1173,31 +1244,55 @@ function WeeklyTrackerTab() {
                     const scheduled = getScheduled(brand, label);
                     const bId       = String(brand._id);
                     const dayTasks  = tasksByBrandDay[bId]?.[date.toDateString()] || [];
+                    // Unfilled slots: actual tasks consume matching planned slots
+                    const EMP_DLVR_KEY = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+                    const EMP_MONTHS   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                    const empMonthLabel = `${EMP_MONTHS[date.getMonth()]}'${String(date.getFullYear()).slice(2)}`;
+                    const rem = {};
+                    dayTasks.forEach(t => { rem[t.contentType] = (rem[t.contentType] || 0) + 1; });
+                    const unfilledSlots = scheduled.reduce((acc, slot) => {
+                      const ct = slot.contentType;
+                      const slotIdx = wtMonthSlotIndex(date, ct, brand.weeklySchedule || []);
+                      const dlvrKey = EMP_DLVR_KEY[ct];
+                      if (dlvrKey) {
+                        const limit = brand.monthlyDeliverables?.[dlvrKey];
+                        if (limit != null && slotIdx >= limit) return acc;
+                      }
+                      if ((rem[ct] || 0) > 0) { rem[ct]--; return acc; }
+                      acc.push({ ...slot, slotIdx });
+                      return acc;
+                    }, []);
                     return (
                       <td key={label} className={isToday ? "emp-today-col" : ""}>
                         <div className="emp-wt-cell">
                           {dayTasks.map(t => {
                             const ct  = WT_CONTENT_META[t.contentType] || {};
                             const sty = getTaskStageStyle(t);
+                            const nom = t.nomenclature || t.title || "";
+                            const ctLower = (t.contentType || "").toLowerCase();
+                            let suffix = nom.toLowerCase().startsWith(ctLower) ? nom.slice(ctLower.length).trim() : nom;
+                            suffix = suffix.replace(/\b[a-z]/g, c => c.toUpperCase());
+                            const displayLabel = suffix ? `${ct.label || t.contentType} ${suffix}` : (ct.label || t.contentType);
                             return (
                               <div key={t._id} className="emp-wt-task"
-                                style={{ background:sty.bg, borderColor:sty.border, color:sty.color }}>
-                                <i className={`bi ${ct.icon||"bi-list-task"}`} style={{ fontSize:9, marginRight:2 }} />
-                                {ct.label || t.contentType || t.title?.slice(0,10)}
+                                style={{ background:sty.bg, borderColor:sty.border, color:sty.color, display:"flex", alignItems:"center", gap:4 }}>
+                                <i className={`bi ${ct.icon||"bi-list-task"}`} style={{ fontSize:9, flexShrink:0 }} />
+                                {displayLabel}
                               </div>
                             );
                           })}
-                          {scheduled.map((slot, si) => {
+                          {unfilledSlots.map((slot, si) => {
                             const ct = WT_CONTENT_META[slot.contentType] || {};
+                            const slotLabel = `${ct.label || slot.contentType} ${slot.slotIdx + 1} ${empMonthLabel}`;
                             return (
                               <div key={si} className="emp-wt-slot"
                                 style={{ background:"#F8FAFC", color:"#94A3B8", border:"1px dashed #D1D5DB" }}>
                                 <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
-                                {ct.label || slot.contentType}
+                                {slotLabel}
                               </div>
                             );
                           })}
-                          {scheduled.length === 0 && dayTasks.length === 0 && (
+                          {unfilledSlots.length === 0 && dayTasks.length === 0 && (
                             <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
                           )}
                         </div>
@@ -1344,128 +1439,242 @@ function BrandCalendarTab({ tasks }) {
 }
 
 // ─── MY CALENDAR TAB (Content Team — shows assigned tasks by stage deadline) ───
-function MyCalendarTab({ tasks }) {
-  const [cur, setCur]           = useState(new Date());
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [dayPanel, setDayPanel] = useState(null); // { day, tasks[] }
+function MyCalendarTab() {
+  const today  = new Date();
+  const [year,        setYear]        = useState(today.getFullYear());
+  const [month,       setMonth]       = useState(today.getMonth());
+  const [tasks,       setTasks]       = useState([]);
+  const [brands,      setBrands]      = useState([]);
   const [brandFilter, setBrandFilter] = useState("");
+  const [loading,     setLoading]     = useState(true);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [dayPanel,    setDayPanel]    = useState(null);
 
-  const year      = cur.getFullYear();
-  const month     = cur.getMonth();
-  const monthName = cur.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const prevMonth = () => { if (month === 0) { setYear(y => y-1); setMonth(11); } else setMonth(m => m-1); };
+  const nextMonth = () => { if (month === 11) { setYear(y => y+1); setMonth(0); } else setMonth(m => m+1); };
+
+  useEffect(() => {
+    const start = new Date(year, month, 1).toISOString();
+    const end   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
+    const q     = new URLSearchParams({ dateStart: start, dateEnd: end });
+    if (brandFilter) q.set("brandId", brandFilter);
+    setLoading(true);
+    setDayPanel(null);
+    Promise.all([
+      fetch(`/api/employee/brand-tasks?${q}`, { headers: authH() }).then(r => r.json()),
+      fetch(`/api/employee/weekly-tracker?dateStart=${start}&dateEnd=${end}`, { headers: authH() }).then(r => r.json()),
+    ])
+      .then(([td, bd]) => {
+        if (td.success) setTasks(td.tasks || []);
+        if (bd.success) {
+          const bs = bd.brands || [];
+          setBrands(bs);
+          // Auto-select Viralon, or first brand — never "All"
+          setBrandFilter(prev => {
+            if (prev && bs.find(b => String(b._id) === prev)) return prev;
+            const viralon = bs.find(b => /viralon/i.test(b.name));
+            return String(viralon?._id || bs[0]?._id || "");
+          });
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [year, month, brandFilter]);
+
+  const monthName = new Date(year, month, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
   const firstDay  = new Date(year, month, 1).getDay();
   const daysInMon = new Date(year, month + 1, 0).getDate();
   const offset    = firstDay === 0 ? 6 : firstDay - 1;
   const cells     = Array(offset).fill(null).concat(Array.from({ length: daysInMon }, (_, i) => i + 1));
-  const today     = new Date();
   const DAY_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const MC_DLVR   = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+  const MC_MONS   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const mcMonLabel = `${MC_MONS[month]}'${String(year).slice(2)}`;
 
-  // Show all production/content tasks — pipeline colors reflect stage progress
-  const myTasks = tasks.filter(t => t.taskType === "production" || t.contentType);
-
-  // All brands from my tasks
-  const brands = [...new Map(myTasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
-  const filtered = brandFilter ? myTasks.filter(t => t.brandId?._id === brandFilter) : myTasks;
-
-  // Place approved/completed tasks on most relevant date available
-  function getApprovedDate(t) {
-    const s1 = t.stages?.[0];
-    if (s1?.deadline)   return new Date(s1.deadline);
-    if (t.dueDate)      return new Date(t.dueDate);
-    if (s1?.doneAt)     return new Date(s1.doneAt);
-    if (t.submittedAt)  return new Date(t.submittedAt);
-    if (t.updatedAt)    return new Date(t.updatedAt);
-    if (t.createdAt)    return new Date(t.createdAt);
-    return null;
+  function mcSlotIndex(dayNum, contentType, weeklySchedule) {
+    const DN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const target = new Date(year, month, dayNum);
+    let count = 0;
+    const cur = new Date(year, month, 1);
+    while (cur <= target) {
+      count += weeklySchedule.filter(s => s.day === DN[cur.getDay()] && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1;
   }
 
-  function dayTasks(day) {
-    return filtered.filter(t => {
-      const dl = getApprovedDate(t);
-      if (!dl) return false;
-      return dl.getFullYear() === year && dl.getMonth() === month && dl.getDate() === day;
+  const tasksByDay = (() => {
+    const result = {};
+    const DN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const taskGroups = {};
+    tasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      const ct  = t.contentType || "__unknown";
+      if (!taskGroups[bId]) taskGroups[bId] = {};
+      if (!taskGroups[bId][ct]) taskGroups[bId][ct] = [];
+      taskGroups[bId][ct].push(t);
     });
-  }
-
-  const STATUS_COLOR_MAP = {
-    todo: "#9CA3AF", in_progress: "#3B82F6", review: "#F59E0B",
-    completed: "#10B981", blocked: "#EF4444",
-  };
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")))
+    );
+    const brandsToUse = brands;
+    brandsToUse.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+      for (let day = 1; day <= daysInMon; day++) {
+        const dayLabel = DN[new Date(year, month, day).getDay()];
+        schedule.filter(s => s.day === dayLabel).forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct];
+          if (!ctTasks || !ctTasks.length) return;
+          const idx = mcSlotIndex(day, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+          const dlvrKey = MC_DLVR[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+          if (!result[day]) result[day] = [];
+          result[day].push(ctTasks[idx]);
+        });
+      }
+    });
+    return result;
+  })();
 
   return (
     <div>
       <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} />
 
-      {/* Brand filter */}
+      {/* Brand dropdown */}
       {brands.length > 0 && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px" }}>Brand:</span>
-          <div onClick={() => setBrandFilter("")}
-            style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", background: !brandFilter ? "#4F46E5" : "#fff", color: !brandFilter ? "#fff" : "#374151", borderColor: !brandFilter ? "#4F46E5" : "#E5E7EB" }}>
-            All
-          </div>
-          {brands.map(b => (
-            <div key={b._id} onClick={() => setBrandFilter(brandFilter === b._id ? "" : b._id)}
-              style={{ padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", display: "flex", alignItems: "center", gap: 5, background: brandFilter === b._id ? b.color || "#4F46E5" : "#fff", color: brandFilter === b._id ? "#fff" : "#374151", borderColor: brandFilter === b._id ? b.color || "#4F46E5" : "#E5E7EB" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: brandFilter === b._id ? "#fff" : b.color, display: "inline-block" }} />{b.name}
-            </div>
-          ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", flexShrink: 0 }}>Brand:</span>
+          <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
+            style={{ padding: "7px 12px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 13, fontWeight: 600, outline: "none", background: "#fff", color: "#1E293B", cursor: "pointer", minWidth: 160 }}>
+            {brands.map(b => <option key={b._id} value={String(b._id)}>{b.name}</option>)}
+          </select>
+          {/* Colour dot for selected brand */}
+          {(() => { const sel = brands.find(b => String(b._id) === brandFilter); return sel ? <span style={{ width: 10, height: 10, borderRadius: "50%", background: sel.color || "#6366F1", display: "inline-block", flexShrink: 0 }} /> : null; })()}
         </div>
       )}
 
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+          <span key={l+"a"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Assigned
+          </span>,
+          <span key={l+"d"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Approved
+          </span>,
+        ])}
+        <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+          <span style={{ width:18, height:12, borderRadius:3, background:"#F8FAFC", border:"1px dashed #D1D5DB", display:"inline-block" }} />Scheduled (plan)
+        </span>
+      </div>
+
       <div className="tms-card" style={{ padding: 0, overflow: "hidden" }}>
-        {/* Calendar header */}
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #F0F0F0" }}>
-          <button onClick={() => { setCur(new Date(year, month - 1, 1)); setDayPanel(null); }} style={{ background: "#F3F4F6", border: "none", borderRadius: 7, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={prevMonth} style={{ background: "#F3F4F6", border: "none", borderRadius: 7, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="bi bi-chevron-left" />
           </button>
           <span style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: 16 }}>{monthName}</span>
-          <button onClick={() => { setCur(new Date(year, month + 1, 1)); setDayPanel(null); }} style={{ background: "#F3F4F6", border: "none", borderRadius: 7, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={nextMonth} style={{ background: "#F3F4F6", border: "none", borderRadius: 7, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <i className="bi bi-chevron-right" />
           </button>
         </div>
 
-        {/* Day headers */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid #F3F4F6" }}>
-          {DAY_HEADS.map(d => (
-            <div key={d} style={{ padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#9CA3AF" }}>{d}</div>
-          ))}
-        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}><div className="spinner-border spinner-border-sm text-primary" /></div>
+        ) : (
+          <>
+            {/* Day headers */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid #F3F4F6" }}>
+              {DAY_HEADS.map(d => (
+                <div key={d} style={{ padding: "9px 0", textAlign: "center", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#9CA3AF" }}>{d}</div>
+              ))}
+            </div>
 
-        {/* Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-          {cells.map((day, i) => {
-            if (!day) return <div key={`e${i}`} style={{ minHeight: 90, borderBottom: "1px solid #F9F9F9", borderRight: "1px solid #F9F9F9" }} />;
-            const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-            const dt = dayTasks(day);
-            const hasTasks = dt.length > 0;
-            return (
-              <div key={day}
-                onClick={() => hasTasks && setDayPanel({ day, tasks: dt })}
-                style={{ minHeight: 100, padding: "7px 6px", borderBottom: "1px solid #F9F9F9", borderRight: "1px solid #F9F9F9", background: isToday ? "#FFFBEB" : hasTasks ? "#FAFBFF" : "#fff", cursor: hasTasks ? "pointer" : "default", transition: "background .1s" }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", marginBottom: 5, display: "flex", alignItems: "center", justifyContent: "center", background: isToday ? "#D97706" : "transparent", fontSize: 12, fontWeight: isToday ? 800 : 400, color: isToday ? "#fff" : "#374151" }}>{day}</div>
-                {dt.slice(0, 3).map(t => {
-                  const od  = (() => { const dl = getStageDeadline(t); return dl ? isOverdue(dl) && t.status !== "completed" : false; })();
-                  const sty = od ? { bg:"#FEE2E2", border:"#DC2626", color:"#DC2626" } : getTaskStageStyle(t);
-                  return (
-                    <div key={t._id}
-                      onClick={e => { e.stopPropagation(); setSelectedTask(t); }}
-                      title={`${t.nomenclature || t.title}\n${t.brandId?.name || ""}`}
-                      style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, marginBottom: 3, background: sty.bg, color: sty.color, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer", border:`1px solid ${sty.border}`, borderLeft:`3px solid ${sty.border}` }}>
-                      {od && "⚠ "}{t.contentType ? `[${t.contentType}] ` : ""}{t.nomenclature || t.title}
-                    </div>
-                  );
-                })}
-                {dt.length > 3 && (
-                  <div style={{ fontSize: 9, color: "#9CA3AF", fontWeight: 600 }}>+{dt.length - 3} more</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+            {/* Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+              {cells.map((day, i) => {
+                if (!day) return <div key={`e${i}`} style={{ minHeight: 90, borderBottom: "1px solid #F9F9F9", borderRight: "1px solid #F9F9F9" }} />;
+                const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+                const dt = tasksByDay[day] || [];
+
+                // Planned slots (only when brand is selected)
+                const selBrand = brandFilter ? brands.find(b => String(b._id) === brandFilter) : null;
+                let unfilledSlots = [];
+                if (selBrand) {
+                  const DN2 = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                  const dl2 = DN2[new Date(year, month, day).getDay()];
+                  const sc2 = (selBrand.weeklySchedule || []).filter(s => s.day === dl2);
+                  const rem = {};
+                  dt.forEach(t => { rem[t.contentType] = (rem[t.contentType] || 0) + 1; });
+                  unfilledSlots = sc2.reduce((acc, slot) => {
+                    const ct = slot.contentType;
+                    const slotIdx = mcSlotIndex(day, ct, selBrand.weeklySchedule || []);
+                    const dlvrKey = MC_DLVR[ct];
+                    if (dlvrKey) {
+                      const limit = selBrand.monthlyDeliverables?.[dlvrKey];
+                      if (limit != null && slotIdx >= limit) return acc;
+                    }
+                    if ((rem[ct] || 0) > 0) { rem[ct]--; return acc; }
+                    acc.push({ ...slot, slotIdx });
+                    return acc;
+                  }, []);
+                }
+
+                const preview   = dt.slice(0, 3);
+                const extraTask = dt.length - preview.length;
+                const slotsShow = unfilledSlots.slice(0, Math.max(0, 3 - preview.length));
+                const extraSlot = unfilledSlots.length - slotsShow.length;
+
+                return (
+                  <div key={day}
+                    onClick={() => dt.length > 0 && setDayPanel({ day, tasks: dt })}
+                    style={{ minHeight: 100, padding: "7px 6px", borderBottom: "1px solid #F9F9F9", borderRight: "1px solid #F9F9F9", background: isToday ? "#FFFBEB" : "#fff", cursor: dt.length > 0 ? "pointer" : "default" }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", marginBottom: 5, display: "flex", alignItems: "center", justifyContent: "center", background: isToday ? "#D97706" : "transparent", fontSize: 12, fontWeight: isToday ? 800 : 400, color: isToday ? "#fff" : "#374151" }}>{day}</div>
+                    {preview.map(t => {
+                      const ct  = WT_CONTENT_META[t.contentType] || {};
+                      const sty = getTaskStageStyle(t);
+                      const nom = t.nomenclature || t.title || "";
+                      const ctL = (t.contentType || "").toLowerCase();
+                      let sfx = nom.toLowerCase().startsWith(ctL) ? nom.slice(ctL.length).trim() : nom;
+                      sfx = sfx.replace(/\b[a-z]/g, c => c.toUpperCase());
+                      const lbl = sfx ? `${ct.label||t.contentType} ${sfx}` : (ct.label||nom);
+                      return (
+                        <div key={t._id} onClick={e => { e.stopPropagation(); setSelectedTask(t); }} title={nom}
+                          style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, marginBottom: 3, background: sty.bg, color: sty.color, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", cursor: "pointer", border:`1.5px solid ${sty.border}`, display:"flex", alignItems:"center", gap:3 }}>
+                          {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:9, flexShrink:0 }} />}{lbl}
+                        </div>
+                      );
+                    })}
+                    {extraTask > 0 && <div style={{ fontSize: 9, color: "#9CA3AF", fontWeight: 600, cursor:"pointer" }} onClick={e => { e.stopPropagation(); setDayPanel({ day, tasks: dt }); }}>+{extraTask} more</div>}
+                    {slotsShow.map((slot, si) => {
+                      const ct = WT_CONTENT_META[slot.contentType] || {};
+                      return (
+                        <div key={`ps${si}`}
+                          style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, marginBottom: 3, background: "#F8FAFC", color: "#94A3B8", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", border: "1px dashed #D1D5DB", display:"flex", alignItems:"center", gap:3 }}>
+                          {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:9, flexShrink:0 }} />}
+                          {`${ct.label||slot.contentType} ${slot.slotIdx+1} ${mcMonLabel}`}
+                        </div>
+                      );
+                    })}
+                    {extraSlot > 0 && <div style={{ fontSize: 9, color: "#94A3B8", fontWeight: 600 }}>+{extraSlot} planned</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Day panel — shows all tasks for selected day with content preview */}
+      {/* Day panel — click a day to see all tasks */}
       {dayPanel && (
         <div className="tms-card" style={{ marginTop: 16, padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "12px 18px", background: "#F9FAFB", borderBottom: "1px solid #F0F0F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1478,21 +1687,17 @@ function MyCalendarTab({ tasks }) {
           {dayPanel.tasks.map(t => {
             const brandColor = t.brandId?.color || "#7C3AED";
             const sm = STATUS_MAP[t.status] || STATUS_MAP.todo;
-            const od = (() => { const dl = getStageDeadline(t); return dl ? isOverdue(dl) && t.status !== "completed" : false; })();
             return (
-              <div key={t._id} style={{ padding: "14px 18px", borderBottom: "1px solid #F9F9F9", cursor: "pointer" }}
-                onClick={() => setSelectedTask(t)}>
+              <div key={t._id} style={{ padding: "14px 18px", borderBottom: "1px solid #F9F9F9", cursor: "pointer" }} onClick={() => setSelectedTask(t)}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  {/* Brand colour strip */}
                   <div style={{ width: 4, borderRadius: 4, background: brandColor, alignSelf: "stretch", flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>{t.nomenclature || t.title}</span>
                       {t.contentType && <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 4, background: brandColor + "20", color: brandColor, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>}
                       <span className={`tms-badge ${sm.cls}`} style={{ fontSize: 10 }}>{sm.label}</span>
-                      {od && <span style={{ fontSize: 10, fontWeight: 800, background: "#FEE2E2", color: "#DC2626", borderRadius: 20, padding: "1px 7px" }}>OVERDUE</span>}
                     </div>
-                    {t.brandId && <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}><i className="bi bi-building me-1" />{t.brandId.name}</div>}
+                    {t.brandId && <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}><i className="bi bi-building me-1" />{typeof t.brandId === "object" ? t.brandId.name : ""}</div>}
                     {t.pillar && <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 4 }}><i className="bi bi-tag me-1" />{t.pillar}</div>}
                     {t.description ? (
                       <div style={{ fontSize: 12, color: "#374151", background: "#F8FAFC", borderRadius: 8, padding: "8px 10px", lineHeight: 1.6, maxHeight: 80, overflowY: "auto", whiteSpace: "pre-wrap" }}>
@@ -3052,43 +3257,108 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 // ─── PORTAL THIS WEEK VIEW ────────────────────────────────────────────────────
 function PortalThisWeekView() {
   const [weekOffset, setWeekOffset] = useState(0);
-  const [wtBrands,     setWtBrands]     = useState([]);
-  const [wtTasks,      setWtTasks]      = useState([]);
-  const [wtLoading,    setWtLoading]    = useState(true);
-  const [brandFilter,  setBrandFilter]  = useState("");
+  const [wtBrands,    setWtBrands]   = useState([]);
+  const [wtTasks,     setWtTasks]    = useState([]);
+  const [wtLoading,   setWtLoading]  = useState(true);
+  const [brandFilter, setBrandFilter] = useState("");
 
-  const weekDates = getWTWeekDates(weekOffset);
-  const weekStart = weekDates[0].date;
-  const weekEnd   = weekDates[6].date;
+  const weekDates     = getWTWeekDates(weekOffset);
+  const weekStart     = weekDates[0].date;
+  const weekEnd       = weekDates[6].date;
   const isCurrentWeek = weekOffset === 0;
-  const weekLabel = `${fmtWTShort(weekStart)} — ${fmtWTShort(weekEnd)}`;
+  const weekLabel     = `${fmtWTShort(weekStart)} — ${fmtWTShort(weekEnd)}`;
 
   useEffect(() => {
     setWtLoading(true);
-    const start = new Date(weekStart); start.setHours(0,0,0,0);
-    const end   = new Date(weekEnd);   end.setHours(23,59,59,999);
-    const q = new URLSearchParams({ dateStart: start.toISOString(), dateEnd: end.toISOString() });
+    // Fetch the full month(s) so slot-index placement has the correct picture
+    const firstDay   = weekDates[0].date;
+    const lastDay    = weekDates[6].date;
+    const monthStart = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1);
+    const monthEnd   = new Date(lastDay.getFullYear(),  lastDay.getMonth() + 1, 0, 23, 59, 59, 999);
+    const q = new URLSearchParams({ dateStart: monthStart.toISOString(), dateEnd: monthEnd.toISOString() });
     fetch(`/api/employee/weekly-tracker?${q}`, { headers: authH() })
       .then(r => r.json())
-      .then(d => { if (d.success) { setWtBrands(d.brands || []); setWtTasks(d.tasks || []); } })
+      .then(d => {
+        if (d.success) {
+          const bs = d.brands || [];
+          setWtBrands(bs);
+          setWtTasks(d.tasks || []);
+          setBrandFilter(prev => {
+            if (prev && bs.find(b => b._id?.toString() === prev)) return prev;
+            const viralon = bs.find(b => /viralon/i.test(b.name));
+            return String(viralon?._id || bs[0]?._id || "");
+          });
+        }
+      })
       .catch(() => {})
       .finally(() => setWtLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
-  const getScheduled = (brand, dayLabel) =>
-    (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
+  // 0-based: how many times contentType was scheduled from month-start up to date
+  function pwMonthSlotIndex(date, contentType, weeklySchedule) {
+    const DAY = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= date) {
+      count += weeklySchedule.filter(s => s.day === DAY[cur.getDay()] && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1;
+  }
 
-  // Group portal weekly tasks by brandId → dateString
-  const portalTasksByBrandDay = {};
-  wtTasks.forEach(t => {
-    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
-    if (!dateKey || !t.brandId) return;
-    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
-    if (!portalTasksByBrandDay[bId]) portalTasksByBrandDay[bId] = {};
-    if (!portalTasksByBrandDay[bId][dateKey]) portalTasksByBrandDay[bId][dateKey] = [];
-    portalTasksByBrandDay[bId][dateKey].push(t);
-  });
+  const PW_DLVR = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+  const PW_MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // Group tasks by brand → contentType → monthKey, sorted by taskId
+  const portalTasksByBrandDay = (() => {
+    const result     = {};
+    const taskGroups = {};
+    wtTasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      const ct  = t.contentType || "__unknown";
+      const d   = t.dueDate ? new Date(t.dueDate) : t.scheduledFor ? new Date(t.scheduledFor) : t.createdAt ? new Date(t.createdAt) : null;
+      if (!d) return;
+      const mk = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!taskGroups[bId])         taskGroups[bId] = {};
+      if (!taskGroups[bId][ct])     taskGroups[bId][ct] = {};
+      if (!taskGroups[bId][ct][mk]) taskGroups[bId][ct][mk] = [];
+      taskGroups[bId][ct][mk].push(t);
+    });
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(byMonth =>
+        Object.values(byMonth).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")))
+      )
+    );
+    wtBrands.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+      if (!schedule.length) return;
+      weekDates.forEach(({ label, date }) => {
+        const mk = `${date.getFullYear()}-${date.getMonth()}`;
+        schedule.filter(s => s.day === label).forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct]?.[mk];
+          if (!ctTasks || !ctTasks.length) return;
+          const idx = pwMonthSlotIndex(date, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+          const dlvrKey = PW_DLVR[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+          const dateKey = date.toDateString();
+          if (!result[bId]) result[bId] = {};
+          if (!result[bId][dateKey]) result[bId][dateKey] = [];
+          result[bId][dateKey].push(ctTasks[idx]);
+        });
+      });
+    });
+    return result;
+  })();
 
   const displayBrands = brandFilter ? wtBrands.filter(b => b._id?.toString() === brandFilter) : wtBrands;
 
@@ -3120,13 +3390,27 @@ function PortalThisWeekView() {
           )}
         </div>
         <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
-          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, background:"#fff", color:"#374151", outline:"none", fontFamily:"inherit" }}>
-          <option value="">All Brands</option>
+          style={{ padding:"6px 10px", borderRadius:8, border:"1.5px solid #E5E7EB", fontSize:12, fontWeight:600, background:"#fff", color:"#374151", outline:"none", fontFamily:"inherit" }}>
           {wtBrands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
         </select>
       </div>
 
-      {/* Weekly tracker table */}
+      {/* Legend */}
+      <div style={{ display:"flex", gap:10, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
+        {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+          <span key={l+"a"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Assigned
+          </span>,
+          <span key={l+"d"} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+            <span style={{ width:18, height:12, borderRadius:3, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l} Approved
+          </span>,
+        ])}
+        <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+          <span style={{ width:18, height:12, borderRadius:3, background:"#F8FAFC", border:"1.5px dashed #D1D5DB", display:"inline-block" }} />Scheduled (plan)
+        </span>
+      </div>
+
+      {/* Table */}
       {wtLoading ? (
         <div style={{ textAlign:"center", padding:32, color:"#94A3B8" }}><div className="spinner-border spinner-border-sm text-primary" /></div>
       ) : displayBrands.length === 0 ? (
@@ -3157,39 +3441,59 @@ function PortalThisWeekView() {
                       <div style={{ width:6, height:30, borderRadius:4, background:brand.color||"#6366F1", flexShrink:0 }} />
                       <div>
                         <div style={{ fontWeight:700, fontSize:12, color:"#1E293B" }}>{brand.name}</div>
-                        <div style={{ fontSize:10, color:"#94A3B8" }}>{(brand.weeklySchedule||[]).length} post/wk</div>
+                        <div style={{ fontSize:10, color:"#1E293B" }}>{(brand.weeklySchedule||[]).length} post/wk</div>
                       </div>
                     </div>
                   </td>
                   {weekDates.map(({ label, date }) => {
-                    const isToday   = date.toDateString() === new Date().toDateString();
-                    const scheduled = getScheduled(brand, label);
-                    const bId       = String(brand._id);
-                    const dayT      = portalTasksByBrandDay[bId]?.[date.toDateString()] || [];
+                    const isToday  = date.toDateString() === new Date().toDateString();
+                    const bId      = String(brand._id);
+                    const dayTasks = portalTasksByBrandDay[bId]?.[date.toDateString()] || [];
+                    const monLabel = `${PW_MON[date.getMonth()]}'${String(date.getFullYear()).slice(2)}`;
+                    const scheduled = (brand.weeklySchedule || []).filter(s => s.day === label);
+                    const rem = {};
+                    dayTasks.forEach(t => { rem[t.contentType] = (rem[t.contentType] || 0) + 1; });
+                    const unfilledSlots = scheduled.reduce((acc, slot) => {
+                      const ct = slot.contentType;
+                      const slotIdx = pwMonthSlotIndex(date, ct, brand.weeklySchedule || []);
+                      const dlvrKey = PW_DLVR[ct];
+                      if (dlvrKey) {
+                        const limit = brand.monthlyDeliverables?.[dlvrKey];
+                        if (limit != null && slotIdx >= limit) return acc;
+                      }
+                      if ((rem[ct] || 0) > 0) { rem[ct]--; return acc; }
+                      acc.push({ ...slot, slotIdx });
+                      return acc;
+                    }, []);
                     return (
-                      <td key={label} style={{ padding:"6px 4px", verticalAlign:"top", background:isToday?"#F5F3FF":"transparent", minWidth:80 }}>
-                        {dayT.map(t => {
+                      <td key={label} style={{ padding:"6px 4px", verticalAlign:"top", background:isToday?"#F5F3FF":"transparent", minWidth:90 }}>
+                        {dayTasks.map(t => {
                           const ct  = WT_CONTENT_META[t.contentType] || {};
                           const sty = getTaskStageStyle(t);
+                          const nom = t.nomenclature || t.title || "";
+                          const ctL = (t.contentType || "").toLowerCase();
+                          let sfx = nom.toLowerCase().startsWith(ctL) ? nom.slice(ctL.length).trim() : nom;
+                          sfx = sfx.replace(/\b[a-z]/g, c => c.toUpperCase());
+                          const lbl = sfx ? `${ct.label||t.contentType} ${sfx}` : (ct.label||t.contentType);
                           return (
                             <div key={t._id} style={{ borderRadius:7, padding:"3px 6px", marginBottom:3, fontSize:10, fontWeight:600, display:"flex", alignItems:"center", gap:3,
                               background:sty.bg, color:sty.color, border:`1.5px solid ${sty.border}` }}>
                               <i className={`bi ${ct.icon||"bi-list-task"}`} style={{ fontSize:9 }} />
-                              {ct.label||t.contentType||t.title?.slice(0,10)}
+                              {lbl}
                             </div>
                           );
                         })}
-                        {scheduled.map((slot, si) => {
+                        {unfilledSlots.map((slot, si) => {
                           const ct = WT_CONTENT_META[slot.contentType] || {};
                           return (
                             <div key={si} style={{ borderRadius:7, padding:"3px 6px", marginBottom:3, fontSize:10, fontWeight:700, display:"flex", alignItems:"center", gap:3,
                               background:"#F8FAFC", color:"#94A3B8", border:"1px dashed #D1D5DB" }}>
                               <i className={`bi ${ct.icon||"bi-dot"}`} style={{ fontSize:9 }} />
-                              {ct.label||slot.contentType}
+                              {`${ct.label||slot.contentType} ${slot.slotIdx+1} ${monLabel}`}
                             </div>
                           );
                         })}
-                        {scheduled.length === 0 && dayT.length === 0 && (
+                        {unfilledSlots.length === 0 && dayTasks.length === 0 && (
                           <div style={{ fontSize:10, color:"#E5E7EB", textAlign:"center", paddingTop:4 }}>—</div>
                         )}
                       </td>
@@ -3201,7 +3505,6 @@ function PortalThisWeekView() {
           </table>
         </div>
       )}
-
     </div>
   );
 }
@@ -3534,18 +3837,21 @@ function PortalCalendarView() {
     const q     = new URLSearchParams({ dateStart: start, dateEnd: end });
     if (brandFilter) q.set("brandId", brandFilter);
     setLoading(true);
-    fetch(`/api/employee/brand-tasks?${q}`, { headers: authH() })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          const taskList = d.tasks || [];
-          setTasks(taskList);
-          const seen = new Set(); const bs = [];
-          taskList.forEach(t => { if (t.brandId && !seen.has(t.brandId._id)) { seen.add(t.brandId._id); bs.push(t.brandId); } });
-          setBrands(prev => {
-            const all = [...prev, ...bs];
-            const u = new Map(all.map(b => [b._id, b]));
-            return [...u.values()];
+    // Fetch tasks AND brands with weeklySchedule in parallel (brands used for slot placement)
+    Promise.all([
+      fetch(`/api/employee/brand-tasks?${q}`, { headers: authH() }).then(r => r.json()),
+      fetch(`/api/employee/weekly-tracker?dateStart=${start}&dateEnd=${end}`, { headers: authH() }).then(r => r.json()),
+    ])
+      .then(([taskData, brandData]) => {
+        if (taskData.success) setTasks(taskData.tasks || []);
+        if (brandData.success) {
+          const bs = brandData.brands || [];
+          setBrands(bs);
+          // Auto-select Viralon, or first brand — never "All"
+          setBrandFilter(prev => {
+            if (prev && bs.find(b => String(b._id) === prev)) return prev;
+            const viralon = bs.find(b => /viralon/i.test(b.name));
+            return String(viralon?._id || bs[0]?._id || "");
           });
         }
       })
@@ -3559,24 +3865,69 @@ function PortalCalendarView() {
   const cells     = Array(offset).fill(null).concat(Array.from({ length: daysInMon }, (_, i) => i + 1));
   const DAY_HEADS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
-  function getTaskDate(t) {
-    if (t.scheduledFor) return new Date(t.scheduledFor);
-    if (t.dueDate)      return new Date(t.dueDate);
-    const s1 = t.stages?.[0];
-    if (s1?.deadline)  return new Date(s1.deadline);
-    if (s1?.doneAt)    return new Date(s1.doneAt);
-    if (t.submittedAt) return new Date(t.submittedAt);
-    if (t.updatedAt)   return new Date(t.updatedAt);
-    if (t.createdAt)   return new Date(t.createdAt);
-    return null;
+  function portalMonthSlotIndex(dayNum, contentType, weeklySchedule) {
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const target = new Date(year, month, dayNum);
+    const start  = new Date(year, month, 1);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= target) {
+      count += weeklySchedule.filter(s => s.day === DAY_NAMES[cur.getDay()] && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1;
   }
 
-  function dayTasks(day) {
-    return tasks.filter(t => {
-      const d = getTaskDate(t);
-      if (!d) return false;
-      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+  // Build tasksByDay using brand schedule slot index (mirrors admin calendar)
+  const _portalTasksByDay = (() => {
+    const result = {};
+    const daysInMon2 = new Date(year, month + 1, 0).getDate();
+    const DAY_NAMES  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+    // Group tasks by brand+contentType, sort by taskId
+    const taskGroups = {};
+    tasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      if (!taskGroups[bId]) taskGroups[bId] = {};
+      const ct = t.contentType || "__unknown";
+      if (!taskGroups[bId][ct]) taskGroups[bId][ct] = [];
+      taskGroups[bId][ct].push(t);
     });
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")))
+    );
+
+    const PC_DLVR = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+    // Use brand.weeklySchedule from the brands state (populated by brand-tasks API)
+    brands.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+      if (!schedule.length) return;
+      for (let day = 1; day <= daysInMon2; day++) {
+        const dayLabel = DAY_NAMES[new Date(year, month, day).getDay()];
+        schedule.filter(s => s.day === dayLabel).forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct];
+          if (!ctTasks || !ctTasks.length) return;
+          const idx = portalMonthSlotIndex(day, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+          const dlvrKey = PC_DLVR[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+          if (!result[day]) result[day] = [];
+          result[day].push(ctTasks[idx]);
+        });
+      }
+    });
+    return result;
+  })();
+
+  function dayTasks(day) {
+    return _portalTasksByDay[day] || [];
   }
 
   const prevMonth = () => { if (month===0){setYear(y=>y-1);setMonth(11);}else setMonth(m=>m-1); };
@@ -3590,15 +3941,14 @@ function PortalCalendarView() {
         <button onClick={prevMonth} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><i className="bi bi-chevron-left" style={{ color:"#374151" }} /></button>
         <div>
           <div style={{ fontWeight:800, fontSize:17, color:"#1e293b" }}>{CAL_MONTHS[month]} {year}</div>
-          <div style={{ fontSize:12, color:"#64748b" }}>{tasks.length} approved content task{tasks.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize:12, color:"#64748b" }}>{tasks.length} content task{tasks.length !== 1 ? "s" : ""}</div>
         </div>
         <button onClick={nextMonth} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}><i className="bi bi-chevron-right" style={{ color:"#374151" }} /></button>
         <button onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:600, color:"#374151" }}>Today</button>
         {brands.length > 0 && (
           <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
-            style={{ padding:"6px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontSize:12, outline:"none", background:"#fff", color:"#374151", marginLeft:"auto" }}>
-            <option value="">All Brands</option>
-            {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+            style={{ padding:"6px 10px", borderRadius:8, border:"1px solid #e2e8f0", fontSize:12, fontWeight:600, outline:"none", background:"#fff", color:"#374151", marginLeft:"auto" }}>
+            {brands.map(b => <option key={b._id} value={String(b._id)}>{b.name}</option>)}
           </select>
         )}
       </div>
@@ -3615,6 +3965,9 @@ function PortalCalendarView() {
         ])}
         <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
           <span style={{ width:18, height:12, borderRadius:3, background:"#F1F5F9", border:"1.5px solid #D1D5DB", display:"inline-block" }} />No stage
+        </span>
+        <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+          <span style={{ width:18, height:12, borderRadius:3, background:"#F8FAFC", border:"1px dashed #D1D5DB", display:"inline-block" }} />Scheduled (plan)
         </span>
       </div>
 
@@ -3634,20 +3987,65 @@ function PortalCalendarView() {
               if (!day) return <div key={`e${i}`} style={{ minHeight:90, borderBottom:"1px solid #f9f9f9", borderRight:"1px solid #f9f9f9", background:"#FAFAFA" }} />;
               const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===day;
               const dt = dayTasks(day);
+              // Planned slots: only when a brand is selected, capped by monthly deliverable
+              const PC_DLVR2 = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+              const PC_MON   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+              const pcMonLabel = `${PC_MON[month]}'${String(year).slice(2)}`;
+              const selBrand = brandFilter ? brands.find(b => String(b._id) === brandFilter) : null;
+              let unfilledSlots = [];
+              if (selBrand) {
+                const DAY_NAMES2 = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                const dayLabel2  = DAY_NAMES2[new Date(year, month, day).getDay()];
+                const scheduled2 = (selBrand.weeklySchedule || []).filter(s => s.day === dayLabel2);
+                const rem2 = {};
+                dt.forEach(t => { rem2[t.contentType] = (rem2[t.contentType] || 0) + 1; });
+                unfilledSlots = scheduled2.reduce((acc, slot) => {
+                  const ct = slot.contentType;
+                  const slotIdx = portalMonthSlotIndex(day, ct, selBrand.weeklySchedule || []);
+                  const dlvrKey = PC_DLVR2[ct];
+                  if (dlvrKey) {
+                    const limit = selBrand.monthlyDeliverables?.[dlvrKey];
+                    if (limit != null && slotIdx >= limit) return acc;
+                  }
+                  if ((rem2[ct] || 0) > 0) { rem2[ct]--; return acc; }
+                  acc.push({ ...slot, slotIdx });
+                  return acc;
+                }, []);
+              }
+              const preview   = dt.slice(0, 3);
+              const extraTask = dt.length - preview.length;
+              const slotsShow = unfilledSlots.slice(0, Math.max(0, 3 - preview.length));
+              const extraSlot = unfilledSlots.length - slotsShow.length;
               return (
                 <div key={day} style={{ minHeight:90, padding:"7px 6px", borderBottom:"1px solid #f9f9f9", borderRight:"1px solid #f9f9f9", background:isToday?"#FFFBEB":"#fff" }}>
                   <div style={{ width:26, height:26, borderRadius:"50%", marginBottom:5, display:"flex", alignItems:"center", justifyContent:"center", background:isToday?"#5A57FB":"transparent", fontSize:12, fontWeight:isToday?800:400, color:isToday?"#fff":"#374151" }}>{day}</div>
-                  {dt.slice(0,3).map(t => {
-                    const ct  = CAL_CTYPE[t.contentType];
+                  {preview.map(t => {
+                    const ct  = CAL_CTYPE[t.contentType] || {};
                     const sty = getTaskStageStyle(t);
+                    const nom = t.nomenclature || t.title || "";
+                    const ctLower = (t.contentType || "").toLowerCase();
+                    let suffix = nom.toLowerCase().startsWith(ctLower) ? nom.slice(ctLower.length).trim() : nom;
+                    suffix = suffix.replace(/\b[a-z]/g, c => c.toUpperCase());
+                    const label = suffix ? `${ct.label||t.contentType} ${suffix}` : (ct.label||nom);
                     return (
-                      <div key={t._id} onClick={() => setSelectedTask(t)} title={t.nomenclature||t.title}
-                        style={{ fontSize:10, padding:"2px 5px", borderRadius:4, marginBottom:2, background:sty.bg, color:sty.color, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"pointer", border:`1px solid ${sty.border}`, borderLeft:`3px solid ${sty.border}` }}>
-                        {ct && <i className={`bi ${ct.icon}`} style={{ marginRight:2, fontSize:9 }} />}{t.nomenclature||t.title}
+                      <div key={t._id} onClick={() => setSelectedTask(t)} title={nom}
+                        style={{ fontSize:10, padding:"2px 5px", borderRadius:4, marginBottom:2, background:sty.bg, color:sty.color, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"pointer", border:`1.5px solid ${sty.border}`, display:"flex", alignItems:"center", gap:3 }}>
+                        {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:9, flexShrink:0 }} />}{label}
                       </div>
                     );
                   })}
-                  {dt.length>3 && <div style={{ fontSize:9, color:"#5A57FB", fontWeight:700, cursor:"pointer" }} onClick={() => setSelectedTask(dt[3])}>+{dt.length-3} more</div>}
+                  {extraTask > 0 && <div style={{ fontSize:9, color:"#5A57FB", fontWeight:700, cursor:"pointer" }} onClick={() => setSelectedTask(dt[3])}>+{extraTask} more</div>}
+                  {slotsShow.map((slot, si) => {
+                    const ct = CAL_CTYPE[slot.contentType] || {};
+                    return (
+                      <div key={`ps${si}`}
+                        style={{ fontSize:10, padding:"2px 5px", borderRadius:4, marginBottom:2, background:"#F8FAFC", color:"#94A3B8", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", border:"1px dashed #D1D5DB", display:"flex", alignItems:"center", gap:3 }}>
+                        {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:9, flexShrink:0 }} />}
+                        {`${ct.label||slot.contentType} ${slot.slotIdx+1} ${pcMonLabel}`}
+                      </div>
+                    );
+                  })}
+                  {extraSlot > 0 && <div style={{ fontSize:9, color:"#94A3B8", fontWeight:700 }}>+{extraSlot} planned</div>}
                 </div>
               );
             })}
@@ -3915,7 +4313,7 @@ export default function EmployeeTasksDashboard() {
             {activeTab === "brandcal"    && <BrandCalendarTab tasks={tasks} />}
             {activeTab === "calendar"    && <BrandCalendarTab tasks={tasks} />}
             {activeTab === "weekly"      && <WeeklyTrackerTab />}
-            {activeTab === "mycal"       && <MyCalendarTab    tasks={tasks} />}
+            {activeTab === "mycal"       && <MyCalendarTab />}
             {activeTab === "library"     && <ScriptLibraryTab tasks={tasks} />}
             {activeTab === "submissions" && <SubmissionsTab   tasks={tasks} />}
             {activeTab === "queue"       && <QueueTab         tasks={tasks} role={role} />}

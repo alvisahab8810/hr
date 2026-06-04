@@ -1,5 +1,5 @@
 // pages/employee/dashboard.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Dashnav from "@/components/Dashnav";
@@ -106,6 +106,120 @@ export default function EmployeeDashboard() {
   const [tasks,              setTasks]              = useState([]);
   const [loadingTasks,       setLoadingTasks]       = useState(true);
 
+  // ── Tea Time ──────────────────────────────────────────────────────────────
+  const TEA_H = 16, TEA_M_START = 30, TEA_M_END = 45;
+  const [teaStatus,    setTeaStatus]    = useState("idle");
+  const [teaRemaining, setTeaRemaining] = useState(0);
+  const [teaCountdown, setTeaCountdown] = useState(0);
+  const audioCtxRef    = useRef(null);
+  const audioBufferRef = useRef(null);
+  const scheduledRef   = useRef(false); // prevent double-scheduling per day
+
+  // ── Pre-load MP3 + schedule via AudioContext (works in background/pinned tabs) ──
+  const scheduleTeaMusic = useRef(async () => {
+    if (typeof window === "undefined" || scheduledRef.current) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      // Create/resume context (requires prior user gesture — login click counts)
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+
+      // Fetch & decode MP3 once
+      if (!audioBufferRef.current) {
+        const resp = await fetch("/sounds/team-time-music.mp3");
+        const raw  = await resp.arrayBuffer();
+        audioBufferRef.current = await ctx.decodeAudioData(raw);
+      }
+
+      const now      = new Date();
+      const teaStart = new Date();
+      teaStart.setHours(TEA_H, TEA_M_START, 0, 0);
+      const teaEnd   = new Date();
+      teaEnd.setHours(TEA_H, TEA_M_END, 0, 0);
+
+      const secsUntil  = (teaStart - now) / 1000;
+      const secsPassed = (now - teaStart) / 1000;
+
+      // Only schedule if tea time is today and hasn't ended yet
+      if (now >= teaEnd) return;
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBufferRef.current;
+      const gain = ctx.createGain();
+      gain.gain.value = 1.0; // 100% volume
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (secsUntil > 0) {
+        // Schedule for exact future 4:30:00 PM
+        source.start(ctx.currentTime + secsUntil);
+      } else if (secsPassed >= 0 && secsPassed < (TEA_M_END - TEA_M_START) * 60) {
+        // Page loaded mid-tea-time — play immediately
+        source.start();
+      }
+
+      scheduledRef.current = true;
+
+      // Reset at midnight so next day it re-schedules
+      const msToMidnight = new Date().setHours(24,0,0,0) - Date.now();
+      setTimeout(() => { scheduledRef.current = false; }, msToMidnight);
+
+    } catch (e) {
+      console.log("Tea music scheduling failed:", e);
+    }
+  });
+
+  // ── Trigger scheduling on first user interaction (unlocks AudioContext) ──
+  useEffect(() => {
+    const unlock = () => {
+      scheduleTeaMusic.current();
+      window.removeEventListener("click",   unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+    window.addEventListener("click",      unlock, { once: true });
+    window.addEventListener("keydown",    unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+
+    // Also try immediately in case context is already unlocked (page navigated from another)
+    scheduleTeaMusic.current();
+
+    return () => {
+      window.removeEventListener("click",      unlock);
+      window.removeEventListener("keydown",    unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
+  // ── UI tick: update banner state every second ──────────────────────────────
+  useEffect(() => {
+    const tick = () => {
+      const now    = new Date();
+      const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+      const nowSec   = h * 3600 + m * 60 + s;
+      const startSec = TEA_H * 3600 + TEA_M_START * 60;
+      const endSec   = TEA_H * 3600 + TEA_M_END   * 60;
+
+      if (nowSec >= startSec && nowSec < endSec) {
+        setTeaStatus("active");
+        setTeaRemaining(endSec - nowSec);
+      } else if (nowSec >= startSec - 15 * 60 && nowSec < startSec) {
+        setTeaStatus("upcoming");
+        setTeaCountdown(startSec - nowSec);
+      } else {
+        setTeaStatus("idle");
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // ── Employee — redirect to login if not authenticated ─────────────────────
   useEffect(() => {
     const token = localStorage.getItem("employeeToken");
@@ -208,6 +322,11 @@ export default function EmployeeDashboard() {
 
   const completion = calcCompletion(employee);
   const name       = employee ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim() : "";
+
+  const fmtCountdown = (secs) => {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  };
 
   if (!employee) return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh" }}>
@@ -378,12 +497,106 @@ export default function EmployeeDashboard() {
             flex-wrap:wrap; gap:10px; margin-bottom:20px;
           }
 
-          /* Responsive tweaks */
+          /* ── Tea Time Card ── */
+          .tea-card {
+            background: #fff; border-radius: 16px; margin-bottom: 20px;
+            border: 1.5px solid #EDE9F8; overflow: hidden;
+            box-shadow: 0 2px 12px rgba(44,34,105,.08);
+          }
+          .tea-card-accent { height: 4px; background: linear-gradient(90deg,#2C2269,#4F46E5,#2563EB); }
+          .tea-card-body {
+            padding: 14px 16px;
+            display: flex; align-items: center; gap: 12px;
+          }
+          .tea-card-icon {
+            width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+            background: linear-gradient(135deg,#2C2269,#4F46E5);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 3px 10px rgba(44,34,105,.25);
+          }
+          .tea-card-icon i { font-size: 18px; color: #fff; }
+          .tea-card-content { flex: 1; min-width: 0; }
+          .tea-card-eyebrow {
+            font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+            color: #9CA3AF; text-transform: uppercase; margin-bottom: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          }
+          .tea-card-title {
+            font-size: 13.5px; font-weight: 800; color: #1e1b4b;
+            margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          }
+          .tea-card-sub { font-size: 11.5px; color: #6B7280; line-height: 1.4; }
+          .tea-card-badge {
+            flex-shrink: 0; background: #EDE9F8; border-radius: 10px;
+            padding: 8px 12px; text-align: center; border: 1px solid #C4B5FD;
+            min-width: 70px;
+          }
+          .tea-card-badge-time { font-size: 12px; font-weight: 800; color: #2C2269; line-height: 1.35; }
+          .tea-card-badge-label { font-size: 9.5px; color: #9CA3AF; font-weight: 600; margin-top: 2px; }
+
+          /* Active state — brand dark gradient */
+          .tea-active {
+            border-radius: 16px; margin-bottom: 20px; overflow: hidden;
+            box-shadow: 0 8px 28px rgba(44,34,105,.28);
+          }
+          .tea-active-inner {
+            background: linear-gradient(135deg,#1e1b4b 0%,#2C2269 45%,#2563EB 100%);
+            padding: 20px 24px; display: flex; align-items: center; gap: 18px;
+            flex-wrap: wrap; position: relative; overflow: hidden;
+          }
+          .tea-active-inner::before {
+            content:""; position:absolute; top:-50px; right:-50px;
+            width:180px; height:180px; border-radius:50%;
+            background:rgba(255,255,255,.05); pointer-events:none;
+          }
+          .tea-active-icon {
+            width: 54px; height: 54px; border-radius: 16px; flex-shrink: 0;
+            background: rgba(255,255,255,.15); border: 1.5px solid rgba(255,255,255,.25);
+            display: flex; align-items: center; justify-content: center;
+            animation: teaPulse 2s ease-in-out infinite;
+          }
+          .tea-active-icon i { font-size: 22px; color: #fff; }
+          @keyframes teaPulse {
+            0%,100% { transform:scale(1);   box-shadow:0 0 0 0   rgba(255,255,255,.2); }
+            50%     { transform:scale(1.04); box-shadow:0 0 0 8px rgba(255,255,255,.0); }
+          }
+          .tea-active-info { flex: 1; min-width: 0; }
+          .tea-active-eyebrow { font-size:10px; font-weight:800; letter-spacing:.14em; color:rgba(255,255,255,.6); text-transform:uppercase; margin-bottom:3px; }
+          .tea-active-title  { font-size:19px; font-weight:900; color:#fff; margin-bottom:4px; }
+          .tea-active-sub    { font-size:12.5px; color:rgba(255,255,255,.7); line-height:1.5; }
+          .tea-timer-block   { flex-shrink:0; text-align:center; }
+          .tea-timer-eyebrow { font-size:10px; font-weight:700; color:rgba(255,255,255,.55); letter-spacing:.08em; margin-bottom:6px; }
+          .tea-timer-digits  {
+            background:rgba(0,0,0,.3); border-radius:12px; padding:9px 18px;
+            font-family:monospace; font-size:26px; font-weight:900;
+            color:#C7D2FE; letter-spacing:3px;
+            border:1px solid rgba(255,255,255,.12);
+          }
+
+          /* Upcoming pill */
+          .tea-soon-pill {
+            display:inline-flex; align-items:center; gap:6px;
+            background:#2C2269; color:#fff; font-size:11px; font-weight:700;
+            padding:5px 12px; border-radius:20px;
+          }
+          .tea-soon-dot { width:6px; height:6px; border-radius:50%; background:#A5B4FC; flex-shrink:0; }
+
+          /* Responsive */
           @media(max-width:576px){
             .ed-hero { padding:18px; gap:14px; }
             .ed-hero-name { font-size:16px; }
             .ed-stat { padding:12px 14px; }
             .ed-stat-val { font-size:16px; }
+            /* Tea card — already compact, just ensure no overflow */
+            .tea-card-body { padding:12px 14px; gap:10px; }
+            .tea-card-title { font-size:13px; }
+            .tea-card-sub   { font-size:11px; }
+            /* Active banner — stack timer below info on small screens */
+            .tea-active-inner { padding:16px 14px; gap:12px; flex-direction:column; align-items:flex-start; }
+            .tea-active-title { font-size:15px; }
+            .tea-timer-block  { width:100%; display:flex; align-items:center; gap:10px; }
+            .tea-timer-eyebrow{ margin-bottom:0; }
+            .tea-timer-digits { font-size:20px; padding:7px 14px; flex:1; text-align:center; }
           }
         `}</style>
       </Head>
@@ -422,6 +635,62 @@ export default function EmployeeDashboard() {
                 <Link href="/employee/complete-profile" className="ed-nudge-btn">
                   Complete →
                 </Link>
+              </div>
+            )}
+
+            {/* ── Tea Time Announcement (always visible) ── */}
+            {teaStatus === "active" ? (
+              /* ACTIVE 4:30–4:45 PM — brand dark gradient with live countdown */
+              <div className="tea-active">
+                <div className="tea-active-inner">
+                  <div className="tea-active-icon">
+                    <i className="bi bi-cup-hot-fill" />
+                  </div>
+                  <div className="tea-active-info">
+                    <div className="tea-active-eyebrow">Viralon · Daily Tea Break</div>
+                    <div className="tea-active-title">Tea Time — Take a Break</div>
+                    <div className="tea-active-sub">
+                      Step away from your screen and recharge.
+                      Break runs from <strong style={{ color:"#C7D2FE" }}>4:30 PM to 4:45 PM</strong> daily.
+                    </div>
+                  </div>
+                  <div className="tea-timer-block">
+                    <div className="tea-timer-eyebrow">TIME REMAINING</div>
+                    <div className="tea-timer-digits">{fmtCountdown(teaRemaining)}</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* IDLE / UPCOMING — compact single-row card */
+              <div className="tea-card">
+                <div className="tea-card-accent" />
+                <div className="tea-card-body">
+                  <div className="tea-card-icon">
+                    <i className="bi bi-cup-hot-fill" />
+                  </div>
+                  <div className="tea-card-content">
+                    <div className="tea-card-eyebrow">Daily Announcement</div>
+                    <div className="tea-card-title">Tea Break · 4:30 – 4:45 PM</div>
+                    <div className="tea-card-sub">
+                      Your daily 15-min reset. Relax, breathe and come back stronger.
+                    </div>
+                  </div>
+                  <div className="tea-card-badge">
+                    {teaStatus === "upcoming" ? (
+                      <>
+                        <div className="tea-card-badge-time" style={{ color:"#4F46E5", fontSize:14 }}>
+                          {Math.ceil(teaCountdown / 60)}m
+                        </div>
+                        <div className="tea-card-badge-label">Soon</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="tea-card-badge-time">4:30<br />4:45</div>
+                        <div className="tea-card-badge-label">PM · Daily</div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

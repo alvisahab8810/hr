@@ -7,6 +7,8 @@ import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
 
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+// Maps content type key to monthlyDeliverables field name
+const DELIVERABLE_KEY = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
 
 const CONTENT_META = {
   reel:     { label: "Reel",     icon: "bi-camera-video-fill", color: "#F59E0B" },
@@ -74,21 +76,39 @@ export default function WeeklyTrackerPage() {
   const weekStart = weekDates[0].date;
   const weekEnd   = weekDates[6].date;
 
-  /* ── Fetch brands ── */
+  /* ── Fetch brands — only Social Media brands with a weekly schedule ── */
   useEffect(() => {
     fetch("/api/admin/brands", { credentials: "include" })
       .then(r => r.json())
-      .then(d => { if (d.success) setBrands(d.brands || []); })
+      .then(d => {
+        if (d.success) {
+          const smBrands = (d.brands || []).filter(
+            b => (b.services || []).includes("socialMedia") && (b.weeklySchedule || []).length > 0
+          );
+          setBrands(smBrands);
+          // Auto-select Viralon or first brand — never "All"
+          setBrandFilter(prev => {
+            if (prev && smBrands.find(b => b._id === prev)) return prev;
+            const viralon = smBrands.find(b => /viralon/i.test(b.name));
+            return viralon?._id || smBrands[0]?._id || "";
+          });
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  /* ── Fetch production tasks for the visible week ── */
+  /* ── Fetch all production tasks for the month(s) the visible week touches ── */
   useEffect(() => {
-    const end = new Date(weekEnd);
-    end.setHours(23, 59, 59, 999);
+    // Expand to full month(s) so week-2/3/4 tasks are available when navigating
+    const firstDay = weekDates[0].date;
+    const lastDay  = weekDates[6].date;
+    const monthStart = new Date(firstDay.getFullYear(), firstDay.getMonth(), 1);
+    // If the week crosses a month boundary (e.g. Jun 30 – Jul 6) include both months
+    const monthEnd = new Date(lastDay.getFullYear(), lastDay.getMonth() + 1, 0, 23, 59, 59, 999);
+
     fetch(
-      `/api/admin/tasks?taskType=production&dateStart=${weekStart.toISOString()}&dateEnd=${end.toISOString()}&limit=500`,
+      `/api/admin/tasks?taskType=production&dateStart=${monthStart.toISOString()}&dateEnd=${monthEnd.toISOString()}&limit=500`,
       { credentials: "include" }
     )
       .then(r => r.json())
@@ -99,16 +119,95 @@ export default function WeeklyTrackerPage() {
   const getScheduledContent = (brand, dayLabel) =>
     (brand.weeklySchedule || []).filter(s => s.day === dayLabel);
 
-  // Tasks grouped by brandId → dateString
-  const tasksByBrandDay = {};
-  tasks.forEach(t => {
-    const dateKey = t.dueDate ? new Date(t.dueDate).toDateString() : null;
-    if (!dateKey || !t.brandId) return;
-    const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
-    if (!tasksByBrandDay[bId]) tasksByBrandDay[bId] = {};
-    if (!tasksByBrandDay[bId][dateKey]) tasksByBrandDay[bId][dateKey] = [];
-    tasksByBrandDay[bId][dateKey].push(t);
-  });
+  // For a given date + contentType, count how many times that contentType was
+  // scheduled in the brand's weeklySchedule from the 1st of that month up to
+  // and including that date.  The result (0-based) is the task-list index that
+  // belongs on this day.
+  //
+  // Example – Episoul, Reel schedule: Wed + Sat
+  //   Wed Jun 3  → 1 slot counted (Jun 3 itself) → index 0 → OR001
+  //   Sat Jun 6  → 2 slots counted (Jun 3, Jun 6) → index 1 → OR002
+  //   Wed Jun 10 → 3 slots counted                → index 2 → OR003
+  function monthSlotIndex(date, contentType, weeklySchedule) {
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+    let count = 0;
+    const cur = new Date(monthStart);
+    while (cur <= date) {
+      const label = DAY_NAMES[cur.getDay()];
+      count += weeklySchedule.filter(s => s.day === label && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1; // 0-based
+  }
+
+  // Place tasks in the correct day column using the brand schedule as the
+  // authoritative posting calendar — deadline dates are irrelevant here.
+  const tasksByBrandDay = (() => {
+    const result = {};
+
+    // Group tasks by brandId → contentType → monthKey (YYYY-M)
+    // This prevents June tasks from bleeding into July columns when a week spans two months.
+    const taskGroups = {};
+    tasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      const ct  = t.contentType || "__unknown";
+      const d   = t.dueDate      ? new Date(t.dueDate)
+                : t.scheduledFor ? new Date(t.scheduledFor)
+                : t.createdAt    ? new Date(t.createdAt)
+                : null;
+      if (!d) return;
+      const mk = `${d.getFullYear()}-${d.getMonth()}`; // month key
+      if (!taskGroups[bId])       taskGroups[bId] = {};
+      if (!taskGroups[bId][ct])   taskGroups[bId][ct] = {};
+      if (!taskGroups[bId][ct][mk]) taskGroups[bId][ct][mk] = [];
+      taskGroups[bId][ct][mk].push(t);
+    });
+    // Sort each month group by taskId (CO001 < CO002 < …)
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(byMonth =>
+        Object.values(byMonth).forEach(arr =>
+          arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || ""))
+        )
+      )
+    );
+
+    // Walk through every day of the current week and assign tasks to schedule slots
+    brands.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+
+      weekDates.forEach(({ label, date }) => {
+        const mk = `${date.getFullYear()}-${date.getMonth()}`; // month of this column
+        const slotsToday = schedule.filter(s => s.day === label);
+        slotsToday.forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct]?.[mk]; // only this month's tasks
+          if (!ctTasks || ctTasks.length === 0) return;
+
+          const idx = monthSlotIndex(date, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+
+          // Respect monthly deliverable cap — hide tasks beyond the limit
+          const dlvrKey = DELIVERABLE_KEY[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+
+          const task    = ctTasks[idx];
+          const dateKey = date.toDateString();
+          if (!result[bId]) result[bId] = {};
+          if (!result[bId][dateKey]) result[bId][dateKey] = [];
+          result[bId][dateKey].push(task);
+        });
+      });
+    });
+
+    return result;
+  })();
 
   const displayBrands = brandFilter
     ? brands.filter(b => b._id === brandFilter)
@@ -130,7 +229,7 @@ export default function WeeklyTrackerPage() {
           .wt-table tr:hover td { background:#FAFBFF; }
           .wt-cell { min-height:56px; }
           .wt-slot { border-radius:8px; padding:4px 7px; margin-bottom:4px; font-size:10px; font-weight:700; display:flex; align-items:center; gap:4px; }
-          .wt-task { border-radius:8px; padding:4px 7px; margin-bottom:4px; font-size:10px; font-weight:600; cursor:pointer; transition:opacity .12s; border:1px solid; }
+          .wt-task { border-radius:8px; padding:4px 7px; margin-bottom:4px; font-size:10px; font-weight:600; cursor:pointer; transition:opacity .12s; border:1px solid; display:flex; align-items:center; gap:5px; }
           .wt-task:hover { opacity:.8; }
           .wt-btn { border:none; cursor:pointer; border-radius:9px; padding:6px 12px; font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:5px; background:#F1F5F9; color:#475569; }
           .wt-btn:hover { background:#E2E8F0; }
@@ -179,7 +278,6 @@ export default function WeeklyTrackerPage() {
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <select className="wt-select" value={brandFilter} onChange={e => setBrandFilter(e.target.value)}>
-                    <option value="">All Brands</option>
                     {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
@@ -247,7 +345,7 @@ export default function WeeklyTrackerPage() {
                               <div style={{ width: 8, height: 32, borderRadius: 4, background: brand.color || "#6366F1", flexShrink: 0 }} />
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: 12, color: "#1E293B" }}>{brand.name}</div>
-                                <div style={{ fontSize: 10, color: "#94A3B8" }}>
+                                <div style={{ fontSize: 10, color: "#1E293B" }}>
                                   {(brand.weeklySchedule || []).length} post/wk
                                 </div>
                               </div>
@@ -261,6 +359,29 @@ export default function WeeklyTrackerPage() {
                             const bId       = String(brand._id);
                             const dayTasks  = (tasksByBrandDay[bId]?.[date.toDateString()] || []);
 
+                            // Planned slots: not covered by an actual task AND within monthly deliverable limit.
+                            const WK_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                            const wkMonthLabel = `${WK_MONTHS[date.getMonth()]}'${String(date.getFullYear()).slice(2)}`;
+                            const remainingCounts = {};
+                            dayTasks.forEach(t => {
+                              remainingCounts[t.contentType] = (remainingCounts[t.contentType] || 0) + 1;
+                            });
+                            const unfilledSlots = scheduled.reduce((acc, slot) => {
+                              const ct = slot.contentType;
+                              const slotIdx = monthSlotIndex(date, ct, brand.weeklySchedule || []);
+                              const dlvrKey = DELIVERABLE_KEY[ct];
+                              if (dlvrKey) {
+                                const limit = brand.monthlyDeliverables?.[dlvrKey];
+                                if (limit != null && slotIdx >= limit) return acc;
+                              }
+                              if ((remainingCounts[ct] || 0) > 0) {
+                                remainingCounts[ct]--;
+                                return acc;
+                              }
+                              acc.push({ ...slot, slotIdx });
+                              return acc;
+                            }, []);
+
                             return (
                               <td key={label} className={isToday ? "today-col" : ""}>
                                 <div className="wt-cell">
@@ -268,30 +389,42 @@ export default function WeeklyTrackerPage() {
                                   {dayTasks.map(t => {
                                     const ct  = CONTENT_META[t.contentType] || {};
                                     const sty = getTaskStageStyle(t);
+                                    // Format: "Reel 1 Jun'26" from nomenclature "reel1 jun'26"
+                                    const nom = t.nomenclature || t.title || "";
+                                    const ctLower = (t.contentType || "").toLowerCase();
+                                    let suffix = nom.toLowerCase().startsWith(ctLower)
+                                      ? nom.slice(ctLower.length).trim()
+                                      : nom;
+                                    // Capitalise each word: "1 jun'26" → "1 Jun'26"
+                                    suffix = suffix.replace(/\b[a-z]/g, c => c.toUpperCase());
+                                    const displayLabel = suffix
+                                      ? `${ct.label || t.contentType} ${suffix}`
+                                      : (ct.label || t.contentType);
                                     return (
                                       <div key={t._id} className="wt-task"
                                         style={{ background: sty.bg, borderColor: sty.border, color: sty.color }}
                                         onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
                                         <i className={`bi ${ct.icon || "bi-list-task"}`} style={{ fontSize: 10 }} />
-                                        {ct.label || t.contentType || t.title?.slice(0, 12)}
+                                        {displayLabel}
                                       </div>
                                     );
                                   })}
 
-                                  {/* Planned schedule slots (gray dashed, no actual task yet) */}
-                                  {scheduled.map((slot, si) => {
+                                  {/* Planned slots not yet covered by actual tasks */}
+                                  {unfilledSlots.map((slot, si) => {
                                     const ct = CONTENT_META[slot.contentType] || {};
+                                    const slotLabel = `${ct.label || slot.contentType} ${slot.slotIdx + 1} ${wkMonthLabel}`;
                                     return (
                                       <div key={si} className="wt-slot"
                                         style={{ background: "#F8FAFC", color: "#94A3B8", border: "1px dashed #D1D5DB" }}>
                                         <i className={`bi ${ct.icon || "bi-dot"}`} style={{ fontSize: 10 }} />
-                                        {ct.label || slot.contentType}
+                                        {slotLabel}
                                       </div>
                                     );
                                   })}
 
                                   {/* Empty */}
-                                  {scheduled.length === 0 && dayTasks.length === 0 && (
+                                  {unfilledSlots.length === 0 && dayTasks.length === 0 && (
                                     <div style={{ fontSize: 10, color: "#E5E7EB", textAlign: "center", paddingTop: 6 }}>—</div>
                                   )}
                                 </div>

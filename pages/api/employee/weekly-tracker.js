@@ -31,25 +31,29 @@ export default async function handler(req, res) {
   const start = dateStart ? new Date(dateStart) : null;
   const end   = dateEnd   ? new Date(dateEnd)   : null;
 
-  // Build date range filter on scheduledFor or dueDate
-  const dateQ = {};
-  if (start) dateQ.$gte = start;
-  if (end)   dateQ.$lte = end;
-
-  const q = {
-    $or: [{ assignedTo: empId }, { "stages.assignedTo": empId }],
-  };
+  // Return ALL SM production tasks for the month so the brand-schedule
+  // placement algorithm has the full picture (not just this employee's tasks)
+  const q = { taskType: "production" };
   if (start || end) {
-    q.$and = [{ $or: [{ scheduledFor: dateQ }, { dueDate: dateQ }] }];
+    const range = {};
+    if (start) range.$gte = start;
+    if (end)   range.$lte = end;
+    q.$or = [
+      { scheduledFor: range },
+      { dueDate: range },
+      { "stages.deadline": range },
+      { createdAt: range },
+    ];
   }
 
   const [tasks, brands] = await Promise.all([
     Task.find(q)
       .populate("brandId", "name color slug")
-      .sort({ dueDate: 1, scheduledFor: 1 })
+      .sort({ taskId: 1 })
       .lean(),
-    Brand.find({})
-      .select("name color weeklySchedule")
+    // Fetch brands separately (same as admin weekly tracker) with full weeklySchedule
+    Brand.find({ services: { $in: ["socialMedia"] } })
+      .select("_id name color weeklySchedule monthlyDeliverables")
       .lean(),
   ]);
 

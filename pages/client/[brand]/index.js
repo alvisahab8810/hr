@@ -1681,14 +1681,13 @@ const CAL_STAGE_FILL = ["#F97316", "#3B82F6", "#EAB308", "#22C55E"];
 function getCalStageStyle(task) {
   const stages = task?.stages || [];
   const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
-  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: c + "28", border: c, color: c }; } }
-  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: "#fff", border: c, color: c }; } }
+  for (let i = 3; i >= 0; i--) { if (stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: c, border: c, color: "#fff" }; } }
+  for (let i = 3; i >= 0; i--) { if (hasAssignee(stages[i]) && !stages[i]?.approved) { const c = CAL_STAGE_FILL[i]; return { bg: "#fff", border: c, color: "#1E293B" }; } }
   return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF" };
 }
 
-function CalendarView({ overview }) {
+function CalendarView({ overview, brand }) {
   const { allTasks = [] } = overview || {};
-  // Show all production/content tasks — pipeline colors show stage progress
   const content = allTasks.filter(t => t.taskType === "production" || t.contentType);
 
   const todayReal = new Date();
@@ -1703,24 +1702,62 @@ function CalendarView({ overview }) {
   const startOfMo = new Date(year, month, 1);
   const startDow  = (startOfMo.getDay() + 6) % 7; // Mon=0
 
-  function getTaskDate(t) {
-    if (t.scheduledFor) return new Date(t.scheduledFor);
-    if (t.dueDate)      return new Date(t.dueDate);
-    const s1 = t.stages?.[0];
-    if (s1?.deadline)  return new Date(s1.deadline);
-    if (s1?.doneAt)    return new Date(s1.doneAt);
-    if (t.submittedAt) return new Date(t.submittedAt);
-    if (t.updatedAt)   return new Date(t.updatedAt);
-    if (t.createdAt)   return new Date(t.createdAt);
-    return null;
+  const weeklySchedule = brand?.weeklySchedule || [];
+
+  function clientMonthSlotIndex(dayNum, contentType) {
+    const SUN_TO_SAT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const target = new Date(year, month, dayNum);
+    const start  = new Date(year, month, 1);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= target) {
+      count += weeklySchedule.filter(s => s.day === SUN_TO_SAT[cur.getDay()] && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count - 1;
   }
 
-  function tasksByDay(day) {
-    return content.filter(t => {
-      const d = getTaskDate(t);
-      if (!d) return false;
-      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+  const _tasksByDay = (() => {
+    const result = {};
+    const SUN_TO_SAT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    // Group by contentType AND month so June tasks never appear in July
+    const taskGroups = {};
+    content.forEach(t => {
+      const d = t.dueDate ? new Date(t.dueDate) : t.scheduledFor ? new Date(t.scheduledFor) : t.createdAt ? new Date(t.createdAt) : null;
+      if (!d) return;
+      // Only include tasks belonging to the viewed month
+      if (d.getFullYear() !== year || d.getMonth() !== month) return;
+      const ct = t.contentType || "__unknown";
+      if (!taskGroups[ct]) taskGroups[ct] = [];
+      taskGroups[ct].push(t);
     });
+    Object.values(taskGroups).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")));
+    // Assign to days via schedule
+    const CLIENT_DLVR_KEY = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+    const monthlyDlvr = brand?.monthlyDeliverables || {};
+    for (let day = 1; day <= daysInMo; day++) {
+      const dayLabel = SUN_TO_SAT[new Date(year, month, day).getDay()];
+      weeklySchedule.filter(s => s.day === dayLabel).forEach(slot => {
+        const ct = slot.contentType;
+        const ctTasks = taskGroups[ct];
+        if (!ctTasks || !ctTasks.length) return;
+        const idx = clientMonthSlotIndex(day, ct);
+        if (idx < 0 || idx >= ctTasks.length) return;
+        // Respect monthly deliverable cap
+        const dlvrKey = CLIENT_DLVR_KEY[ct];
+        if (dlvrKey) {
+          const limit = monthlyDlvr[dlvrKey];
+          if (limit != null && idx >= limit) return;
+        }
+        if (!result[day]) result[day] = [];
+        result[day].push(ctTasks[idx]);
+      });
+    }
+    return result;
+  })();
+
+  function tasksByDay(day) {
+    return _tasksByDay[day] || [];
   }
 
   function prevMonth() { if (month === 0) { setYear(y => y-1); setMonth(11); } else setMonth(m => m-1); }
@@ -1740,7 +1777,7 @@ function CalendarView({ overview }) {
             </button>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a" }}>{MONTH_NAMES[month]} {year}</div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>{content.filter(t => { const d = getTaskDate(t); return d && d.getFullYear()===year && d.getMonth()===month; }).length} content pieces</div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>{Object.values(_tasksByDay).reduce((n, arr) => n + arr.length, 0)} content pieces</div>
             </div>
             <button onClick={nextMonth} style={{ border: "1.5px solid #E2E8F0", background: "#fff", borderRadius: 8, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
               <i className="bi bi-chevron-right" />
@@ -1757,9 +1794,12 @@ function CalendarView({ overview }) {
                 <span style={{ width:16, height:10, borderRadius:2, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l}
               </span>,
               <span key={l+"d"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
-                <span style={{ width:16, height:10, borderRadius:2, background:c+"28", border:`1.5px solid ${c}`, display:"inline-block" }} />{l}✓
+                <span style={{ width:16, height:10, borderRadius:2, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l}✓
               </span>,
             ])}
+            <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
+              <span style={{ width:16, height:10, borderRadius:2, background:"#F8FAFC", border:"1px dashed #D1D5DB", display:"inline-block" }} />Scheduled
+            </span>
           </div>
         </div>
       </div>
@@ -1772,36 +1812,75 @@ function CalendarView({ overview }) {
           ))}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
-          {Array.from({ length: totalCells }, (_, i) => {
-            const dayNum = i - startDow + 1;
-            const valid  = dayNum >= 1 && dayNum <= daysInMo;
-            const isToday = valid && year === todayReal.getFullYear() && month === todayReal.getMonth() && dayNum === todayReal.getDate();
-            const dayTs  = valid ? tasksByDay(dayNum) : [];
-            return (
-              <div key={i} style={{ minHeight: 64, border: `1px solid ${isToday ? "#5A57FB" : "#E2E8F0"}`, borderRadius: 8, padding: 4, background: isToday ? "#F0F0FF" : valid ? "#fff" : "#FAFAFA", cursor: dayTs.length > 0 ? "pointer" : "default" }}>
-                {valid && (
-                  <>
-                    <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 500, color: isToday ? "#5A57FB" : "#94a3b8", marginBottom: 3 }}>{dayNum}</div>
-                    {dayTs.slice(0, 2).map(t => {
-                      const sty = getCalStageStyle(t);
-                      return (
-                        <div key={t._id} onClick={() => setSelTask(t)}
-                          style={{ fontSize: 9, background: sty.bg, color: sty.color, border: `1px solid ${sty.border}`, borderLeft: `3px solid ${sty.border}`, borderRadius: 3, padding: "2px 5px", marginBottom: 2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
-                          title={t.nomenclature || t.title}>
-                          {t.contentType?.toUpperCase() || "TASK"} · {(t.nomenclature || t.title || "").slice(0, 12)}
-                        </div>
-                      );
-                    })}
-                    {dayTs.length > 2 && (
-                      <div onClick={() => setSelTask(dayTs[2])} style={{ fontSize: 9, color: "#5A57FB", fontWeight: 700, cursor: "pointer" }}>
-                        +{dayTs.length - 2} more
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          })}
+          {(() => {
+            const CAL_CT = { reel:{ label:"Reel", icon:"bi-camera-video-fill" }, post:{ label:"Post", icon:"bi-image-fill" }, carousel:{ label:"Carousel", icon:"bi-images" }, story:{ label:"Story", icon:"bi-phone-fill" } };
+            const CAL_DLVR = { reel:"reels", post:"posts", carousel:"carousels", story:"stories" };
+            const CAL_MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            const calMonLbl = `${CAL_MON[month]}'${String(year).slice(2)}`;
+            const SUN_TO_SAT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+            return Array.from({ length: totalCells }, (_, i) => {
+              const dayNum  = i - startDow + 1;
+              const valid   = dayNum >= 1 && dayNum <= daysInMo;
+              const isToday = valid && year === todayReal.getFullYear() && month === todayReal.getMonth() && dayNum === todayReal.getDate();
+              const dayTs   = valid ? tasksByDay(dayNum) : [];
+
+              // Planned/unfilled slots for this day
+              let unfilledSlots = [];
+              if (valid) {
+                const dayLabel = SUN_TO_SAT[new Date(year, month, dayNum).getDay()];
+                const scheduled = weeklySchedule.filter(s => s.day === dayLabel);
+                const rem = {};
+                dayTs.forEach(t => { rem[t.contentType] = (rem[t.contentType] || 0) + 1; });
+                unfilledSlots = scheduled.reduce((acc, slot) => {
+                  const ct = slot.contentType;
+                  const slotIdx = clientMonthSlotIndex(dayNum, ct);
+                  const dlvrKey = CAL_DLVR[ct];
+                  if (dlvrKey) {
+                    const limit = brand?.monthlyDeliverables?.[dlvrKey];
+                    if (limit != null && slotIdx >= limit) return acc;
+                  }
+                  if ((rem[ct] || 0) > 0) { rem[ct]--; return acc; }
+                  acc.push({ ...slot, slotIdx });
+                  return acc;
+                }, []);
+              }
+
+              return (
+                <div key={i} style={{ minHeight: 80, border: `1px solid ${isToday ? "#5A57FB" : "#E2E8F0"}`, borderRadius: 8, padding: 4, background: isToday ? "#F0F0FF" : valid ? "#fff" : "#FAFAFA" }}>
+                  {valid && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 500, color: isToday ? "#5A57FB" : "#94a3b8", marginBottom: 3 }}>{dayNum}</div>
+                      {dayTs.map(t => {
+                        const ct  = CAL_CT[t.contentType] || {};
+                        const sty = getCalStageStyle(t);
+                        const nom = t.nomenclature || t.title || "";
+                        const ctL = (t.contentType || "").toLowerCase();
+                        let sfx = nom.toLowerCase().startsWith(ctL) ? nom.slice(ctL.length).trim() : nom;
+                        sfx = sfx.replace(/\b[a-z]/g, c => c.toUpperCase());
+                        const lbl = sfx ? `${ct.label||t.contentType} ${sfx}` : (ct.label||nom);
+                        return (
+                          <div key={t._id} onClick={() => setSelTask(t)} title={nom}
+                            style={{ fontSize: 9, background: sty.bg, color: sty.color, border: `1.5px solid ${sty.border}`, borderRadius: 4, padding: "2px 5px", marginBottom: 2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", display:"flex", alignItems:"center", gap:3 }}>
+                            {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:8, flexShrink:0 }} />}{lbl}
+                          </div>
+                        );
+                      })}
+                      {unfilledSlots.map((slot, si) => {
+                        const ct = CAL_CT[slot.contentType] || {};
+                        return (
+                          <div key={`ps${si}`}
+                            style={{ fontSize: 9, background: "#F8FAFC", color: "#94A3B8", border: "1px dashed #D1D5DB", borderRadius: 4, padding: "2px 5px", marginBottom: 2, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display:"flex", alignItems:"center", gap:3 }}>
+                            {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize:8, flexShrink:0 }} />}
+                            {`${ct.label||slot.contentType} ${slot.slotIdx+1} ${calMonLbl}`}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -4586,7 +4665,7 @@ export default function ClientDashboard() {
                 {view === "overview"   && <OverviewView client={client} brand={brand} overview={overview} onRefresh={loadOverview} setView={setView} />}
                 {view === "social"     && <SocialMediaView overview={overview} brand={brand} onRefresh={loadOverview} setView={setView} />}
                 {view === "approvals"  && <ApprovalsView overview={overview} onRefresh={loadOverview} />}
-                {view === "calendar"   && <CalendarView overview={overview} />}
+                {view === "calendar"   && <CalendarView overview={overview} brand={brand} />}
                 {view === "seo"        && <SeoView brandSlug={brandSlug} />}
                 {view === "web"        && <WebDevView />}
                 {view === "ads"        && <AdCampaignsView brandSlug={brandSlug} />}

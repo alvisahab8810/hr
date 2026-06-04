@@ -21,20 +21,20 @@ const STAGE_IDX  = { S1: 0, S2: 1, S3: 2, S4: 3 };
 function getTaskStageStyle(task) {
   const stages = task.stages || [];
   const hasAssignee = s => Array.isArray(s?.assignedTo) ? s.assignedTo.length > 0 : !!s?.assignedTo;
-  // Highest approved stage → filled color
+  // Highest approved stage → solid fill (matches weekly tracker)
   for (const key of ["S4","S3","S2","S1"]) {
     const s = stages[STAGE_IDX[key]];
     if (s?.approved) {
       const c = STAGE_FILL[key];
-      return { bg: c + "28", border: c, color: c, key };
+      return { bg: c, border: c, color: "#fff", key };
     }
   }
-  // Highest assigned (not approved) → border only
+  // Highest assigned (not approved) → white bg, colored border
   for (const key of ["S4","S3","S2","S1"]) {
     const s = stages[STAGE_IDX[key]];
     if (hasAssignee(s) && !s?.approved) {
       const c = STAGE_FILL[key];
-      return { bg: "#fff", border: c, color: c, key };
+      return { bg: "#fff", border: c, color: "#1E293B", key };
     }
   }
   return { bg: "#F1F5F9", border: "#D1D5DB", color: "#9CA3AF", key: null };
@@ -64,7 +64,22 @@ export default function ContentCalendarPage() {
   /* ── Fetch brands ── */
   useEffect(() => {
     fetch("/api/admin/brands", { credentials: "include" })
-      .then(r => r.json()).then(d => { if (d.success) setBrands(d.brands || []); }).catch(() => {});
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          const smBrands = (d.brands || []).filter(
+            b => (b.services || []).includes("socialMedia") && (b.weeklySchedule || []).length > 0
+          );
+          setBrands(smBrands);
+          // Auto-select Viralon or first brand — never "All"
+          setBrandFilter(prev => {
+            if (prev && smBrands.find(b => String(b._id) === prev)) return prev;
+            const viralon = smBrands.find(b => /viralon/i.test(b.name));
+            return String(viralon?._id || smBrands[0]?._id || "");
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   /* ── Fetch tasks for the month (all production tasks across all departments) ── */
@@ -104,29 +119,67 @@ export default function ContentCalendarPage() {
     setSelectedDay(null);
   };
 
-  /* ── Group tasks by day: scheduledFor → dueDate → stage deadline → doneAt → submittedAt → updatedAt → createdAt ── */
-  const tasksByDay = {};
-  for (const t of tasks) {
-    let d = t.scheduledFor ? new Date(t.scheduledFor)
-          : t.dueDate      ? new Date(t.dueDate)
-          : null;
-    if (!d && t.stages?.length) {
-      const deadlines = t.stages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
-      if (deadlines.length) d = deadlines.reduce((a, b) => a < b ? a : b);
+  /* ── Group tasks by day using brand schedule (monthSlotIndex) ── */
+  function calMonthSlotIndex(dayNum, contentType, weeklySchedule) {
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const target = new Date(year, month, dayNum);
+    const start  = new Date(year, month, 1);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= target) {
+      const lbl = DAY_NAMES[cur.getDay()];
+      count += weeklySchedule.filter(s => s.day === lbl && s.contentType === contentType).length;
+      cur.setDate(cur.getDate() + 1);
     }
-    if (!d && t.stages?.length) {
-      const doneDates = t.stages.map(s => s.doneAt).filter(Boolean).map(x => new Date(x));
-      if (doneDates.length) d = doneDates[0];
-    }
-    if (!d && t.submittedAt) d = new Date(t.submittedAt);
-    if (!d && t.updatedAt)   d = new Date(t.updatedAt);
-    if (!d && t.createdAt)   d = new Date(t.createdAt);
-    if (!d) continue;
-    if (d.getFullYear() !== year || d.getMonth() !== month) continue;
-    const day = d.getDate();
-    if (!tasksByDay[day]) tasksByDay[day] = [];
-    tasksByDay[day].push(t);
+    return count - 1;
   }
+
+  const tasksByDay = (() => {
+    const result = {};
+    const daysInMonth = getDaysInMonth(year, month);
+
+    // Build brand task groups (sorted by taskId)
+    const taskGroups = {};
+    tasks.forEach(t => {
+      if (!t.brandId) return;
+      const bId = typeof t.brandId === "object" ? String(t.brandId._id || t.brandId) : String(t.brandId);
+      if (!taskGroups[bId]) taskGroups[bId] = {};
+      const ct = t.contentType || "__unknown";
+      if (!taskGroups[bId][ct]) taskGroups[bId][ct] = [];
+      taskGroups[bId][ct].push(t);
+    });
+    Object.values(taskGroups).forEach(byType =>
+      Object.values(byType).forEach(arr => arr.sort((a, b) => (a.taskId || "").localeCompare(b.taskId || "")))
+    );
+
+    // Walk each day of the month, assign tasks via schedule slot index
+    const CAL_MONTH_DLVR_KEY = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    brands.forEach(brand => {
+      const bId = String(brand._id);
+      if (!taskGroups[bId]) return;
+      const schedule = brand.weeklySchedule || [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dayLabel = DAY_NAMES[new Date(year, month, day).getDay()];
+        schedule.filter(s => s.day === dayLabel).forEach(slot => {
+          const ct = slot.contentType;
+          const ctTasks = taskGroups[bId]?.[ct];
+          if (!ctTasks || !ctTasks.length) return;
+          const idx = calMonthSlotIndex(day, ct, schedule);
+          if (idx < 0 || idx >= ctTasks.length) return;
+          // Respect monthly deliverable cap
+          const dlvrKey = CAL_MONTH_DLVR_KEY[ct];
+          if (dlvrKey) {
+            const limit = brand.monthlyDeliverables?.[dlvrKey];
+            if (limit != null && idx >= limit) return;
+          }
+          if (!result[day]) result[day] = [];
+          result[day].push(ctTasks[idx]);
+        });
+      }
+    });
+    return result;
+  })();
 
   const daysInMonth  = getDaysInMonth(year, month);
   const firstDay     = getFirstDayOfMonth(year, month);
@@ -194,9 +247,8 @@ export default function ContentCalendarPage() {
                   </button>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <select style={{ padding: "6px 10px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 12, outline: "none", background: "#fff" }}
+                  <select style={{ padding: "6px 10px", borderRadius: 9, border: "1.5px solid #E5E7EB", fontSize: 12, fontWeight: 600, outline: "none", background: "#fff" }}
                     value={brandFilter} onChange={e => setBrandFilter(e.target.value)}>
-                    <option value="">All Brands</option>
                     {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
@@ -223,6 +275,10 @@ export default function ContentCalendarPage() {
                   <span style={{ width: 18, height: 12, borderRadius: 3, background: "#F1F5F9", border: "1.5px solid #D1D5DB", display: "inline-block" }} />
                   No stage yet
                 </span>
+                <span className="cal-leg-dot" style={{ marginLeft: 6 }}>
+                  <span style={{ width: 18, height: 12, borderRadius: 3, background: "#F8FAFC", border: "1px dashed #D1D5DB", display: "inline-block" }} />
+                  Scheduled (plan)
+                </span>
               </div>
 
               {loading ? (
@@ -239,46 +295,105 @@ export default function ContentCalendarPage() {
                   </div>
 
                   {/* Calendar cells */}
-                  <div className="cal-grid">
-                    {Array.from({ length: totalCells }, (_, i) => {
-                      const dayNum = i - firstDay + 1;
-                      const isValid = dayNum >= 1 && dayNum <= daysInMonth;
-                      const isToday = isValid && year === today.getFullYear() && month === today.getMonth() && dayNum === today.getDate();
-                      const dayTasks = isValid ? (tasksByDay[dayNum] || []) : [];
-                      const preview = dayTasks.slice(0, 3);
-                      const extra   = dayTasks.length - preview.length;
+                  {(() => {
+                    // Pre-compute planned slots for the filtered brand (if any)
+                    const CAL_DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                    const filteredBrand = brandFilter
+                      ? brands.find(b => String(b._id) === brandFilter)
+                      : null;
 
-                      return (
-                        <div
-                          key={i}
-                          className={`cal-cell ${isToday ? "today" : ""} ${!isValid ? "other-month" : ""}`}
-                          style={{ cursor: isValid && dayTasks.length > 0 ? "pointer" : "default" }}
-                          onClick={() => isValid && dayTasks.length > 0 && setSelectedDay({ day: dayNum, tasks: dayTasks })}
-                        >
-                          {isValid && (
-                            <>
-                              <div className={`cal-day-num ${isToday ? "today" : ""}`}>{dayNum}</div>
-                              {preview.map(t => {
-                                const ct  = CONTENT_META[t.contentType];
-                                const sty = getTaskStageStyle(t);
-                                return (
-                                  <div key={t._id} className="cal-event"
-                                    style={{ background: sty.bg, color: sty.color, borderLeft: `3px solid ${sty.border}`, border: `1px solid ${sty.border}`, borderLeftWidth: 3 }}
-                                    title={`${t.nomenclature || t.title}${t.brandId ? ` · ${t.brandId.name}` : ""}`}>
-                                    {ct && <i className={`bi ${ct.icon}`} style={{ marginRight: 3, fontSize: 9 }} />}
-                                    {t.nomenclature || t.title}
-                                  </div>
-                                );
-                              })}
-                              {extra > 0 && (
-                                <div className="cal-more">+{extra} more</div>
+                    return (
+                      <div className="cal-grid">
+                        {Array.from({ length: totalCells }, (_, i) => {
+                          const dayNum  = i - firstDay + 1;
+                          const isValid = dayNum >= 1 && dayNum <= daysInMonth;
+                          const isToday = isValid && year === today.getFullYear() && month === today.getMonth() && dayNum === today.getDate();
+                          const dayTasks = isValid ? (tasksByDay[dayNum] || []) : [];
+
+                          // Planned slots for the filtered brand on this day,
+                          // capped by the brand's monthly deliverable for each content type.
+                          const CAL_DLVR_KEY = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+                          const CAL_MONTHS   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                          const calMonthLabel = `${CAL_MONTHS[month]}'${String(year).slice(2)}`;
+                          let unfilledSlots = [];
+                          if (isValid && filteredBrand) {
+                            const dayLabel = CAL_DAY_NAMES[new Date(year, month, dayNum).getDay()];
+                            const scheduled = (filteredBrand.weeklySchedule || []).filter(s => s.day === dayLabel);
+                            const rem = {};
+                            dayTasks.forEach(t => { rem[t.contentType] = (rem[t.contentType] || 0) + 1; });
+                            unfilledSlots = scheduled.reduce((acc, slot) => {
+                              const ct = slot.contentType;
+                              const slotIdx = calMonthSlotIndex(dayNum, ct, filteredBrand.weeklySchedule || []);
+                              const dlvrKey = CAL_DLVR_KEY[ct];
+                              if (dlvrKey) {
+                                const limit = filteredBrand.monthlyDeliverables?.[dlvrKey];
+                                if (limit != null && slotIdx >= limit) return acc;
+                              }
+                              if ((rem[ct] || 0) > 0) { rem[ct]--; return acc; }
+                              acc.push({ ...slot, slotIdx });
+                              return acc;
+                            }, []);
+                          }
+
+                          const allItems = dayTasks.length + unfilledSlots.length;
+                          const preview  = dayTasks.slice(0, 3);
+                          const extra    = dayTasks.length - preview.length;
+                          // Show up to (3 - tasks shown) planned slots
+                          const slotsToShow = unfilledSlots.slice(0, Math.max(0, 3 - preview.length));
+                          const extraSlots  = unfilledSlots.length - slotsToShow.length;
+
+                          return (
+                            <div
+                              key={i}
+                              className={`cal-cell ${isToday ? "today" : ""} ${!isValid ? "other-month" : ""}`}
+                              style={{ cursor: isValid && allItems > 0 ? "pointer" : "default" }}
+                              onClick={() => isValid && dayTasks.length > 0 && setSelectedDay({ day: dayNum, tasks: dayTasks })}
+                            >
+                              {isValid && (
+                                <>
+                                  <div className={`cal-day-num ${isToday ? "today" : ""}`}>{dayNum}</div>
+
+                                  {/* Actual tasks — pipeline stage colors */}
+                                  {preview.map(t => {
+                                    const ct  = CONTENT_META[t.contentType] || {};
+                                    const sty = getTaskStageStyle(t);
+                                    const nom = t.nomenclature || t.title || "";
+                                    const ctLower = (t.contentType || "").toLowerCase();
+                                    let suffix = nom.toLowerCase().startsWith(ctLower) ? nom.slice(ctLower.length).trim() : nom;
+                                    suffix = suffix.replace(/\b[a-z]/g, c => c.toUpperCase());
+                                    const label = suffix ? `${ct.label || t.contentType} ${suffix}` : (ct.label || t.contentType || nom);
+                                    return (
+                                      <div key={t._id} className="cal-event"
+                                        style={{ background: sty.bg, color: sty.color, border: `1.5px solid ${sty.border}`, display: "flex", alignItems: "center", gap: 4 }}
+                                        title={`${nom}${t.brandId ? ` · ${t.brandId.name}` : ""}`}>
+                                        {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize: 9, flexShrink: 0 }} />}
+                                        {label}
+                                      </div>
+                                    );
+                                  })}
+                                  {extra > 0 && <div className="cal-more">+{extra} more</div>}
+
+                                  {/* Planned slots — gray dashed (no task yet) */}
+                                  {slotsToShow.map((slot, si) => {
+                                    const ct = CONTENT_META[slot.contentType] || {};
+                                    const slotLabel = `${ct.label || slot.contentType} ${slot.slotIdx + 1} ${calMonthLabel}`;
+                                    return (
+                                      <div key={`slot-${si}`} className="cal-event"
+                                        style={{ background: "#F8FAFC", color: "#94A3B8", border: "1px dashed #D1D5DB", display: "flex", alignItems: "center", gap: 4 }}>
+                                        {ct.icon && <i className={`bi ${ct.icon}`} style={{ fontSize: 9, flexShrink: 0 }} />}
+                                        {slotLabel}
+                                      </div>
+                                    );
+                                  })}
+                                  {extraSlots > 0 && <div className="cal-more">+{extraSlots} more</div>}
+                                </>
                               )}
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
@@ -306,56 +421,98 @@ export default function ContentCalendarPage() {
 
           <div style={{ padding: 16 }}>
             {selectedDay.tasks.map(t => {
-              const ct    = CONTENT_META[t.contentType];
+              const ct    = CONTENT_META[t.contentType] || {};
               const brand = t.brandId;
-              const stage = t.stage;
               const sty   = getTaskStageStyle(t);
-              const stageColor = sty.color;
+
+              // Format title: "post1 jun'26" → "Post 1 Jun'26"
+              const nom     = t.nomenclature || t.title || "";
+              const ctLower = (t.contentType || "").toLowerCase();
+              let suffix    = nom.toLowerCase().startsWith(ctLower) ? nom.slice(ctLower.length).trim() : nom;
+              suffix        = suffix.replace(/\b[a-z]/g, c => c.toUpperCase());
+              const displayTitle = suffix ? `${ct.label || t.contentType} ${suffix}` : nom;
+
+              // Filter out system/content-type tags
+              const SYSTEM_TAGS = ["production","reel","post","carousel","story","seo","ads","branding","general"];
+              const displayTags = (t.tags || []).filter(tg => !SYSTEM_TAGS.includes(tg.toLowerCase()));
+
+              // Stage dots
+              const STAGE_KEYS_P = ["S1","S2","S3","S4"];
+              const STAGE_NAMES_P = ["Script","Shoot","Edit","Posted"];
+
               return (
                 <div key={t._id} className="panel-task"
-                  style={{ borderLeft: `3px solid ${sty.border}` }}
+                  style={{ borderLeft: `4px solid ${sty.border}`, cursor: "pointer" }}
                   onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+
+                  {/* Brand + Content type badges */}
+                  <div style={{ display: "flex", gap: 5, marginBottom: 8, flexWrap: "wrap" }}>
                     {brand && (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: (brand.color || "#6366F1") + "20", color: brand.color || "#6366F1" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: (brand.color || "#6366F1") + "18", color: brand.color || "#6366F1" }}>
                         {brand.name}
                       </span>
                     )}
-                    {ct && (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: ct.color + "18", color: ct.color }}>
+                    {ct.label && (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: ct.color + "18", color: ct.color }}>
                         <i className={`bi ${ct.icon}`} style={{ marginRight: 3 }} />{ct.label}
                       </span>
                     )}
-                    {stage && (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: stageColor + "28", color: stageColor }}>
-                        {stage}
-                      </span>
-                    )}
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
-                    {t.nomenclature || t.title}
+
+                  {/* Formatted title */}
+                  <div style={{ fontWeight: 800, fontSize: 14, color: "#1E293B", marginBottom: 8 }}>
+                    {displayTitle}
                   </div>
+
+                  {/* Pipeline stage dots */}
+                  <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
+                    {STAGE_KEYS_P.map((key, i) => {
+                      const stg = t.stages?.[i] || {};
+                      const c   = STAGE_FILL[key];
+                      const approved  = !!stg.approved;
+                      const rejected  = !!stg.rejected;
+                      const pending   = stg.done && !approved && !rejected;
+                      const hasAssign = Array.isArray(stg.assignedTo) ? stg.assignedTo.length > 0 : !!stg.assignedTo;
+                      const bg    = rejected ? "#DC2626" : approved ? c : pending ? "#fff" : hasAssign ? "#fff" : "#F1F5F9";
+                      const bdr   = rejected ? "#DC2626" : (approved || pending || hasAssign) ? c : "#E5E7EB";
+                      const col   = rejected ? "#fff"    : approved ? "#fff" : pending ? c : hasAssign ? c : "#CBD5E1";
+                      const icon  = rejected ? "✗" : approved ? "✓" : pending ? "⏳" : i + 1;
+                      return (
+                        <div key={key} title={STAGE_NAMES_P[i]}
+                          style={{ width: 26, height: 26, borderRadius: 7, border: `2px solid ${bdr}`, background: bg, color: col, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800 }}>
+                          {icon}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Description */}
                   {t.description && (
-                    <div style={{ fontSize: 11, color: "#64748B", marginTop: 6, background: "#F8FAFC", borderRadius: 6, padding: "6px 8px", lineHeight: 1.5, maxHeight: 60, overflowY: "auto" }}>
-                      <span style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", display: "block", marginBottom: 2 }}>Script</span>
-                      {t.description.slice(0, 120)}{t.description.length > 120 ? "…" : ""}
+                    <div style={{ fontSize: 11, color: "#475569", marginBottom: 6, background: "#F8FAFC", borderRadius: 8, padding: "7px 10px", lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 3 }}>Description</div>
+                      {t.description}
                     </div>
                   )}
+
+                  {/* Pillar / keyword */}
                   {t.pillar && (
-                    <div style={{ fontSize: 10, color: "#6366F1", marginTop: 4, fontWeight: 600 }}>
-                      <i className="bi bi-tag me-1" />{t.pillar}
+                    <div style={{ fontSize: 10, color: "#8B5CF6", marginBottom: 4, fontWeight: 600 }}>
+                      <i className="bi bi-tag-fill me-1" />{t.pillar}
                     </div>
                   )}
-                  {t.tags?.length > 0 && (
-                    <div style={{ fontSize: 10, color: "#6366F1", marginTop: 4, lineHeight: 1.6 }}>
-                      {t.tags.slice(0, 5).map(tg => `#${tg}`).join(" ")}{t.tags.length > 5 ? " …" : ""}
+
+                  {/* Hashtags (system tags filtered out) */}
+                  {displayTags.length > 0 && (
+                    <div style={{ fontSize: 10, color: "#6366F1", lineHeight: 1.8, marginBottom: 4, wordBreak: "break-word" }}>
+                      {displayTags.slice(0, 8).map(tg => `#${tg}`).join(" ")}
+                      {displayTags.length > 8 ? " …" : ""}
                     </div>
                   )}
-                  {t.stages?.[0]?.assignedTo?.length > 0 && (
-                    <div style={{ fontSize: 10, color: "#64748B", marginTop: 3 }}>
-                      <i className="bi bi-person me-1" />Content Team · {t.stages[0].done ? "Script Done" : "Writing…"}
-                    </div>
-                  )}
+
+                  {/* View task link */}
+                  <div style={{ fontSize: 10, color: "#6366F1", fontWeight: 700, marginTop: 6, display: "flex", alignItems: "center", gap: 3 }}>
+                    <i className="bi bi-box-arrow-up-right" style={{ fontSize: 9 }} />View task
+                  </div>
                 </div>
               );
             })}
