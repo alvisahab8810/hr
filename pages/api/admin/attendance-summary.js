@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     const records = await Attendance.find({
       employee: { $in: activeEmpIds },
       date:     { $regex: `^${month}` },
-    }).populate("employee", "name email employeeId");
+    }).populate("employee", "name email employeeId personal");
 
     const filtered = records.filter(rec => rec.employee != null);
 
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
       return {
         employeeName: rec.employee?.name || "N/A",
         employeeId: rec.employee?.employeeId || "N/A",
+        avatar: rec.employee?.personal?.avatar || null,
         date: rec.date,
         checkIn: inTime
           ? inTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })

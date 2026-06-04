@@ -86,6 +86,17 @@ const overtimeSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    extensions: [
+      {
+        extraMins:   { type: Number, required: true, min: 15 },
+        reason:      { type: String, default: "" },
+        status:      { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
+        requestedAt: { type: Date, default: Date.now },
+        approvedAt:  { type: Date, default: null },
+        adminRemark: { type: String, default: "" },
+      },
+    ],
   },
   { timestamps: true }
 );

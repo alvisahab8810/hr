@@ -38,7 +38,7 @@ export default function EmployeeLeftbarMobile() {
   const pathname = usePathname();
 
   const [open,     setOpen]     = useState(false);
-  const [employee, setEmployee] = useState({ firstName:"", lastName:"", employeeId:"", dept:"" });
+  const [employee, setEmployee] = useState({ firstName:"", lastName:"", employeeId:"", dept:"", avatar:"" });
   const [attStatus, setAttStatus] = useState(null);
   const [isDmDept, setIsDmDept] = useState(false);
 
@@ -56,6 +56,7 @@ export default function EmployeeLeftbarMobile() {
             lastName:   d.employee.lastName   || "",
             employeeId: d.employee.employeeId || "",
             dept,
+            avatar:     d.employee.personal?.avatar || "",
           });
           setIsDmDept(dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing"));
         }
@@ -211,16 +212,22 @@ export default function EmployeeLeftbarMobile() {
               {statusMeta.label}
             </span>
           )}
-          <div style={{
-            width:34, height:34, borderRadius:"50%",
-            background:"linear-gradient(135deg,#818CF8,#A78BFA)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontWeight:800, fontSize:13, color:"#fff",
-            border:"2px solid rgba(255,255,255,0.25)",
-            flexShrink:0,
-          }}>
-            {initials}
-          </div>
+          {employee.avatar ? (
+            <img src={employee.avatar} alt="avatar"
+              style={{ width:34, height:34, borderRadius:"50%", objectFit:"cover",
+                border:"2px solid rgba(255,255,255,0.35)", flexShrink:0 }}
+            />
+          ) : (
+            <div style={{
+              width:34, height:34, borderRadius:"50%",
+              background:"linear-gradient(135deg,#818CF8,#A78BFA)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontWeight:800, fontSize:13, color:"#fff",
+              border:"2px solid rgba(255,255,255,0.25)", flexShrink:0,
+            }}>
+              {initials}
+            </div>
+          )}
         </div>
       </header>
 
@@ -390,7 +397,8 @@ export default function EmployeeLeftbarMobile() {
         paddingBottom:"env(safe-area-inset-bottom,0px)",
       }}>
         {BOTTOM_TABS.map(item => {
-          const active = pathname === item.href;
+          const active    = pathname === item.href;
+          const isProfile = item.href === "/employee/profile";
           return (
             <Link
               key={item.href}
@@ -400,21 +408,23 @@ export default function EmployeeLeftbarMobile() {
                 alignItems:"center", justifyContent:"center",
                 flex:1, height:"100%", textDecoration:"none",
                 color: active ? "#4F46E5" : "#9CA3AF",
-                position:"relative",
-                transition:"color 0.15s",
-                gap:2,
+                position:"relative", transition:"color 0.15s", gap:2,
               }}
             >
               {active && <span className="emp-tab-active-bar" />}
-              <i className={`bi ${item.icon}`} style={{
-                fontSize: active ? 21 : 19,
-                transition:"font-size 0.15s",
-                fontWeight: active ? "bold" : "normal",
-              }} />
-              <span style={{
-                fontSize:10, fontWeight: active ? 700 : 500,
-                letterSpacing:0.2,
-              }}>
+              {isProfile && employee.avatar ? (
+                <img src={employee.avatar} alt="avatar"
+                  style={{ width: active ? 24 : 22, height: active ? 24 : 22,
+                    borderRadius:"50%", objectFit:"cover",
+                    border: active ? "2px solid #4F46E5" : "2px solid #D1D5DB" }}
+                />
+              ) : (
+                <i className={`bi ${item.icon}`} style={{
+                  fontSize: active ? 21 : 19, transition:"font-size 0.15s",
+                  fontWeight: active ? "bold" : "normal",
+                }} />
+              )}
+              <span style={{ fontSize:10, fontWeight: active ? 700 : 500, letterSpacing:0.2 }}>
                 {item.label}
               </span>
             </Link>

@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const data = await Reimbursement.find(query)
       .populate(
         "employee",
-        "personal.firstName personal.lastName personal.email professional"
+        "personal professional"
       )
       .sort({ createdAt: -1 });
 

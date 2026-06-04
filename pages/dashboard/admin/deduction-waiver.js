@@ -293,6 +293,7 @@ export default function AdminDeductionWaiver() {
                 ) : filteredReports.map(r => {
                   const name    = empName(r.employee);
                   const inits   = getInitials(name);
+                  const avatar  = r.employee?.personal?.avatar || null;
                   const [abg, acol] = avatarBg(name);
                   const deductions  = r.deductions || {};
                   const activeLines = DEDUCTION_LINES.filter(l => (deductions[l.key] || 0) > 0);
@@ -320,10 +321,13 @@ export default function AdminDeductionWaiver() {
                       <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
                         onClick={() => setExpandedId(isExpanded ? null : r._id)}>
 
-                        <div style={{ width: 44, height: 44, borderRadius: 12, background: abg, flexShrink: 0,
-                          display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: acol }}>
-                          {inits}
-                        </div>
+                        {avatar
+                          ? <img src={avatar} alt="avatar" style={{ width:44, height:44, borderRadius:12, objectFit:"cover", flexShrink:0, border:`2px solid ${abg}` }} />
+                          : <div style={{ width:44, height:44, borderRadius:12, background:abg, flexShrink:0,
+                              display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:acol }}>
+                              {inits}
+                            </div>
+                        }
 
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

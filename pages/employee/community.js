@@ -307,7 +307,7 @@ export default function EmployeeCommunity() {
 
       <style>{`
         .content.home { background: transparent !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
-        .tc-layout { display: flex; height: calc(100vh - 60px); overflow: hidden; background: #E9EBF0; }
+        .tc-layout { display: flex; height: calc(100vh - 60px); height: calc(100dvh - 60px); overflow: hidden; background: #E9EBF0; }
         .tc-tabs  { display: flex; gap: 0; border-bottom: 1px solid #E2E8F0; background: #fff; }
         .tc-tab   { padding: 13px 20px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; border-bottom: 2.5px solid transparent; transition: color .15s; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
         .tc-tab.active { color: #4F46E5; border-bottom-color: #4F46E5; }
@@ -363,10 +363,10 @@ export default function EmployeeCommunity() {
         .tc-msg-act-btn.danger:hover { background: #FEE2E2; }
 
         /* Input area */
-        .tc-input-area { padding: 12px 16px; background: #fff; border-top: 1px solid #E2E8F0; position: relative; }
-        .tc-reply-bar { display: flex; align-items: center; gap: 8px; background: #EEF2FF; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
+        .tc-input-area { padding: 12px 16px 14px; background: #fff; border-top: 1px solid #E2E8F0; position: sticky; bottom: 0; z-index: 10; }
+        .tc-reply-bar { display: flex; align-items: center; gap: 8px; background: #EDE9F8; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
         .tc-reply-bar-text { flex: 1; min-width: 0; }
-        .tc-reply-bar-label { font-size: 11px; font-weight: 700; color: #4F46E5; }
+        .tc-reply-bar-label { font-size: 11px; font-weight: 700; color: #2C2269; }
         .tc-reply-bar-preview { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .tc-edit-bar { display: flex; align-items: center; gap: 8px; background: #FEF9C3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; }
         .tc-edit-bar-label { flex: 1; font-size: 12px; font-weight: 600; color: #92400E; }
@@ -377,10 +377,12 @@ export default function EmployeeCommunity() {
         .tc-chip button { background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 13px; line-height: 1; }
         .tc-input-row { display: flex; gap: 8px; align-items: flex-end; }
         .tc-ta { flex: 1; padding: 10px 14px; border: 1.5px solid #E2E8F0; border-radius: 22px; font-size: 13.5px; font-family: inherit; resize: none; outline: none; min-height: 42px; max-height: 130px; color: #0f172a; background: #F0F2F5; line-height: 1.55; }
-        .tc-ta:focus { border-color: #4F46E5; background: #fff; }
+        .tc-ta:focus { border-color: #2C2269; background: #fff; box-shadow: 0 0 0 3px rgba(44,34,105,.08); }
         .tc-action-btn { padding: 8px 10px; background: #F0F2F5; border: 1.5px solid #E2E8F0; border-radius: 50%; font-size: 15px; color: #475569; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; width: 38px; height: 38px; transition: background .12s; }
-        .tc-action-btn:hover { background: #E2E8F0; }
-        .tc-send-btn { width: 38px; height: 38px; background: #4F46E5; color: #fff; border: none; border-radius: 50%; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; }
+        .tc-action-btn:hover { background: #EDE9F8; color: #2C2269; }
+        .tc-send-btn { width: 42px; height: 42px; background: linear-gradient(135deg,#2C2269,#3D2F8A); color: #fff; border: none; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; box-shadow: 0 3px 10px rgba(44,34,105,.35); transition: transform .12s; }
+        .tc-send-btn:hover:not(:disabled) { transform: scale(1.08); }
+        .tc-tab.active { color: #2C2269; border-bottom-color: #2C2269; }
         .tc-send-btn:disabled { opacity: .4; cursor: not-allowed; }
         .tc-mention-list { position: absolute; bottom: calc(100% + 4px); left: 16px; right: 16px; background: #fff; border: 1.5px solid #E2E8F0; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.12); z-index: 50; overflow: hidden; }
         .tc-mention-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 13px; transition: background .1s; }
@@ -423,12 +425,31 @@ export default function EmployeeCommunity() {
         .dm-bubble.admin .dm-btime    { color: #94a3b8; }
         .dm-bubble.employee .dm-btime { color: rgba(255,255,255,.5); text-align: right; }
         @media (max-width: 768px) {
-          .tc-feed { padding: 12px 10px 6px; }
-          .tc-bubble-wrap { max-width: 82%; }
+          /* Layout: subtract bottom mobile nav (~60px) */
+          .tc-layout { height: calc(100dvh - 120px); }
+          .tc-feed { padding: 10px 10px 6px; }
+          .tc-bubble-wrap { max-width: 85%; }
           .tc-img-thumb { max-width: 180px; max-height: 130px; }
-          .tc-input-area { padding: 10px 10px; }
-          .tc-modal-box { width: calc(100vw - 32px); }
-          .tc-msg-actions { padding-bottom: 4px; }
+          /* Input area: fixed to very bottom, above mobile nav */
+          .tc-input-area {
+            position: fixed; left: 0; right: 0; bottom: 60px;
+            padding: 10px 12px 12px;
+            box-shadow: 0 -4px 20px rgba(44,34,105,.12);
+            border-top: 1.5px solid #EDE9F8;
+            z-index: 100;
+          }
+          /* Feed padding so last message isn't hidden behind fixed input */
+          .tc-feed { padding-bottom: 80px; }
+          .dm-feed  { padding-bottom: 80px; }
+          .tc-modal-box { width: calc(100vw - 32px); padding: 20px 16px; }
+          .tc-msg-actions { display: none !important; }
+          .tc-header { padding: 10px 14px; }
+          .tc-header-title { font-size: 14px; }
+          .tc-header-sub { display: none; }
+          .tc-tabs .tc-tab { padding: 11px 14px; font-size: 12px; }
+          .tc-send-btn { width: 40px; height: 40px; font-size: 15px; }
+          .tc-action-btn { width: 34px; height: 34px; font-size: 14px; }
+          .tc-ta { font-size: 13px; }
         }
       `}</style>
 

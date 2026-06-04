@@ -1,13 +1,178 @@
 // pages/employee/profile.js
 "use client";
 import { toast } from "react-toastify";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Head from "next/head";
 import Link from "next/link";
 import Dashnav from "@/components/Dashnav";
 import Leftbar from "@/components/employee/Leftbar";
 import LeftbarMobile from "@/components/employee/LeftbarMobile";
+
+// ─── Image Crop Modal ─────────────────────────────────────────────────────────
+function CropModal({ src, onCancel, onCrop }) {
+  const canvasRef  = useRef(null);
+  const imgRef     = useRef(new Image());
+  const stateRef   = useRef({ scale: 1, ox: 0, oy: 0, dragging: false, lastX: 0, lastY: 0, pinchDist: 0 });
+  const SIZE = 280; // canvas / crop circle diameter
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx    = canvas.getContext("2d");
+    const s      = stateRef.current;
+    const img    = imgRef.current;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+
+    // Draw image centered
+    const w = img.naturalWidth  * s.scale;
+    const h = img.naturalHeight * s.scale;
+    ctx.drawImage(img, SIZE / 2 - w / 2 + s.ox, SIZE / 2 - h / 2 + s.oy, w, h);
+
+    // Darken outside circle
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Circle border
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth   = 2.5;
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2 - 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }, []);
+
+  useEffect(() => {
+    const img    = imgRef.current;
+    img.onload   = () => {
+      // Fit image to fill the circle initially
+      const s = stateRef.current;
+      const ratio = Math.max(SIZE / img.naturalWidth, SIZE / img.naturalHeight);
+      s.scale = ratio * 1.05;
+      s.ox = 0; s.oy = 0;
+      draw();
+    };
+    img.src = src;
+  }, [src, draw]);
+
+  // ── Pointer events (mouse + touch) ──
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    const s = stateRef.current;
+    if (e.touches && e.touches.length === 2) {
+      s.pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      return;
+    }
+    s.dragging = true;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    s.lastX = x; s.lastY = y;
+  };
+
+  const onPointerMove = (e) => {
+    e.preventDefault();
+    const s = stateRef.current;
+    if (e.touches && e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (s.pinchDist) {
+        s.scale = Math.max(0.3, Math.min(5, s.scale * (dist / s.pinchDist)));
+        s.pinchDist = dist;
+        draw();
+      }
+      return;
+    }
+    if (!s.dragging) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    s.ox += x - s.lastX;
+    s.oy += y - s.lastY;
+    s.lastX = x; s.lastY = y;
+    draw();
+  };
+
+  const onPointerUp = () => { stateRef.current.dragging = false; stateRef.current.pinchDist = 0; };
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    const s  = stateRef.current;
+    s.scale  = Math.max(0.3, Math.min(5, s.scale * (e.deltaY > 0 ? 0.92 : 1.08)));
+    draw();
+  };
+
+  // ── Export cropped circle ──
+  const handleSave = () => {
+    const s      = stateRef.current;
+    const img    = imgRef.current;
+    const out    = document.createElement("canvas");
+    out.width    = SIZE; out.height = SIZE;
+    const ctx    = out.getContext("2d");
+    // clip to circle
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
+    const w = img.naturalWidth  * s.scale;
+    const h = img.naturalHeight * s.scale;
+    ctx.drawImage(img, SIZE / 2 - w / 2 + s.ox, SIZE / 2 - h / 2 + s.oy, w, h);
+    out.toBlob(blob => onCrop(blob), "image/jpeg", 0.92);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9999, background:"rgba(0,0,0,.75)",
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+      padding:"16px" }}>
+      <div style={{ background:"#1a1a2e", borderRadius:20, padding:"20px 20px 16px",
+        maxWidth:340, width:"100%", boxShadow:"0 24px 60px rgba(0,0,0,.5)" }}>
+
+        <div style={{ color:"#fff", fontWeight:700, fontSize:15, marginBottom:4, textAlign:"center" }}>
+          Crop Profile Photo
+        </div>
+        <div style={{ color:"rgba(255,255,255,.5)", fontSize:12, textAlign:"center", marginBottom:14 }}>
+          Drag to reposition · Scroll / pinch to zoom
+        </div>
+
+        <canvas ref={canvasRef} width={SIZE} height={SIZE}
+          style={{ borderRadius:"50%", display:"block", margin:"0 auto",
+            cursor:"grab", touchAction:"none",
+            boxShadow:"0 0 0 3px rgba(255,255,255,.15)" }}
+          onMouseDown={onPointerDown}
+          onMouseMove={onPointerMove}
+          onMouseUp={onPointerUp}
+          onMouseLeave={onPointerUp}
+          onTouchStart={onPointerDown}
+          onTouchMove={onPointerMove}
+          onTouchEnd={onPointerUp}
+          onWheel={onWheel}
+        />
+
+        <div style={{ display:"flex", gap:10, marginTop:16 }}>
+          <button onClick={onCancel}
+            style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+              background:"rgba(255,255,255,.12)", color:"#fff", fontWeight:600,
+              fontSize:13, cursor:"pointer" }}>
+            Cancel
+          </button>
+          <button onClick={handleSave}
+            style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+              background:"linear-gradient(135deg,#2C2269,#4F46E5)", color:"#fff",
+              fontWeight:700, fontSize:13, cursor:"pointer" }}>
+            Save & Upload
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 const fmtDate = (d) =>
@@ -40,6 +205,8 @@ function calcCompletion(emp) {
     // Documents
     emp?.documents?.appointmentLetter,
     emp?.documents?.salarySlips?.length > 0,
+    // Profile photo
+    emp?.personal?.avatar,
   ];
   const filled = checks.filter(Boolean).length;
   return Math.round((filled / checks.length) * 100);
@@ -78,9 +245,12 @@ export default function EmployeeProfile() {
   const [emp,        setEmp]        = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [activeTab,  setActiveTab]  = useState("overview");
-  const [uploading,  setUploading]  = useState(false);
-  const [docFiles,   setDocFiles]   = useState({});
-  const [lightbox,   setLightbox]   = useState(null); // { url, name }
+  const [uploading,       setUploading]       = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [cropSrc,         setCropSrc]         = useState(null); // base64 for crop modal
+  const [docFiles,        setDocFiles]        = useState({});
+  const [lightbox,        setLightbox]        = useState(null); // { url, name }
+  const avatarInputRef = useRef(null);
 
   // ── Fetch employee ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -125,6 +295,36 @@ export default function EmployeeProfile() {
       setDocFiles({});
     } catch { toast.error("Upload failed"); }
     finally { setUploading(false); }
+  };
+
+  // ── Step 1: file selected → show crop modal ──────────────────────────────
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => setCropSrc(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  // ── Step 2: user saved crop → upload blob ─────────────────────────────────
+  const handleCroppedUpload = async (blob) => {
+    setCropSrc(null);
+    setAvatarUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("avatar", blob, "avatar.jpg");
+      const res  = await fetch("/api/employee/upload-avatar", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!data.success) { toast.error(data.message || "Upload failed"); return; }
+      toast.success("Profile photo updated!");
+      setEmp((prev) => ({ ...prev, personal: { ...prev?.personal, avatar: data.avatar } }));
+    } catch { toast.error("Upload failed"); }
+    finally { setAvatarUploading(false); }
   };
 
   if (loading) {
@@ -172,12 +372,25 @@ export default function EmployeeProfile() {
             padding:0 24px; margin-top:-36px; margin-bottom:14px;
           }
           .ep-avatar {
-            width:72px; height:72px; border-radius:50%;
-            background:#4F46E5; color:#fff;
+            width:80px; height:80px; border-radius:50%;
+            background:linear-gradient(135deg,#2C2269,#4F46E5); color:#fff;
             display:flex; align-items:center; justify-content:center;
-            font-size:24px; font-weight:800;
-            border:4px solid #fff; box-shadow:0 2px 12px rgba(0,0,0,.15);
+            font-size:26px; font-weight:800;
+            border:4px solid #fff; box-shadow:0 2px 16px rgba(44,34,105,.25);
+            overflow:hidden; position:relative;
           }
+          .ep-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+          .ep-avatar-wrap { position:relative; display:inline-block; padding:0 24px; margin-top:-40px; margin-bottom:14px; }
+          .ep-avatar-upload-btn {
+            position:absolute; bottom:4px; right:22px;
+            width:26px; height:26px; border-radius:50%;
+            background:#2C2269; color:#fff; border:2.5px solid #fff;
+            display:flex; align-items:center; justify-content:center;
+            font-size:11px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.2);
+            transition:background .15s;
+          }
+          .ep-avatar-upload-btn:hover { background:#3D2F8A; }
+          .ep-avatar-upload-btn.loading { background:#9CA3AF; cursor:not-allowed; }
           .ep-sidebar-body { padding:0 24px 24px; }
           .ep-name  { font-size:16px; font-weight:700; color:#111827; margin-bottom:2px; }
           .ep-role  { font-size:12px; color:#6B7280; margin-bottom:16px; }
@@ -357,7 +570,24 @@ export default function EmployeeProfile() {
                 <div className="ep-sidebar">
                   <div className="ep-sidebar-banner"></div>
                   <div className="ep-avatar-wrap">
-                    <div className="ep-avatar">{getInitials(emp?.firstName, emp?.lastName)}</div>
+                    <div className="ep-avatar">
+                      {emp?.personal?.avatar
+                        ? <img src={emp.personal.avatar} alt="Profile" />
+                        : getInitials(emp?.firstName, emp?.lastName)
+                      }
+                    </div>
+                    {/* Hidden file input */}
+                    <input ref={avatarInputRef} type="file" accept="image/*"
+                      style={{ display:"none" }} onChange={handleAvatarUpload} />
+                    {/* Camera button */}
+                    <button
+                      className={`ep-avatar-upload-btn ${avatarUploading ? "loading" : ""}`}
+                      onClick={() => !avatarUploading && avatarInputRef.current?.click()}
+                      title="Upload profile photo">
+                      {avatarUploading
+                        ? <i className="bi bi-hourglass-split" style={{ fontSize:10 }} />
+                        : <i className="bi bi-camera-fill" style={{ fontSize:11 }} />}
+                    </button>
                   </div>
                   <div className="ep-sidebar-body">
                     <div className="ep-name">{name}</div>
@@ -376,10 +606,11 @@ export default function EmployeeProfile() {
                     {/* Section checklist */}
                     <div className="ep-checklist">
                       {[
-                        { key:"personal",     label:"Personal Info",   done:sections.personal     },
-                        { key:"professional", label:"Professional",    done:sections.professional  },
-                        { key:"bank",         label:"Bank Details",    done:sections.bank          },
-                        { key:"documents",    label:"Documents",       done:sections.documents     },
+                        { key:"photo",        label:"Profile Photo",   done:!!emp?.personal?.avatar },
+                        { key:"personal",     label:"Personal Info",   done:sections.personal       },
+                        { key:"professional", label:"Professional",    done:sections.professional   },
+                        { key:"bank",         label:"Bank Details",    done:sections.bank           },
+                        { key:"documents",    label:"Documents",       done:sections.documents      },
                       ].map(({ key, label, done }) => (
                         <div key={key} className="ep-check-item">
                           <div className={`ep-check-icon ${done ? "done" : "todo"}`}>
@@ -613,6 +844,15 @@ export default function EmployeeProfile() {
           </section>
         </div>
       </div>
+
+      {/* ── Image Crop Modal ── */}
+      {cropSrc && (
+        <CropModal
+          src={cropSrc}
+          onCancel={() => setCropSrc(null)}
+          onCrop={handleCroppedUpload}
+        />
+      )}
 
       {/* ── Lightbox / doc viewer ── */}
       {lightbox && (

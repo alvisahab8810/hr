@@ -600,9 +600,10 @@ export default function AttendanceDashboard() {
                                 onClick={() => router.push(`/dashboard/admin/attendance/employee/${emp.employeeId}`)}>
                                 <td style={{ paddingLeft: 20 }}>
                                   <div className="emp-cell">
-                                    <div className="avatar">
-                                      {(emp.name || "NA").split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                                    </div>
+                                    {emp.avatar
+                                      ? <img src={emp.avatar} alt="avatar" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", border:"1.5px solid #E5E7EB", flexShrink:0 }} />
+                                      : <div className="avatar">{(emp.name || "NA").split(" ").map((n) => n[0]).join("").slice(0, 2)}</div>
+                                    }
                                     <span className="emp-name">{emp.name || "N/A"}</span>
                                   </div>
                                 </td>
@@ -709,10 +710,11 @@ export default function AttendanceDashboard() {
                                   {/* Sticky cells — explicit solid bg */}
                                   <td className="cal-sticky-1">
                                     <div className="emp-cell">
-                                      <div className="avatar" style={{ width: 30, height: 30, fontSize: 10 }}>
-                                        {emp.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                                      </div>
-                                      <span style={{ fontWeight: 600, fontSize: 12.5, color: "#111827" }}>{emp.name}</span>
+                                      {emp.avatar
+                                        ? <img src={emp.avatar} alt="avatar" style={{ width:30, height:30, borderRadius:"50%", objectFit:"cover", border:"1.5px solid #E5E7EB", flexShrink:0 }} />
+                                        : <div className="avatar" style={{ width:30, height:30, fontSize:10 }}>{emp.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}</div>
+                                      }
+                                      <span style={{ fontWeight:600, fontSize:12.5, color:"#111827" }}>{emp.name}</span>
                                     </div>
                                   </td>
                                   <td className="cal-sticky-2" style={{ color: "#6B7280", fontSize: 12, textAlign: "center" }}>

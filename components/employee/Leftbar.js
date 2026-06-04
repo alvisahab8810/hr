@@ -9,7 +9,7 @@ export default function EmployeeLeftbar() {
   const pathname = usePathname();
 
   const [employee, setEmployee] = useState({
-    firstName: "", lastName: "", employeeId: "", dept: "", completion: 0,
+    firstName: "", lastName: "", employeeId: "", dept: "", completion: 0, avatar: "",
   });
   const [tmsOpen, setTmsOpen]         = useState(false);
   const [msgUnread, setMsgUnread]         = useState(0);
@@ -30,11 +30,15 @@ export default function EmployeeLeftbar() {
       .then(d => {
         if (d.success && d.employee) {
           const emp = d.employee;
+          // Must match profile.js calcCompletion exactly
           const checks = [
+            emp?.personal?.avatar,
             emp?.personal?.mobile, emp?.personal?.email, emp?.personal?.dob,
             emp?.personal?.address, emp?.personal?.city, emp?.personal?.state,
-            emp?.salary?.bankName, emp?.salary?.accountNumber,
-            emp?.documents?.appointmentLetter,
+            emp?.personal?.maritalStatus, emp?.personal?.fatherName,
+            emp?.professional?.department, emp?.professional?.designation, emp?.professional?.dateOfJoining,
+            emp?.salary?.bankName, emp?.salary?.accountNumber, emp?.salary?.ifscCode, emp?.salary?.panNumber,
+            emp?.documents?.appointmentLetter, emp?.documents?.salarySlips?.length > 0,
           ];
           const pct = Math.round((checks.filter(Boolean).length / checks.length) * 100);
           const dept = emp.professional?.department || "";
@@ -44,6 +48,7 @@ export default function EmployeeLeftbar() {
             employeeId: emp.employeeId || "",
             dept,
             completion: pct,
+            avatar:     emp.personal?.avatar || "",
           });
           const dm   = dept.toLowerCase().includes("digital") || dept.toLowerCase().includes("marketing");
           const tech = dept.toLowerCase().includes("tech") || dept.toLowerCase().includes("development") || dept.toLowerCase().includes("developer") || dept.toLowerCase().includes("engineering");
@@ -157,17 +162,23 @@ export default function EmployeeLeftbar() {
           {/* Avatar cell */}
           <td style={{ width:52, padding:"12px 0 10px 12px", verticalAlign:"middle" }}>
             <div style={{ position:"relative", width:40, height:40 }}>
-              <div style={{
-                width:40, height:40, borderRadius:"50%",
-                background:"linear-gradient(135deg,#818CF8,#A78BFA)",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                color:"#fff", fontWeight:800, fontSize:14,
-                border:"2.5px solid rgba(255,255,255,.3)",
-                boxShadow:"0 0 0 3px rgba(129,140,248,.2)",
-                textAlign:"center", lineHeight:"40px",
-              }}>
-                {initials}
-              </div>
+              {employee.avatar ? (
+                <img src={employee.avatar} alt="avatar"
+                  style={{ width:40, height:40, borderRadius:"50%", objectFit:"cover",
+                    border:"2.5px solid rgba(255,255,255,.3)",
+                    boxShadow:"0 0 0 3px rgba(129,140,248,.2)" }} />
+              ) : (
+                <div style={{
+                  width:40, height:40, borderRadius:"50%",
+                  background:"linear-gradient(135deg,#818CF8,#A78BFA)",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#fff", fontWeight:800, fontSize:14,
+                  border:"2.5px solid rgba(255,255,255,.3)",
+                  boxShadow:"0 0 0 3px rgba(129,140,248,.2)",
+                }}>
+                  {initials}
+                </div>
+              )}
               <span style={{
                 position:"absolute", bottom:1, right:1,
                 width:9, height:9, borderRadius:"50%",

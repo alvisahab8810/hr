@@ -197,16 +197,18 @@ export default function FormerEmployees() {
                         </td></tr>
                       ) : filtered.map(emp => {
                         const meta = EXIT_META[emp.exitStatus] || EXIT_META.Other;
-                        const name = empName(emp);
+                        const name    = empName(emp);
                         const initials = name.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0,2).toUpperCase();
+                        const avatar  = emp.personal?.avatar || null;
                         return (
                           <tr key={emp._id} className="fe-row" onClick={() => setSelected(emp)}
                             style={{ borderBottom:"1px solid #F3F4F6" }}>
                             <td style={{ padding:"12px 14px" }}>
                               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                <div style={{ width:36, height:36, borderRadius:"50%", background:"linear-gradient(135deg,#E5E7EB,#D1D5DB)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:800, color:"#6B7280", flexShrink:0 }}>
-                                  {initials}
-                                </div>
+                                {avatar
+                                  ? <img src={avatar} alt="avatar" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", flexShrink:0, border:"1.5px solid #E5E7EB" }} />
+                                  : <div style={{ width:36, height:36, borderRadius:"50%", background:"linear-gradient(135deg,#E5E7EB,#D1D5DB)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:800, color:"#6B7280", flexShrink:0 }}>{initials}</div>
+                                }
                                 <div>
                                   <div style={{ fontWeight:700, color:"#374151" }}>{name}</div>
                                   <div style={{ fontSize:11, color:"#9CA3AF" }}>{emp.professional?.officialEmail || emp.personal?.email || emp.email?.replace(/_deactivated_\d+@deactivated\.invalid$/, "") || "—"}</div>
@@ -267,9 +269,12 @@ export default function FormerEmployees() {
                     <div style={{ background:"linear-gradient(135deg,#374151,#6B7280)", padding:"20px 22px" }}>
                       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
                         <div>
-                          <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:"#fff", marginBottom:10 }}>
-                            {empName(selected).split(" ").filter(Boolean).map(n=>n[0]).join("").slice(0,2).toUpperCase()}
-                          </div>
+                          {selected.personal?.avatar
+                            ? <img src={selected.personal.avatar} alt="avatar" style={{ width:52, height:52, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:"3px solid rgba(255,255,255,0.3)" }} />
+                            : <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:"#fff", marginBottom:10 }}>
+                                {empName(selected).split(" ").filter(Boolean).map(n=>n[0]).join("").slice(0,2).toUpperCase()}
+                              </div>
+                          }
                           <h3 style={{ color:"#fff", fontWeight:800, fontSize:17, margin:0 }}>{empName(selected)}</h3>
                           <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:3 }}>
                             {selected.professional?.designation || ""}{selected.professional?.department ? ` · ${selected.professional.department}` : ""}

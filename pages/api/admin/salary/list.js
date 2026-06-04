@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     })
       .populate(
         "employee",
-        "firstName lastName professional salary isActive"
+        "firstName lastName personal professional salary isActive"
       )
       .sort({ createdAt: -1 });
 

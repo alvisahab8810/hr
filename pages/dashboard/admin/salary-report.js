@@ -24,6 +24,7 @@ const empName = (s) => {
     return `${s.employee.firstName} ${s.employee.lastName || ""}`.trim();
   return "—";
 };
+const empAvatar = (s) => s.employee?.personal?.avatar || null;
 
 const getInitials = (name) =>
   name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -491,6 +492,7 @@ export default function SalaryReport() {
                         const ot       = s.overtime      || {};
                         const reim     = s.reimbursement || {};
                         const name     = empName(s);
+                        const avatar   = empAvatar(s);
                         const [bg, fc] = avatarColor(name);
 
                         return (
@@ -500,9 +502,10 @@ export default function SalaryReport() {
                               {/* Employee */}
                               <td>
                                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                  <div className="emp-avatar" style={{ background:bg, color:fc }}>
-                                    {getInitials(name)}
-                                  </div>
+                                  {avatar
+                                    ? <img src={avatar} alt="avatar" className="emp-avatar" style={{ objectFit:"cover", padding:0, border:`2px solid ${bg}` }} />
+                                    : <div className="emp-avatar" style={{ background:bg, color:fc }}>{getInitials(name)}</div>
+                                  }
                                   <div>
                                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                                       <span className="emp-info-name">{name}</span>

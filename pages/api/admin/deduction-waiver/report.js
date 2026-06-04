@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
   const [reports, waivers] = await Promise.all([
     SalaryReport.find({ month, year })
-      .populate("employee", "firstName lastName employeeId email professional isActive")
+      .populate("employee", "firstName lastName personal employeeId email professional isActive")
       .lean(),
     DeductionWaiverRequest.find({ month, year })
       .populate("employee", "firstName lastName employeeId")

@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   await dbConnect();
 
   const employees = await Employee.find({ status: { $ne: "inactive" } })
-    .select("firstName lastName professional.department professional.designation _id")
+    .select("firstName lastName personal professional.department professional.designation _id")
     .lean();
 
   const empIds = employees.map(e => e._id);
@@ -38,6 +38,7 @@ export default async function handler(req, res) {
     name:    `${e.firstName || ""} ${e.lastName || ""}`.trim(),
     dept:    e.professional?.department || "",
     desig:   e.professional?.designation || "",
+    avatar:  e.personal?.avatar || null,
     unread:  unreadMap[String(e._id)] || 0,
     lastMsg: lastMsgMap[String(e._id)] || null,
   })).sort((a, b) => {

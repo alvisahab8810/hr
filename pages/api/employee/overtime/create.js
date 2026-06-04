@@ -57,6 +57,14 @@ export default async function handler(req, res) {
     const [sh, sm] = startTime.split(":").map(Number);
     const [eh, em] = endTime.split(":").map(Number);
 
+    // Block 6:00 PM – 6:59 PM start times (office closes at 6, first hour not counted as OT)
+    if (sh === 18) {
+      return res.status(400).json({
+        success: false,
+        message: "OT cannot start between 6:00 PM and 6:59 PM. The first hour after office is not counted as OT. Please start from 7:00 PM.",
+      });
+    }
+
     // If OT date is today, block past start times (allow 30-min grace)
     if (otDate.getTime() === todayMidnight.getTime()) {
       const now = new Date();

@@ -531,7 +531,9 @@ export default function AdminCommunity() {
                             const isOwn = m.senderType === "admin";
                             return (
                               <div key={m._id} className="ac-msg">
-                                <div className="ac-av" style={{ background: avColor(m.senderName) }}>{nameInitials(m.senderName)}</div>
+                                {(() => { const e = employees.find(x => x.name === m.senderName); return e?.avatar
+                                  ? <img src={e.avatar} alt="av" className="ac-av" style={{ objectFit:"cover", padding:0 }} />
+                                  : <div className="ac-av" style={{ background: avColor(m.senderName) }}>{nameInitials(m.senderName)}</div>; })()}
                                 <div className="ac-msg-body">
                                   <div className="ac-msg-meta">
                                     <span className="ac-msg-name">{m.senderName}</span>
@@ -634,7 +636,10 @@ export default function AdminCommunity() {
                             {filteredMembers.map((m, i) => (
                               <div key={m._id} className={`ac-mention-item ${i === mentionIdx ? "active" : ""}`}
                                 onMouseDown={e => { e.preventDefault(); insertMention(m); }}>
-                                <div style={{ width: 28, height: 28, borderRadius: 7, background: avColor(m.name), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff", flexShrink: 0 }}>{nameInitials(m.name)}</div>
+                                {m.avatar
+                                  ? <img src={m.avatar} alt="av" style={{ width:28, height:28, borderRadius:7, objectFit:"cover", flexShrink:0 }} />
+                                  : <div style={{ width:28, height:28, borderRadius:7, background:avColor(m.name), display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:800, color:"#fff", flexShrink:0 }}>{nameInitials(m.name)}</div>
+                                }
                                 <div>
                                   <div style={{ fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{m.name}</div>
                                   {m.dept && <div style={{ fontSize: 11, color: "#94a3b8" }}>{m.dept}</div>}
@@ -661,9 +666,10 @@ export default function AdminCommunity() {
                     <>
                       <div className="ac-dm-hd">
                         {selectedEmp ? (
-                          <div className="ac-dm-hd-av" style={{ background: avColor(selectedEmp.name) }}>
-                            {nameInitials(selectedEmp.name)}
-                          </div>
+                          {selectedEmp.avatar
+                            ? <img src={selectedEmp.avatar} alt="avatar" className="ac-dm-hd-av" style={{ objectFit:"cover", padding:0 }} />
+                            : <div className="ac-dm-hd-av" style={{ background: avColor(selectedEmp.name) }}>{nameInitials(selectedEmp.name)}</div>
+                          }
                         ) : (
                           <div className="ac-dm-hd-av" style={{ background: "linear-gradient(135deg,#4F46E5,#7C3AED)" }}>
                             <i className="bi bi-person-lines-fill" style={{ fontSize: 16, color: "#fff" }} />
@@ -705,9 +711,10 @@ export default function AdminCommunity() {
                                 return (
                                   <div key={m._id} className={`dm-brow ${isAdminMsg ? "dm-sent" : "dm-recv"}`}>
                                     {!isAdminMsg && (
-                                      <div className="dm-av-sm" style={{ background: avColor(m.senderName) }}>
-                                        {nameInitials(m.senderName)}
-                                      </div>
+                                      {selectedEmp?.avatar
+                                        ? <img src={selectedEmp.avatar} alt="av" className="dm-av-sm" style={{ objectFit:"cover", padding:0 }} />
+                                        : <div className="dm-av-sm" style={{ background: avColor(m.senderName) }}>{nameInitials(m.senderName)}</div>
+                                      }
                                     )}
                                     <div className="dm-bwrap">
                                       <div className="dm-bname">{isAdminMsg ? "You" : m.senderName}</div>
@@ -794,7 +801,10 @@ export default function AdminCommunity() {
                         filteredEmployees.map(e => (
                           <div key={e._id} className={`ac-emp-item ${selectedEmp?._id === e._id ? "selected" : ""}`}
                             onClick={() => loadDmThread(e)}>
-                            <div className="ac-emp-av" style={{ background: avColor(e.name) }}>{nameInitials(e.name)}</div>
+                            {e.avatar
+                              ? <img src={e.avatar} alt="av" className="ac-emp-av" style={{ objectFit:"cover", padding:0 }} />
+                              : <div className="ac-emp-av" style={{ background: avColor(e.name) }}>{nameInitials(e.name)}</div>
+                            }
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div className="ac-emp-name">{e.name}</div>

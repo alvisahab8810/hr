@@ -247,7 +247,9 @@ export default function EmployeeDashboard() {
             display: flex; align-items: center; justify-content: center;
             font-size: 22px; font-weight: 800; color: #fff;
             border: 3px solid rgba(255,255,255,.35); flex-shrink: 0;
+            overflow: hidden;
           }
+          .ed-hero-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
           .ed-hero-info { flex: 1; min-width: 0; }
           .ed-hero-name { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 2px; }
           .ed-hero-role { font-size: 13px; color: rgba(255,255,255,.7); margin-bottom: 8px; }
@@ -426,7 +428,10 @@ export default function EmployeeDashboard() {
             {/* ── Hero card ── */}
             <div className="ed-hero">
               <div className="ed-hero-avatar">
-                {getInitials(employee?.firstName, employee?.lastName)}
+                {employee?.personal?.avatar
+                  ? <img src={employee.personal.avatar} alt="avatar" />
+                  : getInitials(employee?.firstName, employee?.lastName)
+                }
               </div>
               <div className="ed-hero-info">
                 <div className="ed-hero-name">Welcome back, {employee.firstName}!</div>

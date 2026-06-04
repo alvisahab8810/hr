@@ -14,6 +14,8 @@ const MONTHS = [
 
 const fmt = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
+const getEmpAvatar = (item) => item.employee?.personal?.avatar || null;
+
 const getEmpName = (item) => {
   if (item.employee?.personal?.firstName)
     return `${item.employee.personal.firstName} ${item.employee.personal.lastName || ""}`.trim();
@@ -94,8 +96,9 @@ export default function AdminReimbursement() {
       if (!map.has(empId)) {
         map.set(empId, {
           empId,
-          name: getEmpName(item),
-          dept: getDept(item),
+          name:   getEmpName(item),
+          dept:   getDept(item),
+          avatar: getEmpAvatar(item),
           entries: [],
         });
       }
@@ -519,9 +522,10 @@ export default function AdminReimbursement() {
                     return (
                       <div key={group.empId} className="rb-emp-card" onClick={() => setDrawer(group)}>
                         <div className="rb-emp-card-top">
-                          <div className="rb-emp-avatar" style={{ background:bg, color:fc }}>
-                            {getInitials(group.name)}
-                          </div>
+                          {group.avatar
+                            ? <img src={group.avatar} alt="avatar" className="rb-emp-avatar" style={{ objectFit:"cover", padding:0 }} />
+                            : <div className="rb-emp-avatar" style={{ background:bg, color:fc }}>{getInitials(group.name)}</div>
+                          }
                           <div style={{ minWidth:0 }}>
                             <div className="rb-emp-name">{group.name}</div>
                             {group.dept && <div className="rb-emp-dept">{group.dept}</div>}
@@ -576,9 +580,10 @@ export default function AdminReimbursement() {
                       const st = groupStats(drawerGroup.entries);
                       return (
                         <>
-                          <div className="rb-drawer-avatar" style={{ background:bg, color:fc }}>
-                            {getInitials(drawerGroup.name)}
-                          </div>
+                          {drawerGroup.avatar
+                            ? <img src={drawerGroup.avatar} alt="avatar" className="rb-drawer-avatar" style={{ objectFit:"cover", padding:0 }} />
+                            : <div className="rb-drawer-avatar" style={{ background:bg, color:fc }}>{getInitials(drawerGroup.name)}</div>
+                          }
                           <div style={{ minWidth:0 }}>
                             <div style={{ fontWeight:800, fontSize:16, color:"#111827" }}>{drawerGroup.name}</div>
                             {drawerGroup.dept && (

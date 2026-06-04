@@ -284,10 +284,20 @@ export default function LeaveManagement() {
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-        />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+          @media (max-width: 640px) {
+            .viral-leaves-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
+            .vl-card { border-radius: 12px !important; margin-bottom: 14px !important; padding: 14px !important; }
+            .vl-card-title { font-size: 14px !important; }
+            .vl-primary-btn { width: 100%; text-align: center; justify-content: center; }
+            .vl-leave-item { flex-direction: column; align-items: flex-start !important; gap: 8px; }
+            .vl-actions { width: 100%; display: flex; gap: 8px; flex-wrap: wrap; }
+            .leave-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .leave-table-wrap table { min-width: 520px; }
+            .breadcrum-bx { display: none; }
+          }
+        `}</style>
       </Head>
 
       <div className="add-employee-area">

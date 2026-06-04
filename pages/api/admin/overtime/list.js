@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const overtimeRequests = await Overtime.find(query)
       .populate(
         "employee",
-        "personal.firstName personal.lastName personal.email professional"
+        "personal professional"
       )
       .populate("approvedBy", "name email")
       .sort({ createdAt: -1 });

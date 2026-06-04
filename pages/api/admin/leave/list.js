@@ -17,7 +17,7 @@
 //     const leaves = await LeaveApplication.find()
 //       .populate({
 //         path: "employee",
-//         select: "firstName lastName",
+//         select: "firstName lastName personal",
 //       })
 //       .sort({ createdAt: -1 })
 //       .lean();
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     })
       .populate({
         path: "employee",
-        select: "firstName lastName",
+        select: "firstName lastName personal",
       })
       .sort({ createdAt: -1 })
       .lean();

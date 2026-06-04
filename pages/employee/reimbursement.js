@@ -138,10 +138,24 @@ export default function Reimbursement() {
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-        />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+          @media (max-width: 640px) {
+            .reim-summary-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+            .reim-card h3 { font-size: 22px !important; }
+            .reim-card-title { font-size: 12px !important; }
+            .reim-section-head { flex-direction: column; gap: 10px; }
+            .reim-section-head > div:last-child,
+            .reim-section-head > button { width: 100%; }
+            .reim-submit-btn { width: 100%; justify-content: center; }
+            .reim-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .reim-table-wrap .reim-table { min-width: 560px; }
+            .reim-page-head h2 { font-size: 20px !important; }
+          }
+          @media (max-width: 380px) {
+            .reim-summary-grid { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
       </Head>
 
       <div className="add-employee-area">
@@ -229,6 +243,7 @@ export default function Reimbursement() {
                   </button>
                 </div>
 
+                <div className="reim-table-wrap">
                 <table className="reim-table">
                   <thead>
                     <tr>
@@ -336,6 +351,7 @@ export default function Reimbursement() {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           </section>

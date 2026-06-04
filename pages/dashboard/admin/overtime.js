@@ -12,9 +12,20 @@ function getOTWindow(ot) {
   const d  = new Date(ot.date);
   const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const start = new Date(`${ds}T${ot.startTime}:00`);
-  const end   = new Date(`${ds}T${ot.endTime}:00`);
+  let   end   = new Date(`${ds}T${ot.endTime}:00`);
   if (end <= start) end.setDate(end.getDate() + 1);
+  // Include approved extensions
+  const extMins = (ot.extensions || [])
+    .filter(e => e.status === "Approved")
+    .reduce((s, e) => s + (e.extraMins || 0), 0);
+  if (extMins > 0) end = new Date(end.getTime() + extMins * 60 * 1000);
   return { start, end };
+}
+
+function minsLabel(m) {
+  if (!m) return "";
+  const h = Math.floor(m / 60), mn = m % 60;
+  return h > 0 ? `${h}h${mn > 0 ? ` ${mn}m` : ""}` : `${mn}m`;
 }
 function fmtMs(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -80,6 +91,7 @@ const getEmpName = (ot) => {
     return `${ot.employee.firstName} ${ot.employee.lastName || ""}`.trim();
   return ot.employee?.email || "—";
 };
+const getEmpAvatar = (ot) => ot.employee?.personal?.avatar || null;
 
 const getInitials = (name) =>
   name.split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0,2).toUpperCase();
@@ -142,6 +154,10 @@ export default function AdminOvertime() {
   // Reject modal (inside drawer)
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectRemark, setRejectRemark] = useState("");
+  // Extension processing
+  const [extProcessing, setExtProcessing] = useState(null); // "otId-extId"
+  const [extRejectTarget, setExtRejectTarget] = useState(null); // { ot, ext }
+  const [extRejectRemark, setExtRejectRemark] = useState("");
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchOT = async () => {
@@ -168,8 +184,9 @@ export default function AdminOvertime() {
       if (!map.has(empId)) {
         map.set(empId, {
           empId,
-          name: getEmpName(ot),
-          dept: ot.employee?.professional?.department || ot.employee?.department || "",
+          name:   getEmpName(ot),
+          dept:   ot.employee?.professional?.department || ot.employee?.department || "",
+          avatar: getEmpAvatar(ot),
           entries: [],
         });
       }
@@ -240,6 +257,24 @@ export default function AdminOvertime() {
       toast.success("Overtime rejected");
     } catch { toast.error("Something went wrong"); }
     finally { setProcessing(null); }
+  };
+
+  // ── Extension approve / reject ─────────────────────────────────────────────
+  const handleExtensionAction = async (ot, ext, action, remark = "") => {
+    const key = `${ot._id}-${ext._id}`;
+    setExtProcessing(key);
+    try {
+      const res  = await fetch("/api/admin/overtime/extend-approve", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ otId: ot._id, extensionId: ext._id, action, remark }),
+      });
+      const data = await res.json();
+      if (!data.success) { toast.error("Failed to process extension"); return; }
+      setOvertimeList(prev => prev.map(o => o._id === ot._id ? { ...o, extensions: data.overtime.extensions } : o));
+      toast.success(`Extension ${action === "approve" ? "approved" : "rejected"}`);
+      setExtRejectTarget(null); setExtRejectRemark("");
+    } catch { toast.error("Something went wrong"); }
+    finally { setExtProcessing(null); }
   };
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -495,6 +530,24 @@ export default function AdminOvertime() {
           .ot-empty p { color:#9CA3AF; font-size:14px; }
           .ot-loading { text-align:center; padding:60px; color:#9CA3AF; }
 
+          /* Extension section */
+          .ot-ext-section { margin-top:10px; border-top:1.5px dashed #E5E7EB; padding-top:10px; }
+          .ot-ext-section-title { font-size:10px; font-weight:700; color:#9CA3AF; text-transform:uppercase;
+            letter-spacing:.05em; margin-bottom:8px; }
+          .ot-ext-item { border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+          .ot-ext-item.pending  { background:#FFFBEB; border:1px solid #FCD34D; }
+          .ot-ext-item.approved { background:#F0FDF4; border:1px solid #BBF7D0; }
+          .ot-ext-item.rejected { background:#FFF1F2; border:1px solid #FECDD3; }
+          .ot-ext-item-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:5px; }
+          .ot-ext-item-mins { font-size:14px; font-weight:800; color:#4F46E5; }
+          .ot-ext-item-status { padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700;
+            display:inline-flex; align-items:center; gap:4px; }
+          .ot-ext-item-status.pending  { background:#FEF9C3; color:#854D0E; }
+          .ot-ext-item-status.approved { background:#DCFCE7; color:#166534; }
+          .ot-ext-item-status.rejected { background:#FEE2E2; color:#991B1B; }
+          .ot-ext-reason { font-size:11px; color:#6B7280; }
+          .ot-ext-actions { display:flex; gap:7px; margin-top:8px; }
+
           @keyframes otPulse {
             0%,100% { opacity:1; transform:scale(1); }
             50% { opacity:.4; transform:scale(1.4); }
@@ -628,9 +681,10 @@ export default function AdminOvertime() {
                       })()}
 
                       <div className="ot-emp-card-top">
-                        <div className="ot-emp-avatar" style={{ background:bg, color:fc }}>
-                          {getInitials(group.name)}
-                        </div>
+                        {group.avatar
+                          ? <img src={group.avatar} alt="avatar" className="ot-emp-avatar" style={{ objectFit:"cover", padding:0 }} />
+                          : <div className="ot-emp-avatar" style={{ background:bg, color:fc }}>{getInitials(group.name)}</div>
+                        }
                         <div style={{ minWidth:0 }}>
                           <div className="ot-emp-name">{group.name}</div>
                           {group.dept && <div className="ot-emp-dept">{group.dept}</div>}
@@ -686,9 +740,10 @@ export default function AdminOvertime() {
                     const st = groupStats(drawerGroup.entries);
                     return (
                       <>
-                        <div className="ot-drawer-avatar" style={{ background:bg, color:fc }}>
-                          {getInitials(drawerGroup.name)}
-                        </div>
+                        {drawerGroup.avatar
+                          ? <img src={drawerGroup.avatar} alt="avatar" className="ot-drawer-avatar" style={{ objectFit:"cover", padding:0 }} />
+                          : <div className="ot-drawer-avatar" style={{ background:bg, color:fc }}>{getInitials(drawerGroup.name)}</div>
+                        }
                         <div style={{ minWidth:0 }}>
                           <div style={{ fontWeight:800, fontSize:16, color:"#111827" }}>{drawerGroup.name}</div>
                           {drawerGroup.dept && <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{drawerGroup.dept}</div>}
@@ -783,6 +838,32 @@ export default function AdminOvertime() {
                             </div>
                           )}
 
+                          {/* Reason */}
+                          {ot.reason && (
+                            <div style={{ background:"#F9FAFB", borderRadius:8, padding:"8px 11px",
+                              fontSize:12, color:"#374151", borderLeft:"3px solid #6366F1",
+                              display:"flex", alignItems:"flex-start", gap:7, marginBottom:9 }}>
+                              <i className="bi bi-chat-left-text" style={{ color:"#6366F1", flexShrink:0, marginTop:1 }} />
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:".04em", marginBottom:2 }}>Reason</div>
+                                {ot.reason}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Tasks */}
+                          {ot.tasks && (
+                            <div style={{ background:"#F9FAFB", borderRadius:8, padding:"8px 11px",
+                              fontSize:12, color:"#374151", borderLeft:"3px solid #8B5CF6",
+                              display:"flex", alignItems:"flex-start", gap:7, marginBottom:9 }}>
+                              <i className="bi bi-list-task" style={{ color:"#8B5CF6", flexShrink:0, marginTop:1 }} />
+                              <div>
+                                <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:".04em", marginBottom:2 }}>Tasks</div>
+                                {ot.tasks}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Authoriser */}
                           {ot.otApprover && (
                             <div className="ot-entry-approver">
@@ -806,6 +887,59 @@ export default function AdminOvertime() {
                             if (otDay !== todayStr) return null;
                             return <AdminOTTimer ot={ot} />;
                           })()}
+
+                          {/* ── Extensions section ── */}
+                          {(ot.extensions || []).length > 0 && (
+                            <div className="ot-ext-section">
+                              <div className="ot-ext-section-title">
+                                <i className="bi bi-plus-circle me-1" />
+                                OT Extensions
+                              </div>
+                              {ot.extensions.map(ext => {
+                                const extKey = `${ot._id}-${ext._id}`;
+                                const cls = ext.status.toLowerCase();
+                                return (
+                                  <div key={ext._id} className={`ot-ext-item ${cls}`}>
+                                    <div className="ot-ext-item-head">
+                                      <span className="ot-ext-item-mins">+{minsLabel(ext.extraMins)}</span>
+                                      <span className={`ot-ext-item-status ${cls}`}>
+                                        <i className={`bi bi-${ext.status==="Approved"?"check-circle-fill":ext.status==="Rejected"?"x-circle-fill":"clock-fill"}`} style={{ fontSize:9 }} />
+                                        {ext.status}
+                                      </span>
+                                    </div>
+                                    {ext.reason && (
+                                      <div className="ot-ext-reason">
+                                        <i className="bi bi-chat-left-text me-1" />
+                                        {ext.reason}
+                                      </div>
+                                    )}
+                                    {ext.status === "Pending" && (
+                                      <div className="ot-ext-actions">
+                                        <button className="ot-btn ot-btn-approve"
+                                          disabled={extProcessing === extKey}
+                                          onClick={() => handleExtensionAction(ot, ext, "approve")}>
+                                          {extProcessing === extKey
+                                            ? <div className="spinner-border spinner-border-sm" role="status" />
+                                            : <><i className="bi bi-check-lg" /> Approve Extension</>}
+                                        </button>
+                                        <button className="ot-btn ot-btn-reject"
+                                          disabled={extProcessing === extKey}
+                                          onClick={() => { setExtRejectTarget({ ot, ext }); setExtRejectRemark(""); }}>
+                                          <i className="bi bi-x-lg" /> Reject
+                                        </button>
+                                      </div>
+                                    )}
+                                    {ext.status !== "Pending" && ext.adminRemark && (
+                                      <div className="ot-entry-remark" style={{ marginTop:6 }}>
+                                        <i className="bi bi-exclamation-circle-fill" style={{ flexShrink:0 }} />
+                                        <span><strong>Remark:</strong> {ext.adminRemark}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
 
                           {/* Actions */}
                           {ot.status === "Pending" && (
@@ -831,6 +965,61 @@ export default function AdminOvertime() {
               </div>
             </div>
           </>
+        )}
+
+        {/* ══════════════════════════════════════════
+            EXTENSION REJECT CONFIRM MODAL
+        ══════════════════════════════════════════ */}
+        {extRejectTarget && (
+          <div className="ot-rmodal-backdrop" onClick={() => setExtRejectTarget(null)}>
+            <div className="ot-rmodal" onClick={e => e.stopPropagation()}>
+              <div className="ot-rmodal-head">
+                <div style={{ fontWeight:700, color:"#DC2626", fontSize:15 }}>
+                  <i className="bi bi-x-circle-fill me-2" />Reject Extension Request
+                </div>
+                <button className="ot-rmodal-close" onClick={() => setExtRejectTarget(null)}>
+                  <i className="bi bi-x-lg" />
+                </button>
+              </div>
+              <div style={{ padding:"16px 22px" }}>
+                <div style={{ background:"#FFF1F2", border:"1px solid #FECDD3", borderRadius:12,
+                  padding:"12px 16px", marginBottom:14,
+                  display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontWeight:700, color:"#111827", fontSize:13 }}>{drawerGroup?.name}</div>
+                    <div style={{ color:"#6B7280", fontSize:11, marginTop:2 }}>
+                      Extension of +{minsLabel(extRejectTarget.ext.extraMins)}
+                    </div>
+                  </div>
+                </div>
+                <label style={{ fontSize:12, fontWeight:700, color:"#374151", display:"block", marginBottom:7 }}>
+                  Rejection Reason <span style={{ color:"#DC2626" }}>*</span>
+                </label>
+                <textarea className="ot-textarea"
+                  placeholder="Explain why this extension is rejected…"
+                  value={extRejectRemark}
+                  onChange={e => setExtRejectRemark(e.target.value)}
+                />
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end", padding:"14px 22px",
+                borderTop:"1px solid #F0F0F0" }}>
+                <button onClick={() => { setExtRejectTarget(null); setExtRejectRemark(""); }}
+                  style={{ padding:"9px 22px", borderRadius:10, border:"none",
+                    background:"#F3F4F6", color:"#374151", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                  Cancel
+                </button>
+                <button
+                  disabled={!extRejectRemark.trim()}
+                  onClick={() => handleExtensionAction(extRejectTarget.ot, extRejectTarget.ext, "reject", extRejectRemark)}
+                  style={{ padding:"9px 22px", borderRadius:10, border:"none",
+                    background:"#DC2626", color:"#fff", fontSize:13, fontWeight:600, cursor:"pointer",
+                    display:"flex", alignItems:"center", gap:6,
+                    opacity: !extRejectRemark.trim() ? 0.55 : 1 }}>
+                  <i className="bi bi-x-circle" /> Reject Extension
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ══════════════════════════════════════════

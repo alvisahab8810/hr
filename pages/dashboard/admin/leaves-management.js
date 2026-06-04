@@ -359,10 +359,10 @@ export default function LeaveManagement() {
                         <tr key={leave._id}>
                           <td>
                             <div className="emp-cell">
-                              <div className="avatar">
-                                {leave.employee?.firstName?.[0]}
-                                {leave.employee?.lastName?.[0]}
-                              </div>
+                              {leave.employee?.personal?.avatar
+                                ? <img src={leave.employee.personal.avatar} alt="avatar" className="avatar" style={{ objectFit:"cover", padding:0 }} />
+                                : <div className="avatar">{leave.employee?.firstName?.[0]}{leave.employee?.lastName?.[0]}</div>
+                              }
                               {leave.employee?.firstName}{" "}
                               {leave.employee?.lastName}
                             </div>
