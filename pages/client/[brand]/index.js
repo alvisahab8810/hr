@@ -1788,13 +1788,18 @@ function CalendarView({ overview, brand }) {
             </button>
           </div>
           {/* Legend */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {[["#F97316","S1"],["#3B82F6","S2"],["#EAB308","S3"],["#22C55E","S4"]].flatMap(([c,l]) => [
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              ["#F97316", "Script"],
+              ["#3B82F6", "Shoot"],
+              ["#EAB308", "Edit"],
+              ["#22C55E", "Posted"],
+            ].flatMap(([c, l]) => [
               <span key={l+"a"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
                 <span style={{ width:16, height:10, borderRadius:2, background:"#fff", border:`1.5px solid ${c}`, display:"inline-block" }} />{l}
               </span>,
               <span key={l+"d"} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
-                <span style={{ width:16, height:10, borderRadius:2, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l}✓
+                <span style={{ width:16, height:10, borderRadius:2, background:c, border:`1.5px solid ${c}`, display:"inline-block" }} />{l} ✓
               </span>,
             ])}
             <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, fontWeight:600, color:"#64748b" }}>
