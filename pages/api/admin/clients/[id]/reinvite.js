@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
     // Find linked brand for the portal URL
     const brand = await Brand.findOne({ clientId: id }).lean();
-    const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
+    const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
     const loginUrl = brand?.slug ? `${baseUrl}/${brand.slug}/login` : null;
 
     let emailSent = false;

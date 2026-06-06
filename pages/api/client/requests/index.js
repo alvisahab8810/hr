@@ -50,7 +50,7 @@ ${stripHtml ? `<tr><td style="background:#DCFCE7;border-bottom:1px solid #BBF7D0
 
 async function sendRequestEmails({ clientEmail, clientName, brandName, title, contentType, priority, needBy, brief, referenceLinks }) {
   const t = makeT();
-  const base = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
+  const base = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
   const details = reqEmailBody({ clientName, brandName, title, contentType, priority, needBy, brief, referenceLinks });
 
   // Email to Anurag

@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     }
 
     // Send invite email
-    const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
+    const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
     const loginUrl = brand.slug ? `${baseUrl}/${brand.slug}/login` : null;
 
     if (!loginUrl) {

@@ -91,6 +91,16 @@ export default async function handler(req, res) {
   const todayStr = istDateString();
   const now = istNow();
 
+  // ❌ Block all clock actions on Sundays (IST)
+  const dayOfWeek = new Date(todayStr + "T12:00:00").getDay();
+  if (dayOfWeek === 0) {
+    return res.status(403).json({
+      success: false,
+      message: "Today is Sunday — attendance is not available.",
+      code: "SUNDAY_OFF",
+    });
+  }
+
   // ================= CLOCK IN =================
   if (action === "clock-in") {
     const existing = await Attendance.findOne({

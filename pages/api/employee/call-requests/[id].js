@@ -44,7 +44,7 @@ async function sendActionEmail({ clientEmail, clientName, brandName, action, pre
     <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.65">We appreciate you reaching out! Unfortunately, we are unable to make it on <strong>${preferredDate}</strong> at <strong>${preferredTime}</strong>. We'd love to reschedule at your convenience.</p>
     ${adminNote ? `<div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#C2410C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Message from Anurag</div><div style="font-size:14px;color:#7C2D12;line-height:1.65">${adminNote}</div></div>` : ""}
     <p style="font-size:13px;color:#374151;line-height:1.65">Please use the client portal to submit a new request with a different date and time. We look forward to connecting with you!</p>
-    <div style="text-align:center;margin-top:16px"><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/tourwatchout" style="display:inline-block;padding:10px 24px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px">Request New Time →</a></div>`;
+    <div style="text-align:center;margin-top:16px"><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/tourwatchout" style="display:inline-block;padding:10px 24px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px">Request New Time →</a></div>`;
 
   await transporter.sendMail({
     from:    `"Viralon Team" <info@viralon.in>`,

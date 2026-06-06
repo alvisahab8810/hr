@@ -142,7 +142,7 @@ export async function sendTaskAssignedEmail({ employeeEmail, employeeName, task,
         <!-- CTA -->
         <tr>
           <td style="padding:0 48px 36px;text-align:left;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;letter-spacing:0.2px;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;letter-spacing:0.2px;">
               Open Portal &rarr;
             </a>
           </td>
@@ -255,7 +255,7 @@ export async function sendClientRequestEmail({ clientName, clientEmail, brandNam
         <!-- CTA -->
         <tr>
           <td style="padding:0 48px 36px;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/dashboard/admin/task-requests" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/dashboard/admin/task-requests" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
               Review in Admin Panel
             </a>
           </td>
@@ -350,7 +350,7 @@ export async function sendStageApprovedEmail({ employeeEmail, employeeName, task
 
         <tr>
           <td style="padding:0 48px 36px;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
               Open Portal &rarr;
             </a>
           </td>
@@ -436,7 +436,7 @@ export async function sendStageRejectedEmail({ employeeEmail, employeeName, task
 
         <tr>
           <td style="padding:0 48px 36px;">
-            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
+            <a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/employee/dashboard" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#DC2626,#B91C1C);color:#ffffff;font-size:14px;font-weight:700;border-radius:10px;text-decoration:none;">
               Open Portal &rarr;
             </a>
           </td>

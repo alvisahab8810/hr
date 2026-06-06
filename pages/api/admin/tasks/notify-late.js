@@ -20,7 +20,7 @@ async function sendLateEmail(empEmail, empName, task, stageName, deadline) {
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
 
   await transporter.sendMail({
     from:    `"Viralon Team" <info@viralon.in>`,

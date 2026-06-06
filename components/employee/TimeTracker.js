@@ -186,6 +186,15 @@ export default function TimeTracker() {
 
   // ── Open face scan ─────────────────────────────────────────────────────────
   function openFaceScan(clockAction) {
+    // Block all clock actions on Sundays
+    if (new Date().getDay() === 0) {
+      toast.error("Today is Sunday — office is closed. Attendance is not available.", {
+        autoClose: 5000,
+        icon: "🚫",
+      });
+      return;
+    }
+
     if (!faceEnrolled) {
       // No face enrolled — ask to enroll first
       toast.warning("Please set up your Face ID first", { autoClose: 4000 });
@@ -299,6 +308,7 @@ export default function TimeTracker() {
   }
 
   // ── UI states ──────────────────────────────────────────────────────────────
+  const isSunday     = new Date().getDay() === 0;
   const clockedOut   = !isClockedIn;
   const lunchOverdue = isOnBreak && breakMs > LUNCH_ALLOW_MS;
   const lunchWarn    = isOnBreak && breakMs > LUNCH_WARN_MS;
@@ -327,7 +337,11 @@ export default function TimeTracker() {
   );
 
   // ── button helpers ────────────────────────────────────────────────────────
-  const BtnClockIn = () => (
+  const BtnClockIn = () => isSunday ? (
+    <button className="tt-btn tt-btn-disabled" disabled title="Sunday — office closed">
+      <i className="bi bi-moon-stars-fill" /> Sunday Off
+    </button>
+  ) : (
     <button className="tt-btn tt-btn-green" onClick={() => openFaceScan("clock-in")}>
       <i className="bi bi-camera-fill" /> Clock In
     </button>

@@ -146,7 +146,7 @@ export default async function handler(req, res) {
     // Respond immediately — don't wait for emails
     res.status(201).json({ success: true, request });
 
-    const base       = process.env.NEXT_PUBLIC_BASE_URL || "https://payroll.viralon.in";
+    const base       = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
     const clientName = client.name || client.email;
     const clientEmail = client.email;
     const emailArgs  = { clientName, brandName: brand.name, preferredDate, preferredTime, note: note || "", requestType: requestType || "call" };
