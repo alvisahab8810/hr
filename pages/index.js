@@ -168,7 +168,7 @@ export default function AdminHome() {
 
             {/* ── GREETING ROW ───────────────────────────────────── */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-              <div className="greetings-box" style={{ flex: 1, margin: 0 }}><DateTimeGreeting /></div>
+              <div className="greetings-box" style={{ flex: 1, margin: 0 }}><DateTimeGreeting name="Ivan Sinha" /></div>
               <button onClick={fetchSummary} disabled={loading} style={{
                 border: "none", borderRadius: 10, padding: "9px 18px",
                 background: loading ? "#EEF2FF" : "linear-gradient(135deg,#6366F1,#818CF8)",

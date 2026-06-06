@@ -110,7 +110,7 @@ export default async function handler(req, res) {
       </div>
       <div style="padding: 20px;">
         <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
-        <p>You’ve been invited to access your <strong>Payroll profile</strong> at <strong>Viralon</strong>.</p>
+        <p>You’ve been invited to access your <strong>Viralon HQ</strong> profile.</p>
         <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
           <tr>
             <td style="padding: 8px; border: 1px solid #ddd;"><strong>Employee ID</strong></td>
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
         <p style="margin: 20px 0;">
           <a href="${loginLink}"
              style="display:inline-block;padding:12px 24px;background:#4a6cf7;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">
-            Login to Payroll
+            Login to Viralon HQ
           </a>
         </p>
         <p style="font-size: 0.9em; color: #555;">If you didn’t request this, please ignore this email.</p>
@@ -148,7 +148,7 @@ export default async function handler(req, res) {
     const info = await transporter.sendMail({
       from: `"Viralon HR" <info@viralon.in>`,
       to: email,
-      subject: "You’re invited to access your Payroll account",
+      subject: "You’re invited to access Viralon HQ",
       html: htmlBody,
     });
     console.log(`[invite-employee] Email sent: ${info.messageId} → ${email}`);

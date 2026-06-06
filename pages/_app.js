@@ -74,7 +74,7 @@ function MyApp({ Component, pageProps }) {
           rel="stylesheet"
         />
 
-        <title>Payroll - Admin Panel</title>
+        <title>Viralon HQ</title>
       </Head>
       {/* Non-Critical Scripts */}
       <Script

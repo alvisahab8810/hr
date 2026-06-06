@@ -36,10 +36,10 @@ export default async function handler(req, res) {
   const htmlBody = `
     <div style="font-family: sans-serif;">
       <h2>Hello ${employee.firstName},</h2>
-      <p>You’ve been invited to access your Payroll profile at <strong>Viralon</strong>.</p>
+      <p>You’ve been invited to access <strong>Viralon HQ</strong>.</p>
       <p>Click the button below to login:</p>
       <a href="${loginLink}" style="display:inline-block;padding:10px 20px;background:#007bff;color:white;text-decoration:none;border-radius:5px;">
-        Login to Payroll
+        Login to Viralon HQ
       </a>
       <p style="margin-top:20px;font-size:0.9em;">If you didn’t request this, please ignore this email.</p>
     </div>
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   await transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
     to: email,
-    subject: "You’re invited to access your Payroll account",
+    subject: "You’re invited to access Viralon HQ",
     html: htmlBody,
   });
 

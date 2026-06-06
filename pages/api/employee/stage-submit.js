@@ -46,32 +46,28 @@ export default async function handler(req, res) {
     const taskCurIdx = STAGE_IDX[task.stage || "S1"] ?? 0;
     const isActiveStage = stageIdx === taskCurIdx;
 
+    // S2/S3/S4 cannot submit until admin has approved S1 (Script/Concept)
+    if (curStage !== "S1" && task.stages?.[0]?.approved !== true) {
+      return res.status(403).json({ success: false, message: "S1 (Script/Concept) must be approved by admin before you can submit this stage." });
+    }
+
     const existingUrls = task.stages?.[stageIdx]?.proofUrls || [];
     const newUrls      = proofUrl?.trim() ? [...existingUrls, proofUrl.trim()] : existingUrls;
 
     // Determine the next status when advancing:
     // • S1 (Content/Script) → always in_progress, never goes directly to client
-    // • S2 (Design) or S3 (Edit) submits:
-    //     – next stage is S4 → "review" (client approval)
-    //     – next stage has assigned employees → "in_progress" (pipeline continues)
-    //     – next stage has NO assigned employees → "review" (client reviews directly)
+    // • S2 (Shoot) → always in_progress; S3 (Edit) still needs to be done
+    // • S3 (Edit) done → review (client approval, next is S4/Posted)
     let newStatus = "in_progress";
     if (isActiveStage) {
       if (curStage === "S1") {
-        // Content Team work (scripts/concepts) never goes to client — always moves to next internal stage
         newStatus = "in_progress";
       } else if (nextStage === "S4") {
         // S3 editing done → goes to client review
         newStatus = "review";
       } else {
-        // S2 or later: only go to review if next stage has no one assigned
-        const nextIdx = STAGE_IDX[nextStage];
-        const nextStageEntry = task.stages?.[nextIdx];
-        const nextHasAssignees =
-          nextStageEntry &&
-          Array.isArray(nextStageEntry.assignedTo) &&
-          nextStageEntry.assignedTo.length > 0;
-        newStatus = nextHasAssignees ? "in_progress" : "review";
+        // S2 submitted → S3 still needs editing, always in_progress
+        newStatus = "in_progress";
       }
     }
 

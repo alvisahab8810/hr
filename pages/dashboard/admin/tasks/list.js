@@ -804,11 +804,19 @@ export default function TasksListPage() {
                                     {t.nomenclature || t.title}
                                   </div>
                                   {t.nomenclature && <div style={{ fontSize: 10, color: "#94A3B8" }}>{t.title}</div>}
-                                  {t.status === "review" && (
-                                    <span style={{ display: "inline-flex", gap: 4, marginTop: 3, padding: "2px 7px", borderRadius: 20, background: "#DBEAFE", color: "#1D4ED8", fontSize: 10, fontWeight: 700 }}>
-                                      <i className="bi bi-hourglass-split" />Admin Review
-                                    </span>
-                                  )}
+                                  {(() => {
+                                    const STAGE_KEYS_LBL = ["S1","S2","S3","S4"];
+                                    const pending = (t.stages || [])
+                                      .map((s, i) => ({ s, i }))
+                                      .filter(({ s }) => s.done && !s.approved && !s.rejected);
+                                    if (!pending.length) return null;
+                                    const label = pending.map(({ i }) => STAGE_KEYS_LBL[i]).join(" & ");
+                                    return (
+                                      <span style={{ display: "inline-flex", gap: 4, marginTop: 3, padding: "2px 7px", borderRadius: 20, background: "#DBEAFE", color: "#1D4ED8", fontSize: 10, fontWeight: 700 }}>
+                                        <i className="bi bi-hourglass-split" />{label} Admin Review
+                                      </span>
+                                    );
+                                  })()}
                                   {t.status === "todo" && t.reviewNote && (
                                     <span style={{ display: "inline-flex", gap: 4, marginTop: 3, padding: "2px 7px", borderRadius: 20, background: "#FEF3C7", color: "#B45309", fontSize: 10, fontWeight: 700 }}>
                                       <i className="bi bi-arrow-counterclockwise" />Client Revision

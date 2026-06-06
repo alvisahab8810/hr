@@ -277,13 +277,10 @@ export default function TaskDetail() {
           statusUpdate = { status: "in_progress" };
           toastMsg = `Stage approved · S${i + 2} now active`;
         } else {
-          // S2 approved → only goes to client review if S3 has no assignees
-          const nextStageData = task.stages?.[i + 1];
-          const nextHasAssignees = nextStageData &&
-            Array.isArray(nextStageData.assignedTo) &&
-            nextStageData.assignedTo.length > 0;
-          statusUpdate = { status: nextHasAssignees ? "in_progress" : "review" };
-          toastMsg = nextHasAssignees ? `Stage approved · S${i + 2} now active` : "Stage approved · Awaiting client review";
+          // S2 approved → S3 (Edit/Develop) still needs to be done, so always in_progress
+          // "review" (client) only happens after S3 is approved, not S2
+          statusUpdate = { status: "in_progress" };
+          toastMsg = `Stage approved · S${i + 2} now active`;
         }
       }
       const body = { stages, performedByName: adminUser?.name || "Admin", ...stageUpdate, ...statusUpdate };
@@ -488,9 +485,18 @@ export default function TaskDetail() {
   }
 
   /* ── Derived values ─────────────────────────────────────────────────────── */
+  // If task shows "review" but is still on an internal stage (S1/S2/S3), the status
+  // was set prematurely — display as "In Progress" until S3 is approved and client review begins
+  const effectiveStatus = (
+    task.status === "review" &&
+    task.taskType === "production" &&
+    task.stage && ["S1","S2","S3"].includes(task.stage) &&
+    task.stages?.[2]?.approved !== true
+  ) ? "in_progress" : task.status;
+
   const sm       = (task.status === "todo" && task.reviewNote && task.taskType === "production")
     ? { label: "Client Revision", bg: "#FEF3C7", color: "#B45309", border: "#FDE68A" }
-    : STATUS_META[task.status] || {};
+    : STATUS_META[effectiveStatus] || {};
   const pm       = PRIORITY_META[task.priority] || {};
   const tm       = TYPE_META[task.taskType]     || {};
   // Use earliest undone stage deadline, fall back to task.dueDate
@@ -979,12 +985,26 @@ export default function TaskDetail() {
                   )}
 
                   {/* Content Review Card — shown for all production tasks that have content */}
-                  {task.taskType === "production" && (task.description || task.caption || task.referenceLink || task.pillar) && (
-                    <div className="tdbg" style={{ border: `2px solid ${task.status === "review" ? "#FDE68A" : task.status === "completed" ? "#BBF7D0" : "#E0E7FF"}`, background: task.status === "review" ? "#FFFBEB" : task.status === "completed" ? "#F0FDF4" : "#EEF2FF", marginBottom: 14 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13, color: task.status === "review" ? "#B45309" : task.status === "completed" ? "#15803D" : "#4338CA", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                        <i className={`bi ${task.status === "review" ? "bi-hourglass-split" : task.status === "completed" ? "bi-check-circle-fill" : "bi-file-text-fill"}`} />
-                        {task.status === "review" ? "Content for Admin Review" : task.status === "completed" ? "Approved Content" : "Content"}
+                  {task.taskType === "production" && (task.description || task.caption || task.referenceLink || task.pillar) && (() => {
+                    const s1Approved   = task.stages?.[0]?.approved === true;
+                    const isApprovedState = s1Approved || task.status === "completed";
+                    const isPendingReview = task.status === "review" && !s1Approved;
+                    const borderColor  = isApprovedState ? "#BBF7D0" : isPendingReview ? "#FDE68A" : "#E0E7FF";
+                    const bgColor      = isApprovedState ? "#F0FDF4"  : isPendingReview ? "#FFFBEB"  : "#EEF2FF";
+                    const titleColor   = isApprovedState ? "#15803D"  : isPendingReview ? "#B45309"  : "#4338CA";
+                    const titleIcon    = isApprovedState ? "bi-check-circle-fill" : isPendingReview ? "bi-hourglass-split" : "bi-file-text-fill";
+                    const titleText    = isApprovedState ? "Approved Content" : isPendingReview ? "Content for Admin Review" : "Content";
+                    return (
+                    <div className="tdbg" style={{ border: `2px solid ${borderColor}`, background: bgColor, marginBottom: 14 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: titleColor, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className={`bi ${titleIcon}`} />
+                        {titleText}
                       </div>
+                      {s1Approved && (
+                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, padding:"6px 10px", background:"#DCFCE7", borderRadius:7, fontSize:11, fontWeight:700, color:"#15803D" }}>
+                          <i className="bi bi-check-circle-fill" /> S1 Script/Concept approved by admin
+                        </div>
+                      )}
                       {task.submittedAt && (
                         <div style={{ fontSize: 10, color: "#92400E", marginBottom: 10 }}>
                           Submitted {fmtDateTime(task.submittedAt)}
@@ -1031,7 +1051,7 @@ export default function TaskDetail() {
                           <span style={{ fontSize: 11, color: "#374151", fontWeight: 600 }}>{task.pillar}</span>
                         </div>
                       )}
-                      {task.status === "review" && (
+                      {isPendingReview && (
                         <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                           <button onClick={handleApprove}
                             style={{ flex: 1, background: "#10B981", color: "#fff", border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -1044,7 +1064,8 @@ export default function TaskDetail() {
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Task meta */}
                   <div className="tdbg">

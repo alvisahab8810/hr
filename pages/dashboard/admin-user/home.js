@@ -77,7 +77,7 @@ export default function AdminUserHome() {
   return (
     <div className="leaves-management-admin">
       <Head>
-        <title>{user?.name ? `${user.name} — Dashboard` : "Dashboard"} | Viralon Payroll</title>
+        <title>{user?.name ? `${user.name} — Dashboard` : "Dashboard"} | Viralon HQ</title>
         <style>{`
           * { box-sizing: border-box; }
           .au-stat-card { background:#fff; border-radius:16px; padding:20px 22px;

@@ -46,7 +46,8 @@
       "Bash(node -e ' *)",
       "Bash(node -e \"const fs = require\\('fs'\\); const code = fs.readFileSync\\('pages/client/[brand]/index.js', 'utf8'\\); console.log\\('File size:', code.length, 'chars'\\); console.log\\('Lines:', code.split\\('\\\\n'\\).length\\);\")",
       "Bash(git log *)",
-      "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\\\\pages\" -Recurse -Filter \"*task*\" -File)"
+      "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\\\\pages\" -Recurse -Filter \"*task*\" -File)",
+      "Bash(xargs ls -la)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

@@ -2891,6 +2891,10 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
   const sbadge = STAGE_BADGE[submitStageKey] || STAGE_BADGE.S1;
   const barColor = isDone ? "#22c55e" : isRejected ? "#ef4444" : hasClientFeedback ? "#f59e0b" : "#f5a623";
 
+  // S2/S3/S4 employees are blocked until admin approves S1
+  const s1Approved   = task.stages?.[0]?.approved === true;
+  const blockedByS1  = submitStageKey !== "S1" && !s1Approved;
+
   return (
     <div className={`ep-tcard ${isRejected ? "rejected-card" : dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
@@ -2934,7 +2938,17 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
             background: i<barIdx ? "#22c55e" : i===barIdx ? barColor : "#e2e8f0" }} />
         ))}
       </div>
-      {hasClientFeedback ? (
+      {blockedByS1 ? (
+        <div style={{ width:"100%", padding:"11px 14px", background:"rgba(124,58,237,.06)", border:"1px solid rgba(124,58,237,.22)", borderRadius:8, textAlign:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, color:"#6d28d9", fontWeight:700, fontSize:12.5, marginBottom:3 }}>
+            <i className="bi bi-lock-fill" style={{ fontSize:12 }} />
+            Waiting for S1 Approval
+          </div>
+          <div style={{ fontSize:11, color:"#7c3aed", opacity:.8 }}>
+            Script/Concept must be approved by admin before you can submit your stage.
+          </div>
+        </div>
+      ) : hasClientFeedback ? (
         <div>
           <div style={{ padding:"8px 12px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px 8px 0 0" }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#92400e", marginBottom:4, display:"flex", alignItems:"center", gap:5 }}>
@@ -3125,16 +3139,17 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
           {loading ? "Loading…" : <>You're at <span>{grade.letter}</span> this month</>}
         </div>
         <div style={{ fontSize:13, color:"rgba(255,255,255,.6)", marginTop:8, maxWidth:580, lineHeight:1.55 }}>
-          You have <strong style={{ color:"#fff" }}>{todayTasks.length} task{todayTasks.length!==1?"s":""} today</strong>
-          {overdue.length>0 && <> including <strong style={{ color:"#fca5a5" }}>{overdue.length} overdue</strong></>}.
+          You have <strong style={{ color:"#fff" }}>{localTasks.length} total task{localTasks.length!==1?"s":""}</strong>
+          {overdue.length>0 && <> — <strong style={{ color:"#fca5a5" }}>{overdue.length} overdue</strong></>}
+          {todayTasks.length>0 && <>, <strong style={{ color:"#fbbf24" }}>{todayTasks.length} due today</strong></>}.
           {" "}Submit on time to lock in your grade.
         </div>
         <div className="ep-stats4">
           {[
-            { lbl:"Today's Tasks",  val:loading?"—":todayTasks.length, color:"#fff",       trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : null },
-            { lbl:"Active Tasks",   val:loading?"—":active.length,     color:"#fff",       trend: <span style={{ color:"#fff",fontSize:11 }}>in progress</span> },
-            { lbl:"On-Time Rate",   val:loading?"—":`${grade.rate}%`,  color:grade.color,  trend: <span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span> },
-            { lbl:"Done This Week", val:loading?"—":doneWeek.length,   color:"#86efac",    trend: <span style={{ color:"#fff",fontSize:11 }}>submissions</span> },
+            { lbl:"Total Tasks",  val:loading?"—":localTasks.length,                                              color:"#fff",      trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : <span style={{ color:"rgba(255,255,255,.6)",fontSize:11 }}>assigned</span> },
+            { lbl:"Active Tasks", val:loading?"—":active.length,                                                  color:"#fff",      trend: <span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>in progress</span> },
+            { lbl:"On-Time Rate", val:loading?"—":`${grade.rate}%`,                                               color:grade.color, trend: <span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span> },
+            { lbl:"Completed",    val:loading?"—":localTasks.filter(t=>t.status==="completed").length,            color:"#86efac",   trend: <span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>all time</span> },
           ].map(s => (
             <div key={s.lbl} className="ep-hstat">
               <div style={{ fontSize:10, color:"#fff", textTransform:"uppercase", letterSpacing:".06em", fontWeight:600 }}>{s.lbl}</div>
@@ -4329,7 +4344,7 @@ function DarkPortal() {
   }, []);
 
   const NAV = [
-    { key:"today",       label:"Today",            icon:"bi-house" },
+    { key:"today",       label:"Dashboard",        icon:"bi-house" },
     { key:"tasks",       label:"My Tasks",          icon:"bi-check2-square" },
     ...(isContent ? [{ key:"editor",  label:"Content Editor",  icon:"bi-pencil-square" }] : []),
     { key:"week",        label:"Weekly Tracker",    icon:"bi-calendar-week" },
@@ -4344,7 +4359,7 @@ function DarkPortal() {
     { key:"performance", label:"My Stats",          icon:"bi-graph-up-arrow" },
   ];
   const TITLES = {
-    today:"Today", tasks:"My Tasks", week:"Weekly Tracker", history:"History",
+    today:"Dashboard", tasks:"My Tasks", week:"Weekly Tracker", history:"History",
     calendar:"Content Calendar", grades:"Grades", notifs:"Notifications",
     performance:"My Stats", profile:"Profile",
     editor:"Content Editor", library:"Script Library", submissions:"Submissions",
@@ -4408,7 +4423,14 @@ function DarkPortal() {
           </div>
 
           {/* ── Desktop topbar ── */}
-          <div className="ep-topbar">
+          <div className="ep-topbar" style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <Link href="/employee/dashboard"
+              style={{ display:"flex", alignItems:"center", gap:7, padding:"6px 12px", borderRadius:20, background:"#EEF2FF", color:"#4F46E5", textDecoration:"none", flexShrink:0, fontSize:12.5, fontWeight:600, transition:"all .18s" }}
+              onMouseEnter={e => { e.currentTarget.style.background="#4F46E5"; e.currentTarget.style.color="#fff"; }}
+              onMouseLeave={e => { e.currentTarget.style.background="#EEF2FF"; e.currentTarget.style.color="#4F46E5"; }}>
+              <i className="bi bi-arrow-left" style={{ fontSize:13 }} />
+              Back to Dashboard
+            </Link>
             <div className="ep-topbar-title">{TITLES[view] || "Dashboard"}</div>
           </div>
 

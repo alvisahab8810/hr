@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import Dashnav from "@/components/Dashnav";
+import EmployeeDashnav from "@/components/employee/EmployeeDashnav";
 import Head from "next/head";
 import { getSocket } from "@/utils/socket";
 import Leftbar from "@/components/employee/Leftbar";
@@ -604,7 +604,7 @@ export default function EmployeeDashboard() {
       <div className="main-nav">
         <Leftbar />
         <LeftbarMobile />
-        <Dashnav />
+        <EmployeeDashnav />
 
         <section className="content home">
           {/* ── Breadcrumb ── */}

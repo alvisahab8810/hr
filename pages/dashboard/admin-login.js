@@ -37,7 +37,7 @@ export default function AdminUserLogin() {
   return (
     <>
       <Head>
-        <title>Admin Login — Viralon Payroll</title>
+        <title>Admin Login — Viralon HQ</title>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
         <style>{`
           * { box-sizing: border-box; }
@@ -62,7 +62,7 @@ export default function AdminUserLogin() {
               boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
               <i className="bi bi-shield-fill-check" style={{ fontSize:26, color:"#fff" }} />
             </div>
-            <h2 style={{ margin:0, fontSize:26, fontWeight:800, color:"#111827" }}>Viralon Payroll</h2>
+            <h2 style={{ margin:0, fontSize:26, fontWeight:800, color:"#111827" }}>Viralon HQ</h2>
             <p style={{ margin:"6px 0 0", fontSize:14, color:"#6B7280" }}>Sign in to your admin account</p>
           </div>
 
