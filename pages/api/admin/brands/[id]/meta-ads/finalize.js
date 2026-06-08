@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     "metaAds.connected":        true,
     "metaAds.adAccountId":      acc.id,
     "metaAds.adAccountName":    acc.name,
+    "metaAds.currency":         acc.currency || "INR",
     "metaAds._pendingAccounts": null,
   };
   // Carry forward the token that was saved during the OAuth callback

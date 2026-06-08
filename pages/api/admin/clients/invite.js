@@ -8,8 +8,9 @@ import Brand from "@/models/tasks/Brand";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 
 async function generateClientId() {
-  const count = await Client.countDocuments();
-  return `CLT-${String(count + 1).padStart(4, "0")}`;
+  const last = await Client.findOne({ clientId: /^CLT-/ }).sort({ clientId: -1 }).select("clientId").lean();
+  const num = last ? (parseInt(last.clientId.replace("CLT-", ""), 10) || 0) : 0;
+  return `CLT-${String(num + 1).padStart(4, "0")}`;
 }
 
 export default async function handler(req, res) {
@@ -28,6 +29,18 @@ export default async function handler(req, res) {
 
     const brand = await Brand.findById(brandId);
     if (!brand) return res.status(404).json({ success: false, message: "Brand not found" });
+
+    // Block early if brand is already linked to a different client
+    if (brand.clientId) {
+      const emailNorm = email.toLowerCase().trim();
+      const existingOwner = await Client.findById(brand.clientId).select("name email").lean();
+      if (existingOwner && existingOwner.email !== emailNorm) {
+        return res.status(409).json({
+          success: false,
+          message: `Brand "${brand.name}" is already linked to ${existingOwner.name} (${existingOwner.email}). Please remove them first via Edit Client, then invite again.`,
+        });
+      }
+    }
 
     const hashed = await bcrypt.hash(password, 10);
 

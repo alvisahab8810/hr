@@ -2739,6 +2739,7 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
   const [showModal,  setShowModal]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localTask,  setLocalTask]  = useState(task);
+  const [showNotes,  setShowNotes]  = useState(false);
   useEffect(() => { setLocalTask(task); }, [task]);
 
   // If parent provides a lifted handler use it (avoids stacking-context bug)
@@ -2822,12 +2823,27 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
 
       {/* Status / CTA */}
       {status === "completed" ? (
-        <div style={{ width:"100%", padding:"10px", background:"rgba(34,197,94,.1)", color:"#16a34a", border:"1.5px solid rgba(34,197,94,.35)", borderRadius:9, fontWeight:700, fontSize:13, textAlign:"center" }}>
-          ✓ Approved
+        <div style={{ borderRadius:9, border:"1.5px solid rgba(34,197,94,.35)", overflow:"hidden" }}>
+          <div style={{ width:"100%", padding:"10px", background:"rgba(34,197,94,.1)", color:"#16a34a", fontWeight:700, fontSize:13, textAlign:"center" }}>
+            ✓ Approved
+          </div>
         </div>
       ) : status === "review" ? (
-        <div style={{ width:"100%", padding:"10px", background:"rgba(245,158,11,.08)", color:"#D97706", border:"1.5px solid rgba(245,158,11,.3)", borderRadius:9, fontWeight:700, fontSize:13, textAlign:"center" }}>
-          👁 Pending Review
+        <div style={{ borderRadius:9, border:"1.5px solid rgba(245,158,11,.3)", overflow:"hidden" }}>
+          <div
+            onClick={() => localTask.reviewNote && setShowNotes(v => !v)}
+            style={{ width:"100%", padding:"10px", background:"rgba(245,158,11,.08)", color:"#D97706", fontWeight:700, fontSize:13, textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6, cursor: localTask.reviewNote ? "pointer" : "default" }}>
+            👁 Pending Review
+            {localTask.reviewNote && (
+              <i className={`bi bi-chevron-${showNotes ? "up" : "down"}`} style={{ fontSize:10 }} />
+            )}
+          </div>
+          {showNotes && localTask.reviewNote && (
+            <div style={{ padding:"10px 12px", background:"#fffbeb", borderTop:"1px solid rgba(245,158,11,.2)" }}>
+              <div style={{ fontSize:10.5, fontWeight:700, color:"#92400e", marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Your Submission Notes</div>
+              <div style={{ fontSize:12, color:"#78350f", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{localTask.reviewNote}</div>
+            </div>
+          )}
         </div>
       ) : status === "blocked" ? (
         <div>
@@ -2856,6 +2872,7 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
 
 // ─── Production Task Card (Social Media stages) ────────────────────────────────
 function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
+  const [showProof, setShowProof] = useState(false);
   // Non-production tasks (SEO, Ads, Branding, General) use the simpler NonSMMCard
   if (task.taskType !== "production") return <NonSMMCard task={task} onOpenModal={onNonSMMSubmit} onViewDetail={onNonSMMDetail} />;
 
@@ -2974,8 +2991,37 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
           </button>
         </div>
       ) : isDone ? (
-        <div style={{ width:"100%", padding:"10px", background:"rgba(34,197,94,.1)", color:"#16a34a", border:"1px solid rgba(34,197,94,.3)", borderRadius:8, fontWeight:600, fontSize:12.5, textAlign:"center" }}>
-          ✓ Stage {submitStageNum} Done
+        <div style={{ borderRadius:8, border:"1px solid rgba(34,197,94,.3)", overflow:"hidden" }}>
+          <div
+            onClick={() => (myStage?.proofUrls?.length || myStage?.doneNote) && setShowProof(v => !v)}
+            style={{ width:"100%", padding:"10px 12px", background:"rgba(34,197,94,.1)", color:"#16a34a", fontWeight:600, fontSize:12.5, textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+              cursor:(myStage?.proofUrls?.length || myStage?.doneNote) ? "pointer" : "default" }}>
+            ✓ Stage {submitStageNum} Done
+            {(myStage?.proofUrls?.length > 0 || myStage?.doneNote) && (
+              <i className={`bi bi-chevron-${showProof ? "up" : "down"}`} style={{ fontSize:10 }} />
+            )}
+          </div>
+          {showProof && (myStage?.proofUrls?.length > 0 || myStage?.doneNote) && (
+            <div style={{ padding:"10px 12px", background:"#f0fdf4", borderTop:"1px solid rgba(34,197,94,.2)" }}>
+              {myStage.proofUrls?.length > 0 && (
+                <div style={{ marginBottom: myStage.doneNote ? 8 : 0 }}>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:"#166534", marginBottom:5, textTransform:"uppercase", letterSpacing:.5 }}>Submitted Links</div>
+                  {myStage.proofUrls.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                      style={{ display:"block", fontSize:11.5, color:"#5A57FB", wordBreak:"break-all", marginBottom:3, textDecoration:"underline" }}>
+                      {url}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {myStage?.doneNote && (
+                <div>
+                  <div style={{ fontSize:10.5, fontWeight:700, color:"#166534", marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Notes</div>
+                  <div style={{ fontSize:12, color:"#374151", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{myStage.doneNote}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <button onClick={() => onSubmit(task, submitStageKey)}

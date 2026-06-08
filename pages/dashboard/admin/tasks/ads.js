@@ -29,11 +29,25 @@ const TABS = [
 
 const STAGE_LABELS = ["Campaign", "Ad Set", "Ads", "Live", "Optimize"];
 
+function getCurrSymbol(currency) {
+  switch ((currency || "").toUpperCase()) {
+    case "USD": case "AUD": case "CAD": case "SGD": return "$";
+    case "EUR": return "€";
+    case "GBP": return "£";
+    default:    return "₹";
+  }
+}
 function fmtINR(n) {
   if (!n) return "₹0";
   if (n >= 100000) return "₹" + (n / 100000).toFixed(1) + "L";
   if (n >= 1000)   return "₹" + (n / 1000).toFixed(0) + "K";
   return "₹" + n;
+}
+function fmtBudget(n, sym) {
+  if (!n) return sym + "0";
+  if (n >= 100000) return sym + (n / 100000).toFixed(1) + "L";
+  if (n >= 1000)   return sym + (n / 1000).toFixed(0) + "K";
+  return sym + n;
 }
 function fmtNum(n) {
   if (!n) return "—";
@@ -77,7 +91,16 @@ export default function AdCampaignsPage() {
     try {
       const r = await fetch("/api/admin/campaigns");
       const d = await r.json();
-      if (d.success) setCampaigns(d.campaigns || []);
+      if (d.success) {
+        const list = d.campaigns || [];
+        setCampaigns(list);
+        // Auto-select first brand if none selected yet
+        setBrandFilter(f => {
+          if (f) return f;
+          const first = list.find(c => c.brandId);
+          return first ? String(first.brandId?._id || first.brandId) : "";
+        });
+      }
     } finally { setLoading(false); }
   }, []);
 
@@ -301,8 +324,14 @@ export default function AdCampaignsPage() {
 
   const activeCampaigns = displayed.filter(c => c.status === "active");
   const totalBudget     = activeCampaigns.reduce((s, c) => s + (c.budget || 0), 0);
-  const totalSpent      = displayed.reduce((s, c) => s + (c.performance?.spent || 0), 0);
-  const totalConv       = displayed.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
+  const totalSpent      = activeCampaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
+  const totalConv       = activeCampaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
+  const totalReach      = activeCampaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
+  const totalImpr       = activeCampaigns.reduce((s, c) => s + (c.performance?.impressions || 0), 0);
+  const totalLinkClicks = activeCampaigns.reduce((s, c) => s + (c.performance?.linkClicks || 0), 0);
+  const totalLpViews    = activeCampaigns.reduce((s, c) => s + (c.performance?.landingPageViews || 0), 0);
+  const avgCpa          = totalConv > 0 ? Math.round(totalSpent / totalConv) : null;
+  const overallCtr      = totalImpr > 0 ? ((totalLinkClicks / totalImpr) * 100).toFixed(2) : null;
 
   const brandMap = {};
   for (const c of campaigns) {
@@ -414,22 +443,27 @@ export default function AdCampaignsPage() {
                 </button>
               </div>
 
-              {/* Stats */}
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 24 }}>
+              {/* Stats — active campaigns only */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 24 }}>
                 {[
-                  { label: "Active Campaigns", value: activeCampaigns.length, icon: "bi-broadcast",   color: "#10B981", bg: "#ECFDF5", border: "#BBF7D0" },
-                  { label: "Total Budget",      value: totalBudget > 0 ? "₹" + totalBudget.toLocaleString("en-IN") : "₹0", icon: "bi-cash-stack",  color: "#6366F1", bg: "#EEF2FF", border: "#C7D2FE" },
-                  { label: "Total Spent",       value: totalSpent > 0 ? "₹" + totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "₹0", icon: "bi-credit-card", color: "#F59E0B", bg: "#FFFBEB", border: "#FDE68A" },
-                  { label: "Conversions",       value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", icon: "bi-arrow-repeat", color: "#0EA5E9", bg: "#F0F9FF", border: "#BAE6FD" },
+                  { label: "Active Campaigns",   value: String(activeCampaigns.length),   sub: activeCampaigns.length > 0 ? `${activeCampaigns.length} live now` : "none running",       color: "#10B981", icon: "bi-broadcast" },
+                  { label: "Total Spend",        value: totalSpent > 0 ? "₹" + totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "₹0",        sub: activeCampaigns.length > 0 ? `₹${totalBudget.toLocaleString("en-IN")} daily budget` : "no active campaigns", color: "#F97316", icon: "bi-credit-card" },
+                  { label: "Reach",              value: fmtNum(totalReach),               sub: totalReach ? "unique people" : "no data yet",        color: "#8B5CF6", icon: "bi-eye" },
+                  { label: "Impressions",        value: fmtNum(totalImpr),                sub: totalImpr  ? "total impressions" : "no data yet",    color: "#0EA5E9", icon: "bi-bar-chart" },
+                  { label: "Leads / Results",    value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", sub: totalConv ? "total conversions" : "no data yet", color: "#10B981", icon: "bi-person-check" },
+                  { label: "Link Clicks",        value: fmtNum(totalLinkClicks),          sub: overallCtr ? `CTR ${overallCtr}%` : "no data yet",   color: "#6366F1", icon: "bi-cursor" },
+                  { label: "Landing Page Views", value: fmtNum(totalLpViews),             sub: totalLpViews ? "total LP views" : "no data yet",     color: "#7C3AED", icon: "bi-box-arrow-in-right" },
+                  { label: "Cost Per Lead",      value: avgCpa ? "₹" + avgCpa.toLocaleString("en-IN") : "—", sub: "avg across active campaigns",    color: "#EF4444", icon: "bi-tag" },
                 ].map(s => (
-                  <div key={s.label} className="ad-stat" style={{ flex: 1, minWidth: 130, background: s.bg, borderColor: s.border }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 10, background: s.color + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className={`bi ${s.icon}`} style={{ color: s.color, fontSize: 15 }} />
+                  <div key={s.label} className="ad-stat" style={{ background: "#fff", borderColor: "#F1F5F9", flexDirection: "column", alignItems: "flex-start", gap: 8, padding: "14px 16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: s.color + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`bi ${s.icon}`} style={{ color: s.color, fontSize: 12 }} />
+                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: .5 }}>{s.label}</div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>{s.label}</div>
-                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: s.color, lineHeight: 1.1 }}>{s.value}</div>
+                    <div style={{ fontSize: 11, color: "#94A3B8" }}>{s.sub}</div>
                   </div>
                 ))}
               </div>
@@ -442,22 +476,16 @@ export default function AdCampaignsPage() {
                   </button>
                 ))}
                 {tab !== "accounts" && tab !== "monthly" && (
-                  <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ marginLeft: "auto" }}>
                     <select
                       value={brandFilter}
                       onChange={e => setBrandFilter(e.target.value)}
-                      style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, fontWeight: 600, color: brandFilter ? "#4F46E5" : "#64748B", background: brandFilter ? "#EEF2FF" : "#fff", cursor: "pointer", fontFamily: "inherit", outline: "none" }}
+                      style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, fontWeight: 600, color: "#4F46E5", background: "#EEF2FF", cursor: "pointer", fontFamily: "inherit", outline: "none" }}
                     >
-                      <option value="">All Brands</option>
                       {[...new Map(campaigns.filter(c => c.brandId).map(c => [c.brandId?._id || c.brandId, c.brandId])).values()].map(b => (
                         <option key={b._id || b} value={b._id || b}>{b.name || b}</option>
                       ))}
                     </select>
-                    {brandFilter && (
-                      <button onClick={() => setBrandFilter("")} style={{ padding: "6px 10px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, background: "#fff", cursor: "pointer", color: "#64748B", fontFamily: "inherit" }}>
-                        Clear
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
@@ -480,7 +508,7 @@ export default function AdCampaignsPage() {
 
                     {/* Table */}
                     <div style={{ background: "#fff", borderRadius: 14, border: "1.5px solid #F1F5F9", overflow: "hidden" }}>
-                      <div style={{ overflowX: "auto" }}>
+                      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 370px)" }}>
                         <table className="ad-table" style={{ minWidth: 1700 }}>
                           <thead>
                             <tr>
@@ -505,6 +533,8 @@ export default function AdCampaignsPage() {
                               const pm   = PLATFORM_META[c.platform] || PLATFORM_META.meta;
                               const sm   = STATUS_META[c.status]   || STATUS_META.planned;
                               const brand = c.brandId || {};
+                              const currency = brand.metaAds?.currency || brand.googleAds?.currency || "INR";
+                              const currSym  = getCurrSymbol(currency);
                               const perf  = c.performance || {};
                               const spent = perf.spent || 0;
                               const impr  = perf.impressions || 0;
@@ -518,7 +548,7 @@ export default function AdCampaignsPage() {
                               const cpm   = impr > 0 ? parseFloat(((spent / impr) * 1000).toFixed(2)) : null;
                               const ctr   = perf.ctr != null ? parseFloat(perf.ctr.toFixed(2)) : null;
                               const cplp  = lpViews > 0 ? parseFloat((spent / lpViews).toFixed(2)) : null;
-                              const budgetLabel = c.budget ? `${fmtINR(c.budget)} Daily` : "—";
+                              const budgetLabel = c.budget ? `${fmtBudget(c.budget, currSym)} Daily` : "—";
                               const spentPct = c.budget > 0 ? Math.min(100, Math.round((spent / c.budget) * 100)) : 0;
                               // No delivery = synced campaign that returned no insights data from Meta at all
                               const noDelivery = c.externalSource === "meta" && spent === 0 && impr === 0 && reach === 0 && convs === 0;
@@ -568,7 +598,7 @@ export default function AdCampaignsPage() {
                                     ) : (
                                       <button onClick={() => setBudgetManually(c._id)}
                                         style={{ fontSize: 11, fontWeight: 600, color: "#6366F1", background: "#EEF2FF", border: "1.5px dashed #A5B4FC", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit" }}>
-                                        + Set ₹
+                                        + Set {currSym}
                                       </button>
                                     )}
                                   </td>
@@ -596,7 +626,7 @@ export default function AdCampaignsPage() {
                                       <td style={{ fontWeight: 700, color: cpr ? "#F59E0B" : "#94A3B8" }}>
                                         {cpr ? (
                                           <>
-                                            <div>₹{cpr.toFixed(2)}</div>
+                                            <div>{currSym}{cpr.toFixed(2)}</div>
                                             <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 400 }}>Per lead</div>
                                           </>
                                         ) : "—"}
@@ -608,12 +638,12 @@ export default function AdCampaignsPage() {
                                       {/* Amount Spent */}
                                       <td>
                                         <div style={{ fontWeight: 800, fontSize: 13, color: spent > 0 ? "#1E293B" : "#94A3B8" }}>
-                                          {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                                          {spent > 0 ? `${currSym}${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                                         </div>
                                       </td>
                                       {/* CPM */}
                                       <td style={{ fontWeight: 600, color: cpm ? "#374151" : "#94A3B8" }}>
-                                        {cpm ? `₹${cpm.toFixed(2)}` : "—"}
+                                        {cpm ? `${currSym}${cpm.toFixed(2)}` : "—"}
                                       </td>
                                       {/* CTR */}
                                       <td style={{ fontWeight: 600, color: ctr ? "#374151" : "#94A3B8" }}>
@@ -625,7 +655,7 @@ export default function AdCampaignsPage() {
                                       </td>
                                       {/* Cost per LP View */}
                                       <td style={{ fontWeight: 700, color: cplp ? "#7C3AED" : "#94A3B8" }}>
-                                        {cplp ? `₹${cplp.toFixed(2)}` : "—"}
+                                        {cplp ? `${currSym}${cplp.toFixed(2)}` : "—"}
                                       </td>
                                       {/* Status */}
                                       <td>

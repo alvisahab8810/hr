@@ -274,6 +274,16 @@ router.post(async (req, res) => {
       });
     }
 
+    // Reject past dates (compare against today in IST)
+    const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const todayStr = nowIST.toISOString().split("T")[0];
+    if (startDate < todayStr) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot apply leave for a past date",
+      });
+    }
+
     /* ================= HALF DAY LOGIC ================= */
 
     let totalDays;

@@ -72,9 +72,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .cp-sidebar::-webkit-scrollbar-track { background: transparent; }
 .cp-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
 .cp-sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
-.cp-main      { margin-left: 230px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.cp-main      { margin-left: 230px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; overflow-x: hidden; }
 .cp-topbar    { height: 56px; background: #fff; border-bottom: 1px solid #E2E8F0; border-top: 3px solid transparent; border-image: linear-gradient(90deg,#5A57FB,#02EBAD) 1; display: flex; align-items: center; padding: 0 24px; gap: 12px; position: sticky; top: 0; z-index: 50; }
-.cp-content   { flex: 1; padding: 24px; }
+.cp-content   { flex: 1; padding: 24px; min-width: 0; }
 
 /* Sidebar — dark Viralon brand */
 .cp-sidebar   { background: #0F0C29 !important; border-right: none !important; }
@@ -4085,8 +4085,18 @@ function ComingSoon({ icon, title, desc }) {
 }
 
 /* ─── Ad Campaigns View ──────────────────────────────────────────────────── */
+function getCurrSymbol(currency) {
+  switch ((currency || "").toUpperCase()) {
+    case "USD": case "AUD": case "CAD": case "SGD": return "$";
+    case "EUR": return "€";
+    case "GBP": return "£";
+    default:    return "₹";
+  }
+}
+
 function AdCampaignsView({ brandSlug }) {
   const [campaigns, setCampaigns] = useState([]);
+  const [currency,  setCurrency]  = useState("INR");
   const [loading,   setLoading]   = useState(true);
 
   const loadCampaigns = useCallback(() => {
@@ -4094,7 +4104,12 @@ function AdCampaignsView({ brandSlug }) {
     setLoading(true);
     fetch(`/api/client/campaigns?brandSlug=${brandSlug}`)
       .then(r => r.json())
-      .then(d => { if (d.success) setCampaigns(d.campaigns || []); })
+      .then(d => {
+        if (d.success) {
+          setCampaigns(d.campaigns || []);
+          if (d.currency) setCurrency(d.currency);
+        }
+      })
       .finally(() => setLoading(false));
   }, [brandSlug]);
 
@@ -4106,15 +4121,17 @@ function AdCampaignsView({ brandSlug }) {
   const STATUS_COLOR   = { planned: "#4F46E5", active: "#15803D", paused: "#B45309", completed: "#475569" };
   const STATUS_LABEL   = { planned: "Planned", active: "Active", paused: "Paused", completed: "Completed" };
 
-  function fmtINRFull(n) {
-    if (!n) return "₹0";
-    return "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const currSym = getCurrSymbol(currency);
+
+  function fmtCurrFull(n) {
+    if (!n) return currSym + "0";
+    return currSym + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  function fmtINR(n) {
-    if (!n) return "₹0";
-    if (n >= 100000) return "₹" + (n / 100000).toFixed(2) + "L";
-    if (n >= 1000)   return "₹" + (n / 1000).toFixed(1) + "K";
-    return "₹" + n;
+  function fmtCurr(n) {
+    if (!n) return currSym + "0";
+    if (n >= 100000) return currSym + (n / 100000).toFixed(2) + "L";
+    if (n >= 1000)   return currSym + (n / 1000).toFixed(1) + "K";
+    return currSym + n;
   }
   function fmtNum(n) {
     if (!n) return "—";
@@ -4124,12 +4141,12 @@ function AdCampaignsView({ brandSlug }) {
   }
 
   const activeCampaigns = campaigns.filter(c => c.status === "active");
-  const totalSpent      = campaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
-  const totalImpr       = campaigns.reduce((s, c) => s + (c.performance?.impressions || 0), 0);
-  const totalClicks     = campaigns.reduce((s, c) => s + (c.performance?.linkClicks || 0), 0);
-  const totalConv       = campaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
-  const totalReach      = campaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
-  const totalLpViews    = campaigns.reduce((s, c) => s + (c.performance?.landingPageViews || 0), 0);
+  const totalSpent      = activeCampaigns.reduce((s, c) => s + (c.performance?.spent || 0), 0);
+  const totalImpr       = activeCampaigns.reduce((s, c) => s + (c.performance?.impressions || 0), 0);
+  const totalClicks     = activeCampaigns.reduce((s, c) => s + (c.performance?.linkClicks || 0), 0);
+  const totalConv       = activeCampaigns.reduce((s, c) => s + (c.performance?.conversions || 0), 0);
+  const totalReach      = activeCampaigns.reduce((s, c) => s + (c.performance?.reach || 0), 0);
+  const totalLpViews    = activeCampaigns.reduce((s, c) => s + (c.performance?.landingPageViews || 0), 0);
   const totalBudget     = activeCampaigns.reduce((s, c) => s + (c.budget || 0), 0);
   const avgCpa          = totalConv > 0 ? Math.round(totalSpent / totalConv) : null;
   const overallCtr      = totalImpr > 0 ? ((totalClicks / totalImpr) * 100).toFixed(2) : null;
@@ -4147,17 +4164,17 @@ function AdCampaignsView({ brandSlug }) {
   }
 
   return (
-    <div>
+    <div style={{ minWidth: 0, overflow: "hidden" }}>
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
-          { label: "Total Spend",       value: fmtINRFull(totalSpent),   sub: activeCampaigns.length > 0 ? `₹${totalBudget.toLocaleString("en-IN")} active budget` : "no active campaigns", color: "#F97316", icon: "bi-credit-card" },
-          { label: "Reach",             value: fmtNum(totalReach),        sub: totalReach ? "unique people" : "no data yet",  color: "#8B5CF6", icon: "bi-eye" },
-          { label: "Impressions",       value: fmtNum(totalImpr),         sub: totalImpr  ? "total impressions" : "no data yet", color: "#0EA5E9", icon: "bi-bar-chart" },
-          { label: "Leads / Results",   value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", sub: totalConv ? "total conversions" : "no data yet", color: "#10B981", icon: "bi-person-check" },
-          { label: "Link Clicks",       value: fmtNum(totalClicks),       sub: overallCtr ? `CTR ${overallCtr}%` : "no data yet", color: "#6366F1", icon: "bi-cursor" },
-          { label: "Landing Page Views",value: fmtNum(totalLpViews),      sub: totalLpViews ? "total LP views" : "no data yet",  color: "#7C3AED", icon: "bi-box-arrow-in-right" },
-          { label: "Cost Per Lead",     value: avgCpa ? fmtINR(avgCpa) : "—", sub: "avg across campaigns",                    color: "#EF4444", icon: "bi-tag" },
+          { label: "Total Spend",       value: activeCampaigns.length > 0 ? fmtCurrFull(totalSpent) : currSym + "0",   sub: activeCampaigns.length > 0 ? `${activeCampaigns.length} active campaign${activeCampaigns.length > 1 ? "s" : ""}` : "no active campaigns", color: "#F97316", icon: "bi-credit-card" },
+          { label: "Reach",             value: fmtNum(totalReach),        sub: activeCampaigns.length > 0 ? (totalReach ? "unique people" : "no data yet") : "no active campaigns",  color: "#8B5CF6", icon: "bi-eye" },
+          { label: "Impressions",       value: fmtNum(totalImpr),         sub: activeCampaigns.length > 0 ? (totalImpr ? "total impressions" : "no data yet") : "no active campaigns", color: "#0EA5E9", icon: "bi-bar-chart" },
+          { label: "Leads / Results",   value: totalConv > 0 ? totalConv.toLocaleString("en-IN") : "—", sub: activeCampaigns.length > 0 ? (totalConv ? "total conversions" : "no data yet") : "no active campaigns", color: "#10B981", icon: "bi-person-check" },
+          { label: "Link Clicks",       value: fmtNum(totalClicks),       sub: activeCampaigns.length > 0 ? (overallCtr ? `CTR ${overallCtr}%` : "no data yet") : "no active campaigns", color: "#6366F1", icon: "bi-cursor" },
+          { label: "Landing Page Views",value: fmtNum(totalLpViews),      sub: activeCampaigns.length > 0 ? (totalLpViews ? "total LP views" : "no data yet") : "no active campaigns",  color: "#7C3AED", icon: "bi-box-arrow-in-right" },
+          { label: "Cost Per Lead",     value: avgCpa ? fmtCurr(avgCpa) : "—", sub: activeCampaigns.length > 0 ? "avg across active campaigns" : "no active campaigns", color: "#EF4444", icon: "bi-tag" },
         ].map(s => (
           <div key={s.label} className="cp-card" style={{ padding: "16px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -4173,7 +4190,7 @@ function AdCampaignsView({ brandSlug }) {
       </div>
 
       {/* Campaign details table */}
-      <div className="cp-card" style={{ padding: 0, overflow: "hidden", marginBottom: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 14, border: "1.5px solid #E2E8F0", overflow: "hidden", marginBottom: 20 }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
           <i className="bi bi-broadcast" style={{ color: "#F97316" }} />
           <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>All Campaigns</span>
@@ -4182,12 +4199,12 @@ function AdCampaignsView({ brandSlug }) {
             <i className="bi bi-arrow-clockwise" /> Refresh
           </button>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 320px)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1300 }}>
-            <thead>
+            <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
               <tr style={{ background: "#FAFAFA" }}>
                 {["Campaign", "Budget", "Results", "Reach", "Frequency", "Cost / Result", "Link Clicks", "Amount Spent", "CPM", "CTR", "LP Views", "Cost / LP View", "Status"].map(h => (
-                  <th key={h} style={{ padding: "9px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #F1F5F9", whiteSpace: "nowrap" }}>{h}</th>
+                  <th key={h} style={{ padding: "9px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: .5, color: "#94a3b8", textAlign: "left", borderBottom: "1px solid #F1F5F9", whiteSpace: "nowrap", background: "#FAFAFA" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -4217,7 +4234,7 @@ function AdCampaignsView({ brandSlug }) {
                     </td>
                     {/* Budget */}
                     <td style={{ padding: "12px 14px", minWidth: 110 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{c.budget ? fmtINR(c.budget) + " Daily" : "—"}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{c.budget ? fmtCurr(c.budget) + " Daily" : "—"}</div>
                       {c.budget > 0 && (
                         <div style={{ marginTop: 4, height: 3, width: 70, background: "#F1F5F9", borderRadius: 4 }}>
                           <div style={{ height: "100%", width: `${spentPct}%`, background: spentPct > 85 ? "#EF4444" : "#F97316", borderRadius: 4 }} />
@@ -4234,22 +4251,22 @@ function AdCampaignsView({ brandSlug }) {
                     <td style={{ padding: "12px 14px", color: "#374151" }}>{freq}</td>
                     {/* Cost/Result */}
                     <td style={{ padding: "12px 14px", fontWeight: 700, color: cpr ? "#F59E0B" : "#94a3b8" }}>
-                      {cpr ? (<><div>₹{cpr.toFixed(2)}</div><div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>per lead</div></>) : "—"}
+                      {cpr ? (<><div>{currSym}{cpr.toFixed(2)}</div><div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400 }}>per lead</div></>) : "—"}
                     </td>
                     {/* Link Clicks */}
                     <td style={{ padding: "12px 14px", fontWeight: 600, color: lc > 0 ? "#6366F1" : "#94a3b8" }}>{lc > 0 ? fmtNum(lc) : "—"}</td>
                     {/* Amount Spent */}
                     <td style={{ padding: "12px 14px", fontWeight: 800, color: spent > 0 ? "#F97316" : "#94a3b8" }}>
-                      {spent > 0 ? `₹${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                      {spent > 0 ? `${currSym}${spent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                     </td>
                     {/* CPM */}
-                    <td style={{ padding: "12px 14px", fontWeight: 600, color: cpm ? "#374151" : "#94a3b8" }}>{cpm ? `₹${cpm.toFixed(2)}` : "—"}</td>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: cpm ? "#374151" : "#94a3b8" }}>{cpm ? `${currSym}${cpm.toFixed(2)}` : "—"}</td>
                     {/* CTR */}
                     <td style={{ padding: "12px 14px", fontWeight: 600, color: ctr != null ? "#374151" : "#94a3b8" }}>{ctr != null ? `${ctr.toFixed(2)}%` : "—"}</td>
                     {/* LP Views */}
                     <td style={{ padding: "12px 14px", fontWeight: 600, color: lpv > 0 ? "#7C3AED" : "#94a3b8" }}>{lpv > 0 ? fmtNum(lpv) : "—"}</td>
                     {/* Cost / LP View */}
-                    <td style={{ padding: "12px 14px", fontWeight: 700, color: cplp ? "#7C3AED" : "#94a3b8" }}>{cplp ? `₹${cplp.toFixed(2)}` : "—"}</td>
+                    <td style={{ padding: "12px 14px", fontWeight: 700, color: cplp ? "#7C3AED" : "#94a3b8" }}>{cplp ? `${currSym}${cplp.toFixed(2)}` : "—"}</td>
                     {/* Status */}
                     <td style={{ padding: "12px 14px" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: STATUS_BG[c.status] || "#F1F5F9", color: STATUS_COLOR[c.status] || "#64748b" }}>
@@ -4267,7 +4284,7 @@ function AdCampaignsView({ brandSlug }) {
                   {campaigns.length} campaigns
                 </td>
                 <td style={{ padding: "10px 14px", fontWeight: 700, color: "#374151", fontSize: 12 }}>
-                  {activeCampaigns.length > 0 ? fmtINR(totalBudget) + " /day" : "—"}
+                  {activeCampaigns.length > 0 ? fmtCurr(totalBudget) + " /day" : "—"}
                 </td>
                 <td style={{ padding: "10px 14px", fontWeight: 800, color: "#10B981" }}>{totalConv > 0 ? totalConv.toLocaleString() : "—"}</td>
                 <td style={{ padding: "10px 14px", fontWeight: 700 }}>{fmtNum(totalReach)}</td>
@@ -4275,7 +4292,7 @@ function AdCampaignsView({ brandSlug }) {
                 <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
                 <td style={{ padding: "10px 14px", fontWeight: 700 }}>{fmtNum(totalClicks)}</td>
                 <td style={{ padding: "10px 14px", fontWeight: 800, color: "#F97316" }}>
-                  {totalSpent > 0 ? `₹${totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                  {totalSpent > 0 ? `${currSym}${totalSpent.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                 </td>
                 <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
                 <td style={{ padding: "10px 14px", color: "#94a3b8" }}>—</td>
@@ -4293,13 +4310,13 @@ function AdCampaignsView({ brandSlug }) {
         <div className="cp-card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 20 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Cost Per Acquisition</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "#F97316" }}>{fmtINR(avgCpa)}</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#F97316" }}>{fmtCurr(avgCpa)}</div>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>avg across all campaigns</div>
           </div>
           <div style={{ width: 1, height: 60, background: "#F1F5F9" }} />
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: .5, marginBottom: 4 }}>Total All-time Spend</div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{fmtINRFull(totalSpent)}</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{fmtCurrFull(totalSpent)}</div>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{totalConv} total conversions · {fmtNum(totalReach)} reach</div>
           </div>
         </div>

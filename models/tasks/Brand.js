@@ -128,6 +128,7 @@ const BrandSchema = new mongoose.Schema(
       connected:        { type: Boolean, default: false },
       adAccountId:      { type: String, default: "" },      // act_XXXXXXXXXX
       adAccountName:    { type: String, default: "" },
+      currency:         { type: String, default: "INR" },   // e.g. "INR", "USD", "AUD"
       token:            { type: String, default: "", select: false },
       tokenExpiry:      { type: Date,   default: null },
       lastSync:         { type: Date,   default: null },

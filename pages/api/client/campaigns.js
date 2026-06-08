@@ -30,5 +30,7 @@ export default async function handler(req, res) {
     .sort({ createdAt: -1 })
     .lean();
 
-  return res.json({ success: true, campaigns });
+  const currency = brand.metaAds?.currency || brand.googleAds?.currency || "INR";
+
+  return res.json({ success: true, campaigns, currency });
 }
