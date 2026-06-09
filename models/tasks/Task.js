@@ -102,7 +102,7 @@ const TaskSchema = new mongoose.Schema(
 
     /* ── Content / Social Media fields ── */
     brandId: { type: mongoose.Schema.Types.ObjectId, ref: "Brand", default: null },
-    contentType: { type: String, enum: ["reel", "post", "carousel", "story", ""], default: "" },
+    contentType: { type: String, enum: ["reel", "post", "carousel", "story", "logo", "brandkit", "social", "presentation", "print", "motion", "web", "other", ""], default: "" },
     stage: { type: String, enum: ["S1", "S2", "S3", "S4", ""], default: "" },
     nomenclature: { type: String, default: "" }, // auto-name: "reel1 may'26"
     caption:      { type: String, default: "" },

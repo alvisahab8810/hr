@@ -1,4 +1,4 @@
-// GET /api/client/seo-tasks?brandSlug=...
+// GET /api/client/branding-tasks?brandSlug=...
 import jwt from "jsonwebtoken";
 import dbConnect from "@/utils/dbConnect";
 import Brand from "@/models/tasks/Brand";
@@ -41,23 +41,20 @@ export default async function handler(req, res) {
 
   const tasks = await Task.find({
     brandId: brand._id,
-    tags:    "seo",
+    tags:    "branding",
   })
-    .select("title taskId nomenclature status dueDate seoCategory description pillar createdAt updatedAt")
+    .select("title taskId nomenclature status dueDate description createdAt updatedAt")
     .sort({ createdAt: -1 })
     .lean();
 
-  // Return only client-safe fields — no assignee info
   const safe = tasks.map(t => ({
     _id:         t._id,
     taskId:      t.taskId,
     title:       t.nomenclature || t.title,
     status:      t.status,
     statusLabel: STATUS_LABEL[t.status] || t.status,
-    seoCategory: t.seoCategory || "general",
     dueDate:     t.dueDate,
     description: t.description || "",
-    pillar:      t.pillar || "",
     createdAt:   t.createdAt,
   }));
 

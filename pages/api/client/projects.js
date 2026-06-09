@@ -1,8 +1,9 @@
 // GET /api/client/projects?brandSlug=...
-// Returns projects (with sprints + features) for the logged-in client
+// Returns projects for the specific brand of the logged-in client
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
+import Brand from "@/models/tasks/Brand";
 import Project from "@/models/projects/Project";
 import Sprint from "@/models/projects/Sprint";
 import Task from "@/models/tasks/Task";
@@ -31,10 +32,20 @@ export default async function handler(req, res) {
   if (!clientId) return res.status(400).json({ success: false, message: "Invalid token" });
 
   try {
-    const projects = await Project.find({
-      clientId,
-      status: { $ne: "cancelled" },
-    })
+    const { brandSlug } = req.query;
+
+    // If brandSlug provided, scope to that specific brand only
+    let brandIdFilter = null;
+    if (brandSlug) {
+      const brand = await Brand.findOne({ slug: brandSlug, clientId }).lean();
+      if (!brand) return res.json({ success: true, projects: [], sprints: [], features: [] });
+      brandIdFilter = brand._id;
+    }
+
+    const query = { clientId, status: { $ne: "cancelled" } };
+    if (brandIdFilter) query.brandId = brandIdFilter;
+
+    const projects = await Project.find(query)
       .sort({ updatedAt: -1 })
       .lean();
 

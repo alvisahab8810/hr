@@ -3,7 +3,8 @@ import { useTaskSync } from "@/utils/hooks/useTaskSync";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { toast } from "react-toastify";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -118,7 +119,19 @@ const EMPTY_PROD_FORM  = { brandId: "", contentType: "reel", stages: freshStages
 const EMPTY_GEN_FORM   = {
   title: "", description: "", priority: "medium",
   assignedTo: "", projectId: "", sprintId: "", dueDate: "", estimatedHours: "", brandId: "",
+  brandingType: "",
 };
+
+const BRANDING_TYPES = [
+  { key: "logo",         label: "Logo Design",        icon: "bi-pentagon-fill",     color: "#6366F1" },
+  { key: "brandkit",     label: "Brand Kit",          icon: "bi-palette-fill",      color: "#EC4899" },
+  { key: "social",       label: "Social Assets",      icon: "bi-images",            color: "#F59E0B" },
+  { key: "presentation", label: "Presentations",      icon: "bi-easel-fill",        color: "#10B981" },
+  { key: "print",        label: "Print / Collateral", icon: "bi-printer-fill",      color: "#8B5CF6" },
+  { key: "motion",       label: "Motion Graphics",    icon: "bi-play-circle-fill",  color: "#EF4444" },
+  { key: "web",          label: "Web Design",         icon: "bi-browser-chrome",    color: "#14B8A6" },
+  { key: "other",        label: "Other",              icon: "bi-boxes",             color: "#94A3B8" },
+];
 
 const SEO_CATS = [
   { key: "blog",      label: "Blog Post",     icon: "bi-file-text",            color: "#6366F1", placeholder: "e.g. Top 10 Hotels in Goa (focus: hotels in goa)" },
@@ -195,10 +208,14 @@ export default function TaskDashboard() {
   });
   const [seoForm,              setSeoForm]              = useState(EMPTY_SEO_FORM);
 
-  /* ── Auto-open create modal when ?create=1 in URL ── */
+  /* ── Auto-open create modal when ?create=1 or ?mode=<type> in URL ── */
   useEffect(() => {
-    if (router.query.create === "1") setShowCreate(true);
-  }, [router.query.create]);
+    const { create, mode } = router.query;
+    if (create === "1" || mode) {
+      if (mode && ["seo","ads","branding","general"].includes(mode)) setCreateMode(mode);
+      setShowCreate(true);
+    }
+  }, [router.query.create, router.query.mode]);
 
   /* ── Fetch all data on mount ── */
   useEffect(() => {
@@ -468,8 +485,8 @@ export default function TaskDashboard() {
         } else if (["offpage","technical"].includes(seoForm.seoCategory)) {
           if (!seoTitle) seoTitle = seoDesc.slice(0, 80) || (seoForm.seoCategory === "offpage" ? "Off-Page SEO Task" : "Technical SEO Task");
         }
-        if (!seoTitle)       { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!seoForm.dueDate){ toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!seoTitle)                       { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!seoForm.dueDate && !adminUser) { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           title:          seoTitle,
           description:    seoDesc,
@@ -486,20 +503,21 @@ export default function TaskDashboard() {
           assignedByName: adminUser?.name || "Admin",
         };
       } else if (["ads","branding"].includes(createMode)) {
-        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           ...genForm,
           taskType:       "manual",
           brandId:        topBrandId || genForm.brandId || null,
           tags:           [createMode],
+          contentType:    createMode === "branding" ? (genForm.brandingType || null) : undefined,
           assignedById:   adminUser?._id,
           assignedByModel:"AdminUser",
           assignedByName: adminUser?.name || "Admin",
         };
       } else {
-        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = {
           ...genForm,
           taskType:       genForm.taskType || "manual",
@@ -529,13 +547,20 @@ export default function TaskDashboard() {
           .then(r => r.json()).then(d => { if (d.success) setTasks(d.tasks || []); });
         fetch("/api/admin/tasks/stats", { credentials: "include" })
           .then(r => r.json()).then(d => { if (d.success) setStats(d.stats); });
-      } else toast.error(data.message || "Failed to create task");
-    } catch { toast.error("Network error"); }
+      } else {
+        console.error("[create-task] API error:", data);
+        toast.error(data.message || "Failed to create task");
+      }
+    } catch (err) {
+      console.error("[create-task] Exception:", err);
+      toast.error("Network error — check console");
+    }
     finally { setSubmitting(false); }
   };
 
   /* ─── Render ─── */
   return (
+    <>
     <div className="leaves-management-admin">
       <Head>
         <title>Dashboard — Task Management</title>
@@ -1271,7 +1296,11 @@ export default function TaskDashboard() {
                         {/* Due Date / Deadline with day display */}
                         <div>
                           <label style={LBL}>Due Date / Deadline</label>
-                          <input type="date" className="tmd-input" value={seoForm.dueDate} onChange={e => setSeoForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          <input type="date" className="tmd-input" value={seoForm.dueDate}
+                            disabled={!!adminUser}
+                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                            onChange={e => setSeoForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                           {seoForm.dueDate && (
                             <div style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
                               <i className="bi bi-calendar-check" />
@@ -1324,7 +1353,7 @@ export default function TaskDashboard() {
                   {["ads","branding"].includes(createMode) && (() => {
                     const banners = {
                       ads:      { bg:"#FFFBEB", border:"#FDE68A", icon:"📢", text:`Ad task for ${selectedBrand?.name || "this brand"}. Platforms: ${selectedBrand?.adsSettings?.platforms?.join(", ") || "TBD"}.` },
-                      branding: { bg:"#FDF2F8", border:"#F9A8D4", icon:"🎨", text:`Branding task for ${selectedBrand?.name || "this brand"}. Logo, identity, packaging.` },
+                      branding: { bg:"#FDF2F8", border:"#F9A8D4", icon:"🎨", text:`Branding task for ${selectedBrand?.name || "this brand"}.` },
                     };
                     const b = banners[createMode];
                     return (
@@ -1332,6 +1361,30 @@ export default function TaskDashboard() {
                         <div style={{ background: b.bg, border: `1px solid ${b.border}`, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#374151", display: "flex", gap: 8 }}>
                           <span>{b.icon}</span> {b.text}
                         </div>
+
+                        {/* Branding category chips */}
+                        {createMode === "branding" && (
+                          <div>
+                            <label style={LBL}>Category</label>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                              {BRANDING_TYPES.map(bt => {
+                                const active = genForm.brandingType === bt.key;
+                                return (
+                                  <button key={bt.key} type="button"
+                                    onClick={() => setGenForm(f => ({ ...f, brandingType: active ? "" : bt.key }))}
+                                    style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 11px", borderRadius:9, fontSize:11, fontWeight:700, cursor:"pointer", transition:"all .12s",
+                                      background: active ? bt.color + "20" : "#F8FAFC",
+                                      color: active ? bt.color : "#64748B",
+                                      border: `1.5px solid ${active ? bt.color : "#E5E7EB"}` }}>
+                                    <i className={`bi ${bt.icon}`} style={{ fontSize:11 }} />
+                                    {bt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         <div>
                           <label style={LBL}>Title <span style={{ color: "#EF4444" }}>*</span></label>
                           <input className="tmd-input" placeholder="Task title" value={genForm.title}
@@ -1358,7 +1411,11 @@ export default function TaskDashboard() {
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                           <div>
                             <label style={LBL}>Due Date</label>
-                            <input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                            <input type="date" className="tmd-input" value={genForm.dueDate}
+                              disabled={!!adminUser}
+                              style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                              onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                            {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                           </div>
                           <div>
                             <label style={LBL}>Est. Hours</label>
@@ -1403,25 +1460,12 @@ export default function TaskDashboard() {
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         <div>
-                          <label style={LBL}>Project</label>
-                          <select className="tmd-select" value={genForm.projectId} onChange={e => setGenForm(f => ({ ...f, projectId: e.target.value, sprintId: "" }))}>
-                            <option value="">No project</option>
-                            {projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={LBL}>Sprint</label>
-                          <select className="tmd-select" value={genForm.sprintId} disabled={!genForm.projectId}
-                            onChange={e => setGenForm(f => ({ ...f, sprintId: e.target.value }))}>
-                            <option value="">No sprint</option>
-                            {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div>
                           <label style={LBL}>Due Date</label>
-                          <input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          <input type="date" className="tmd-input" value={genForm.dueDate}
+                            disabled={!!adminUser}
+                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                            onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                         </div>
                         <div>
                           <label style={LBL}>Est. Hours</label>
@@ -1456,5 +1500,7 @@ export default function TaskDashboard() {
         );
       })()}
     </div>
+    <ToastContainer position="bottom-right" autoClose={3000} />
+    </>
   );
 }

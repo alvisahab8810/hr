@@ -807,6 +807,11 @@ export default function Leftbar({ role = "admin" }) {
                   <i className="bi bi-search" style={{ marginRight: 6, fontSize: 12 }} />SEO Hub
                 </Link>
               </li>
+              <li className={pathname?.startsWith("/dashboard/admin/tasks/branding") ? "active" : ""}>
+                <Link href="/dashboard/admin/tasks/branding">
+                  <i className="bi bi-palette-fill" style={{ marginRight: 6, fontSize: 12 }} />Branding
+                </Link>
+              </li>
 
               {/* PERFORMANCE */}
               <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>

@@ -2209,36 +2209,33 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
 
   const { pending = [], allTasks = [], instagram } = overview || {};
 
+  // Shipped = status completed OR S4 done OR postedAt set
+  const isShipped = t => t.status === "completed" || !!t.stages?.[3]?.done || !!t.postedAt;
   // Task-based counts
-  const posted    = allTasks.filter(t => t.status === "completed" && t.contentType);
-  const reels     = allTasks.filter(t => t.contentType === "reel").length;
-  const taskPosts = allTasks.filter(t => t.contentType === "post").length;
-  const carousels = allTasks.filter(t => t.contentType === "carousel").length;
+  const posted    = allTasks.filter(t => isShipped(t) && t.contentType);
+  const reels     = allTasks.filter(t => t.contentType === "reel"     && isShipped(t)).length;
+  const taskPosts = allTasks.filter(t => t.contentType === "post"     && isShipped(t)).length;
+  const carousels = allTasks.filter(t => t.contentType === "carousel" && isShipped(t)).length;
+  // Per-type status for content mix (only non-shipped tasks)
+  const reelWip     = allTasks.filter(t => t.contentType === "reel"     && ["in_progress","todo"].includes(t.status) && !isShipped(t)).length;
+  const postWip     = allTasks.filter(t => t.contentType === "post"     && ["in_progress","todo"].includes(t.status) && !isShipped(t)).length;
+  const carouselWip = allTasks.filter(t => t.contentType === "carousel" && ["in_progress","todo"].includes(t.status) && !isShipped(t)).length;
+  const reelReview     = allTasks.filter(t => t.contentType === "reel"     && t.status === "review" && !isShipped(t)).length;
+  const postReview     = allTasks.filter(t => t.contentType === "post"     && t.status === "review" && !isShipped(t)).length;
+  const carouselReview = allTasks.filter(t => t.contentType === "carousel" && t.status === "review" && !isShipped(t)).length;
 
   const monthlyReels     = brand?.monthlyDeliverables?.reels     || 0;
   const monthlyPosts     = brand?.monthlyDeliverables?.posts     || 0;
   const monthlyCarousels = brand?.monthlyDeliverables?.carousels || 0;
   const totalTarget      = monthlyReels + monthlyPosts + monthlyCarousels;
-  const month            = now.toLocaleString("en-IN", { month: "long" });
 
   // Instagram data
-  const igConnected      = !!instagram?.connected;
-  const igPosts          = instagram?.posts          || [];
-  const igFollowers      = instagram?.followersCount || 0;
-  const profileInsights  = instagram?.profileInsights || [];
+  const igConnected     = !!instagram?.connected;
+  const igPosts         = instagram?.posts          || [];
+  const igFollowers     = instagram?.followersCount || 0;
+  const profileInsights = instagram?.profileInsights || [];
 
-  // Current-month KPI totals (always from current month, not filter)
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthIgPosts  = igPosts.filter(p => p.timestamp && new Date(p.timestamp) >= startOfMonth);
-  const kpiReach      = monthIgPosts.reduce((s, p) => s + (p.reach    || 0), 0);
-  const kpiLikes      = monthIgPosts.reduce((s, p) => s + (p.likes    || 0), 0);
-  const kpiSaved      = monthIgPosts.reduce((s, p) => s + (p.saved    || 0), 0);
-  const kpiComments   = monthIgPosts.reduce((s, p) => s + (p.comments || 0), 0);
-  const engRate       = kpiReach > 0
-    ? (((kpiLikes + kpiSaved + kpiComments) / kpiReach) * 100).toFixed(1) + "%"
-    : "—";
-
-  // Available months from post data
+  // Build available months list from all post data + current month
   const availableMonths = [...new Set(
     igPosts.filter(p => p.timestamp).map(p => {
       const d = new Date(p.timestamp);
@@ -2247,21 +2244,51 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
   )].sort().reverse();
   if (!availableMonths.includes(defaultMonth)) availableMonths.unshift(defaultMonth);
 
-  // Filtered posts for the posts table
+  // Derived from monthFilter — drives ALL analytics sections
   const [fy, fm] = monthFilter.split("-").map(Number);
-  const filteredPosts = igPosts.filter(p => {
+  const monthName = new Date(fy, fm - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const monthShort = new Date(fy, fm - 1, 1).toLocaleString("en-IN", { month: "long" });
+
+  // All posts for the selected month (no type filter) — for KPI cards & top post
+  const monthPosts = igPosts.filter(p => {
     if (!p.timestamp) return false;
     const d = new Date(p.timestamp);
-    if (d.getFullYear() !== fy || d.getMonth() + 1 !== fm) return false;
+    return d.getFullYear() === fy && d.getMonth() + 1 === fm;
+  });
+
+  // Account-level reach for the selected month (sum of daily profileInsights reach)
+  const accountMonthReach = profileInsights
+    .filter(p => p.date && p.date.startsWith(monthFilter))
+    .reduce((s, p) => s + (p.reach || 0), 0);
+
+  // Post-level KPI totals for selected month
+  const kpiReach    = monthPosts.reduce((s, p) => s + (p.reach    || 0), 0);
+  const kpiLikes    = monthPosts.reduce((s, p) => s + (p.likes      || 0), 0);
+  const kpiSaved    = monthPosts.reduce((s, p) => s + (p.saved      || 0), 0);
+  const kpiComments = monthPosts.reduce((s, p) => s + (p.comments   || 0), 0);
+  const kpiShares   = monthPosts.reduce((s, p) => s + (p.shares     || 0), 0);
+  const kpiPlays    = monthPosts.reduce((s, p) => s + (p.videoViews || 0), 0);
+  const displayReach = kpiReach;
+  const engRate      = kpiReach > 0
+    ? (((kpiLikes + kpiSaved + kpiComments) / kpiReach) * 100).toFixed(1) + "%"
+    : "—";
+
+  // Top post for selected month by reach
+  const topMonthPost = monthPosts.length > 0
+    ? [...monthPosts].sort((a, b) => (b.reach || 0) - (a.reach || 0))[0]
+    : null;
+
+  // Filtered posts for the posts table (month + type filter)
+  const filteredPosts = monthPosts.filter(p => {
     if (typeFilter === "all") return true;
     const mt = (p.mediaType || "").toLowerCase();
-    if (typeFilter === "reel")          return mt === "reel" || mt === "video";
-    if (typeFilter === "image")         return mt === "image";
+    if (typeFilter === "reel")           return mt === "reel" || mt === "video";
+    if (typeFilter === "image")          return mt === "image";
     if (typeFilter === "carousel_album") return mt === "carousel_album";
     return true;
   }).sort((a, b) => (b.reach || 0) - (a.reach || 0));
 
-  // Period summary stats for filtered posts
+  // Period summary stats for filtered posts (used inside the posts card)
   const filteredReach    = filteredPosts.reduce((s, p) => s + (p.reach    || 0), 0);
   const filteredLikes    = filteredPosts.reduce((s, p) => s + (p.likes    || 0), 0);
   const filteredSaved    = filteredPosts.reduce((s, p) => s + (p.saved    || 0), 0);
@@ -2271,41 +2298,49 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
     ? (((filteredLikes + filteredSaved + filteredComments) / filteredReach) * 100).toFixed(1) + "%"
     : "—";
 
-  // Chart: follower growth (from profileInsights)
+  // Chart: follower growth (from profileInsights — all synced days)
   const followerChartData = profileInsights
     .filter(p => p.followers > 0)
     .map(p => ({ date: p.date, value: p.followers }));
 
-  // Chart: reach by post (last 20 posts, chronological)
-  const reachChartData = [...igPosts]
-    .filter(p => p.timestamp)
+  // Chart: reach by post for selected month, chronological
+  const reachChartData = [...monthPosts]
     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-    .slice(-20)
     .map(p => ({ date: p.timestamp, value: p.reach || 0 }));
 
   return (
     <div>
-      {/* Info banner */}
-      <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "11px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#3730A3" }}>
+      {/* Info banner + global month filter */}
+      <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 10, padding: "11px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#3730A3", flexWrap: "wrap" }}>
         <i className="bi bi-instagram" style={{ fontSize: 15 }} />
         Social Media — content engine, analytics, and approvals in one place.
         {igConnected && (
-          <span style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontWeight: 700, color: "#5A57FB" }}>@{instagram.username}</span>
             {instagram.lastSync && (
               <span style={{ fontSize: 11, color: "#94a3b8" }}>· synced {fmtAgo(instagram.lastSync)}</span>
             )}
           </span>
         )}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#4F46E5", whiteSpace: "nowrap" }}>Viewing:</span>
+          <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
+            style={{ padding: "5px 10px", border: "1.5px solid #C7D2FE", borderRadius: 7, fontSize: 12, color: "#3730A3", fontFamily: "inherit", cursor: "pointer", outline: "none", background: "#fff", fontWeight: 700 }}>
+            {availableMonths.map(m => {
+              const [y, mo] = m.split("-").map(Number);
+              return <option key={m} value={m}>{new Date(y, mo - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</option>;
+            })}
+          </select>
+        </div>
       </div>
 
       {/* ── 4 KPI cards ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
         {[
-          { label: "POSTS SHIPPED",   val: `${posted.length}/${totalTarget || "?"}`, sub: `${posted.length} in ${month}`,        live: true },
-          { label: "TOTAL REACH",     val: igConnected ? fmtNum(kpiReach) || "0"   : "—", sub: igConnected ? `↑ ${month} reach` : "Connect Instagram",  live: igConnected && kpiReach > 0 },
-          { label: "AVG ENGAGEMENT",  val: igConnected ? engRate : "—",              sub: igConnected ? "(likes+saves+comments)÷reach" : "Connect Instagram", live: igConnected && kpiReach > 0 },
-          { label: "FOLLOWERS",       val: igConnected ? fmtNum(igFollowers) || "0" : "—", sub: igConnected ? `@${instagram?.username}` : "Connect Instagram", live: igConnected },
+          { label: "POSTS SHIPPED",  val: `${posted.length}/${totalTarget || "?"}`, sub: `${posted.length} in ${monthShort}`, live: true },
+          { label: "TOTAL REACH",    val: igConnected ? fmtNum(displayReach) || "0" : "—", sub: igConnected ? `↑ ${monthShort} reach` : "Connect Instagram", live: igConnected && displayReach > 0 },
+          { label: "AVG ENGAGEMENT", val: igConnected ? engRate : "—", sub: igConnected ? "(likes+saves+comments)÷reach" : "Connect Instagram", live: igConnected && kpiReach > 0 },
+          { label: "FOLLOWERS",      val: igConnected ? fmtNum(igFollowers) || "0" : "—", sub: igConnected ? `@${instagram?.username}` : "Connect Instagram", live: igConnected },
         ].map(k => (
           <div key={k.label} style={{ background: "#fff", border: "1.5px solid #E2E8F0", borderRadius: 12, padding: "18px 20px" }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", letterSpacing: .7, textTransform: "uppercase", marginBottom: 10 }}>{k.label}</div>
@@ -2333,7 +2368,7 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
             <div className="cp-card-title" style={{ marginBottom: 12 }}>
               <i className="bi bi-eye" style={{ color: "#E11D48" }} />
               Reach by Post
-              <span className="cp-card-sub" style={{ marginLeft: 8 }}>Last 20 posts</span>
+              <span className="cp-card-sub" style={{ marginLeft: 8 }}>{monthShort} · {monthPosts.length} posts</span>
             </div>
             <MiniBarChart data={reachChartData} color="#E11D48" height={120} />
           </div>
@@ -2341,14 +2376,15 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
       )}
 
       {/* ── Engagement summary row (when connected + has data) ── */}
-      {igConnected && kpiReach > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 24 }}>
+      {igConnected && (displayReach > 0 || kpiReach > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 24 }}>
           {[
-            { label: "Reach",        val: kpiReach,    icon: "bi-eye",        color: "#5A57FB" },
-            { label: "Likes",        val: kpiLikes,    icon: "bi-heart",      color: "#E11D48" },
-            { label: "Comments",     val: kpiComments, icon: "bi-chat",       color: "#F59E0B" },
-            { label: "Saves",        val: kpiSaved,    icon: "bi-bookmark",   color: "#059669" },
-            { label: "Engagement",   val: engRate,     icon: "bi-bar-chart",  color: "#8B5CF6", isStr: true },
+            { label: "Post Reach",  val: kpiReach,    icon: "bi-eye",         color: "#5A57FB" },
+            { label: "Likes",       val: kpiLikes,    icon: "bi-heart",       color: "#E11D48" },
+            { label: "Comments",    val: kpiComments, icon: "bi-chat",        color: "#F59E0B" },
+            { label: "Saves",       val: kpiSaved,    icon: "bi-bookmark",    color: "#059669" },
+            { label: "Shares",      val: kpiShares,   icon: "bi-share",       color: "#06B6D4" },
+            { label: "Engagement",  val: engRate,     icon: "bi-bar-chart",   color: "#8B5CF6", isStr: true },
           ].map(s => (
             <div key={s.label} style={{ background: "#fff", border: "1.5px solid #E2E8F0", borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 34, height: 34, borderRadius: 8, background: s.color + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -2368,22 +2404,15 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
       {/* ── Posts section with filters (when connected) ── */}
       {igConnected && (
         <div className="cp-card" style={{ marginBottom: 24 }}>
-          {/* Filter bar */}
+          {/* Filter bar — type only; month is controlled by global selector above */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <div className="cp-card-title" style={{ marginBottom: 0, flex: 1 }}>
               <i className="bi bi-grid" style={{ color: "#5A57FB" }} />
               Posts
               {filteredPosts.length > 0 && (
-                <span className="cp-card-sub" style={{ marginLeft: 8 }}>{filteredPosts.length} posts · sorted by reach</span>
+                <span className="cp-card-sub" style={{ marginLeft: 8 }}>{filteredPosts.length} posts · {monthShort} · sorted by reach</span>
               )}
             </div>
-            <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
-              style={{ padding: "6px 10px", border: "1.5px solid #E2E8F0", borderRadius: 7, fontSize: 12, color: "#374151", fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
-              {availableMonths.map(m => {
-                const [y, mo] = m.split("-").map(Number);
-                return <option key={m} value={m}>{new Date(y, mo - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</option>;
-              })}
-            </select>
             <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 8, padding: "3px" }}>
               {[
                 { key: "all",           label: "All" },
@@ -2472,12 +2501,6 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
                     <span style={{ color: p.saved > 0 ? "#059669" : "#CBD5E1", display: "flex", alignItems: "center", gap: 3 }}>
                       <i className="bi bi-bookmark" /><span style={{ fontWeight: p.saved > 0 ? 600 : 400 }}>{fmtNumZero(p.saved)}</span>
                     </span>
-                    {isVideo && (
-                      <span style={{ color: p.videoViews > 0 ? "#8B5CF6" : "#CBD5E1", display: "flex", alignItems: "center", gap: 3 }}>
-                        <i className="bi bi-play-circle" /><span style={{ fontWeight: p.videoViews > 0 ? 600 : 400 }}>{fmtNumZero(p.videoViews)}</span>
-                        <span style={{ color: "#94a3b8", fontSize: 10 }}>plays</span>
-                      </span>
-                    )}
                     {(mt === "reel") && (
                       <span style={{ color: p.shares > 0 ? "#06B6D4" : "#CBD5E1", display: "flex", alignItems: "center", gap: 3 }}>
                         <i className="bi bi-share" /><span style={{ fontWeight: p.shares > 0 ? 600 : 400 }}>{fmtNumZero(p.shares)}</span>
@@ -2501,6 +2524,64 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
           })}
         </div>
       )}
+
+      {/* ── Top post this month ── */}
+      {igConnected && topMonthPost && (() => {
+        const tp = topMonthPost;
+        const mt = (tp.mediaType || "image").toLowerCase();
+        const isVideo = mt === "reel" || mt === "video";
+        const typeKey = isVideo ? "reel" : mt === "carousel_album" ? "carousel" : "post";
+        const tm = CTYPE_META[typeKey] || { label: "POST", color: "#5A57FB", bg: "#EEF2FF" };
+        const topEng = tp.reach > 0 ? (((tp.likes + tp.saved + tp.comments) / tp.reach) * 100).toFixed(1) + "%" : "—";
+        return (
+          <div className="cp-card" style={{ marginBottom: 24 }}>
+            <div className="cp-card-title" style={{ marginBottom: 14 }}>
+              <i className="bi bi-trophy" style={{ color: "#F59E0B" }} />
+              Top post · {monthShort}
+              <span className="cp-card-sub" style={{ marginLeft: 8 }}>Highest reach · {monthShort}</span>
+              {tp.permalink && (
+                <a href={tp.permalink} target="_blank" rel="noreferrer" style={{ marginLeft: "auto", color: "#5A57FB", fontSize: 13, display: "flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
+                  View on Instagram <i className="bi bi-box-arrow-up-right" style={{ fontSize: 11 }} />
+                </a>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+              <div style={{ width: 90, height: 90, borderRadius: 12, overflow: "hidden", flexShrink: 0, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {tp.thumbnailUrl
+                  ? <img src={tp.thumbnailUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <i className={`bi ${isVideo ? "bi-play-circle" : "bi-image"}`} style={{ color: "#94a3b8", fontSize: 30 }} />
+                }
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                  <span className="cp-badge" style={{ background: tm.bg, color: tm.color }}>{tm.label.toUpperCase()}</span>
+                  {tp.timestamp && <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(tp.timestamp).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+                </div>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, marginBottom: 12, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                  {tp.caption?.slice(0, 140) || "(no caption)"}
+                </div>
+                <div style={{ display: "flex", gap: 18, fontSize: 13, flexWrap: "wrap" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 800, color: "#5A57FB" }}>
+                    <i className="bi bi-eye" style={{ fontSize: 12 }} />{fmtNum(tp.reach) !== "—" ? fmtNumZero(tp.reach) : "—"}
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>reach</span>
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#E11D48", fontWeight: 700 }}><i className="bi bi-heart" style={{ fontSize: 12 }} />{fmtNumZero(tp.likes)}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#F59E0B", fontWeight: 700 }}><i className="bi bi-chat" style={{ fontSize: 12 }} />{fmtNumZero(tp.comments)}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#059669", fontWeight: 700 }}><i className="bi bi-bookmark" style={{ fontSize: 12 }} />{fmtNumZero(tp.saved)}</span>
+                  {false && tp.videoViews > 0 && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: "#7C3AED", fontWeight: 700 }}><i className="bi bi-play-circle" style={{ fontSize: 12 }} />{fmtNumZero(tp.videoViews)} <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400 }}>views</span></span>
+                  )}
+                  {tp.reach > 0 && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 800, color: "#8B5CF6" }}>
+                      <i className="bi bi-bar-chart-fill" style={{ fontSize: 11 }} />{topEng}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Two-column: Quick links + Content mix ── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 24 }}>
@@ -2526,82 +2607,27 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
 
         {/* Content type mix */}
         <div className="cp-card" style={{ padding: "16px 18px" }}>
-          <div className="cp-card-title" style={{ marginBottom: 14 }}>Content type mix · {month}</div>
+          <div className="cp-card-title" style={{ marginBottom: 14 }}>Content type mix · {monthShort}</div>
           {[
-            { label: "Reels",     count: reels,     total: monthlyReels,     color: "#E11D48" },
-            { label: "Posts",     count: taskPosts, total: monthlyPosts,     color: "#06B6D4" },
-            { label: "Carousels", count: carousels, total: monthlyCarousels, color: "#F59E0B" },
+            { label: "Reels",     done: reels,     wip: reelWip,     inReview: reelReview,     total: monthlyReels,     color: "#E11D48" },
+            { label: "Posts",     done: taskPosts, wip: postWip,     inReview: postReview,     total: monthlyPosts,     color: "#06B6D4" },
+            { label: "Carousels", done: carousels, wip: carouselWip, inReview: carouselReview, total: monthlyCarousels, color: "#F59E0B" },
           ].map(t => (
-            <div key={t.label} style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 }}>
+            <div key={t.label} style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 5 }}>
                 <span>{t.label}</span>
-                <span style={{ color: "#94a3b8" }}>{t.count}/{t.total || "?"}</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {t.inReview > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#4F46E5" }}>{t.inReview} in review</span>}
+                  {t.wip > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#1D4ED8" }}>{t.wip} in progress</span>}
+                  <span style={{ color: "#94a3b8" }}>{t.done}/{t.total || "?"} shipped</span>
+                </div>
               </div>
               <div style={{ height: 7, background: "#F1F5F9", borderRadius: 4, overflow: "hidden" }}>
-                <div style={{ height: 7, borderRadius: 4, width: `${Math.min(100, (t.count / Math.max(t.total, 1)) * 100)}%`, background: t.color, transition: "width .4s" }} />
+                <div style={{ height: 7, borderRadius: 4, width: `${Math.min(100, (t.done / Math.max(t.total, 1)) * 100)}%`, background: t.color, transition: "width .4s" }} />
               </div>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* ── Awaiting approval ── */}
-      <div className="cp-card">
-        <div className="cp-card-title">
-          <i className="bi bi-clock-history" style={{ color: "#4F46E5" }} />
-          Awaiting your approval
-          {pending.length > 0 && <span style={{ marginLeft: 4, background: "#EEF2FF", color: "#4F46E5", borderRadius: 5, padding: "1px 7px", fontSize: 11, fontWeight: 700 }}>{pending.length}</span>}
-          <span className="cp-card-sub" style={{ marginLeft: 4 }}>{pending.length} piece{pending.length !== 1 ? "s" : ""} ready for sign-off</span>
-          {pending.length > 0 && <button className="cp-view-all" onClick={() => setView("approvals")}>Approvals queue</button>}
-        </div>
-        {pending.length === 0 ? (
-          <div className="cp-empty-state">
-            <i className="bi bi-check-circle" style={{ color: "#02EBAD" }} />
-            <p>All caught up! Nothing waiting for your review.</p>
-          </div>
-        ) : pending.map((task, idx) => {
-          const bc = task.brandId?.color || "#5A57FB";
-          const tm = CTYPE_META[task.contentType] || { label: (task.contentType || "TASK").toUpperCase(), color: "#5A57FB", bg: "#EEF2FF" };
-          return (
-            <div key={task._id} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 0", borderBottom: idx < pending.length - 1 ? "1px solid #F1F5F9" : "none" }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: bc + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: bc, flexShrink: 0 }}>
-                {(task.contentType || "T").slice(0, 1).toUpperCase()}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{task.nomenclature || task.title}</span>
-                  <span className="cp-badge" style={{ background: tm.bg, color: tm.color }}>{tm.label}</span>
-                  <span style={{ padding: "2px 8px", background: "#EEF2FF", color: "#4F46E5", borderRadius: 5, fontSize: 11, fontWeight: 700 }}>● Awaiting you</span>
-                </div>
-                {task.caption && (
-                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.caption}</div>
-                )}
-                {task.assignedTo?.personal?.firstName && (
-                  <div style={{ fontSize: 11, color: "#94a3b8", display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: bc + "30", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 800, color: bc }}>
-                      {task.assignedTo.personal.firstName[0]}{task.assignedTo.personal.lastName?.[0] || ""}
-                    </div>
-                    {task.assignedTo.personal.firstName} submitted {fmtAgo(task.updatedAt)}
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button title="Review" onClick={() => setReviewModal(task)}
-                  style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "#DCFCE7", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="bi bi-check" style={{ color: "#16A34A", fontSize: 14 }} />
-                </button>
-                <button title="Request changes" onClick={() => setReviewModal(task)}
-                  style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "#EEF2FF", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="bi bi-arrow-repeat" style={{ color: "#4F46E5", fontSize: 12 }} />
-                </button>
-                <button title="Reject" onClick={() => setReviewModal(task)}
-                  style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "#FEE2E2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <i className="bi bi-x" style={{ color: "#DC2626", fontSize: 15 }} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {reviewModal && (
@@ -2638,6 +2664,7 @@ function SeoView({ brandSlug }) {
   const [chart,   setChart]   = useState("clicks");
   const [seoTasks,     setSeoTasks]     = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [selTask,      setSelTask]      = useState(null);
 
   useEffect(() => {
     if (seoTab !== "tasks") return;
@@ -2678,7 +2705,8 @@ function SeoView({ brandSlug }) {
   );
 
   if (seoTab === "tasks") {
-    const SEO_CAT_COLOR = { blog:"#3B82F6", technical:"#8B5CF6", local:"#F59E0B", ecommerce:"#EC4899", general:"#64748b" };
+    const SEO_CAT_COLOR = { blog:"#3B82F6", technical:"#8B5CF6", onpage:"#10B981", offpage:"#F59E0B", backlinks:"#6366F1", keywords:"#EC4899", local:"#F59E0B", ecommerce:"#EC4899", general:"#64748b" };
+    const SEO_CAT_LABEL = { blog:"Blog", technical:"Technical", onpage:"On-Page", offpage:"Off-Page", backlinks:"Backlinks", keywords:"Keywords", general:"General" };
     const STATUS_COLOR  = { todo:"#64748b", in_progress:"#1D4ED8", review:"#B45309", completed:"#15803D", blocked:"#DC2626" };
     const STATUS_BG     = { todo:"#F1F5F9", in_progress:"#DBEAFE", review:"#FEF3C7", completed:"#DCFCE7", blocked:"#FEE2E2" };
     return (
@@ -2701,11 +2729,14 @@ function SeoView({ brandSlug }) {
               const stBg     = STATUS_BG[t.status]     || "#F1F5F9";
               const overdue  = t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
               return (
-                <div key={t._id} style={{ background:"#fff", border:"1.5px solid #E2E8F0", borderRadius:12, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+                <div key={t._id} onClick={() => setSelTask(t)}
+                  style={{ background:"#fff", border:"1.5px solid #E2E8F0", borderRadius:12, padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap", cursor:"pointer", transition:"border-color .12s" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor="#A5B4FC"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor="#E2E8F0"}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
                       <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:6, background:catColor+"18", color:catColor, textTransform:"capitalize" }}>
-                        {cat}
+                        {SEO_CAT_LABEL[cat] || cat}
                       </span>
                       {t.taskId && <span style={{ fontSize:10, color:"#94a3b8", fontFamily:"monospace" }}>{t.taskId}</span>}
                     </div>
@@ -2717,14 +2748,83 @@ function SeoView({ brandSlug }) {
                       </div>
                     )}
                   </div>
-                  <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:700, background:stBg, color:stColor, whiteSpace:"nowrap" }}>
-                    {t.statusLabel}
-                  </span>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:700, background:stBg, color:stColor, whiteSpace:"nowrap" }}>
+                      {t.statusLabel}
+                    </span>
+                    <i className="bi bi-chevron-right" style={{ fontSize:12, color:"#94A3B8" }} />
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* Task detail modal */}
+        {selTask && (() => {
+          const cat = selTask.seoCategory || "general";
+          const catColor = SEO_CAT_COLOR[cat] || "#64748b";
+          const stColor  = STATUS_COLOR[selTask.status]  || "#64748b";
+          const stBg     = STATUS_BG[selTask.status]     || "#F1F5F9";
+          const overdue  = selTask.dueDate && new Date(selTask.dueDate) < new Date() && selTask.status !== "completed";
+          return (
+            <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+              onClick={() => setSelTask(null)}>
+              <div style={{ background:"#fff", borderRadius:18, width:"100%", maxWidth:520, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}
+                onClick={e => e.stopPropagation()}>
+                <div style={{ padding:"18px 22px", borderBottom:"1.5px solid #F1F5F9", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:6 }}>
+                      <span style={{ fontSize:10, fontWeight:700, padding:"2px 9px", borderRadius:6, background:catColor+"18", color:catColor, textTransform:"capitalize" }}>
+                        {SEO_CAT_LABEL[cat] || cat}
+                      </span>
+                      {selTask.taskId && <span style={{ fontSize:10, color:"#94a3b8", fontFamily:"monospace" }}>{selTask.taskId}</span>}
+                    </div>
+                    <div style={{ fontWeight:800, fontSize:17, color:"#0f172a", lineHeight:1.3 }}>{selTask.title}</div>
+                  </div>
+                  <button onClick={() => setSelTask(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#94A3B8", padding:"0 0 0 12px", lineHeight:1, flexShrink:0 }}>×</button>
+                </div>
+                <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:14 }}>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+                    <span style={{ padding:"6px 16px", borderRadius:20, fontSize:13, fontWeight:700, background:stBg, color:stColor }}>{selTask.statusLabel}</span>
+                    {selTask.dueDate && (
+                      <span style={{ fontSize:13, color: overdue ? "#DC2626" : "#64748b", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+                        <i className={`bi bi-calendar${overdue ? "-x" : "-check"}`} />
+                        {overdue ? "Overdue — " : "Due: "}
+                        {new Date(selTask.dueDate).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                      </span>
+                    )}
+                  </div>
+
+                  {selTask.description && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>Details</div>
+                      <div style={{ fontSize:13, color:"#374151", lineHeight:1.7, background:"#F8FAFC", borderRadius:10, padding:"12px 14px", whiteSpace:"pre-wrap" }}>
+                        {selTask.description}
+                      </div>
+                    </div>
+                  )}
+
+                  {selTask.pillar && (
+                    <div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>Keywords / Pillar</div>
+                      <div style={{ fontSize:13, color:"#374151", background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:10, padding:"10px 14px" }}>
+                        {selTask.pillar}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display:"flex", gap:20, paddingTop:6, borderTop:"1px solid #F1F5F9" }}>
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>Created</div>
+                      <div style={{ fontSize:12, color:"#374151", fontWeight:600 }}>{new Date(selTask.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -3002,30 +3102,57 @@ const PHASE_META = {
   completed:   { label: "Completed",     color: "#64748B" },
 };
 
-function WebDevView() {
-  const [projects,  setProjects]  = useState([]);
-  const [sprints,   setSprints]   = useState([]);
-  const [features,  setFeatures]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [activeProj,setActiveProj]= useState(null);
-  const [selected,  setSelected]  = useState(null);
-  const [reviewData,setReviewData]= useState({ action: "", note: "" });
-  const [saving,    setSaving]    = useState(false);
+const WEB_PHASES = {
+  uiux:        { label: "UI/UX",    color: "#8B5CF6", icon: "bi-palette"         },
+  development: { label: "Dev",      color: "#0EA5E9", icon: "bi-code-slash"      },
+  testing:     { label: "Testing",  color: "#F59E0B", icon: "bi-bug"             },
+  launch:      { label: "Launch",   color: "#10B981", icon: "bi-rocket-takeoff"  },
+};
+
+function WebDevView({ brandSlug }) {
+  const [projects,        setProjects]        = useState([]);
+  const [sprints,         setSprints]         = useState([]);
+  const [features,        setFeatures]        = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [activeProj,      setActiveProj]      = useState(null);
+  const [expandedSprints, setExpandedSprints] = useState(new Set());
+  const [selected,        setSelected]        = useState(null);
+  const [reviewData,      setReviewData]      = useState({ action: "", note: "" });
+  const [saving,          setSaving]          = useState(false);
 
   useEffect(() => {
-    fetch("/api/client/projects")
+    fetch(`/api/client/projects${brandSlug ? `?brandSlug=${brandSlug}` : ""}`)
       .then(r => r.json())
       .then(d => {
         if (d.success) {
           setProjects(d.projects);
           setSprints(d.sprints);
           setFeatures(d.features);
-          if (d.projects.length > 0) setActiveProj(d.projects[0]._id?.toString());
+          if (d.projects.length > 0) {
+            const firstId = d.projects[0]._id?.toString();
+            setActiveProj(firstId);
+            const first = d.sprints.find(s => s.projectId?.toString() === firstId);
+            if (first) setExpandedSprints(new Set([first._id?.toString()]));
+          }
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  function toggleSprint(id) {
+    setExpandedSprints(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function switchProject(id) {
+    setActiveProj(id);
+    const first = sprints.find(s => s.projectId?.toString() === id);
+    setExpandedSprints(first ? new Set([first._id?.toString()]) : new Set());
+  }
 
   async function submitReview() {
     if (!selected) return;
@@ -3071,148 +3198,200 @@ function WebDevView() {
     );
   }
 
+  const STAT_ITEMS = [
+    { label: "Total",       val: activeFeat.length,                                         color: "#6366F1", icon: "bi-layers"       },
+    { label: "In Progress", val: activeFeat.filter(f => f.status === "in_progress").length,  color: "#0EA5E9", icon: "bi-arrow-repeat" },
+    { label: "For Approval",val: awaitingCount,                                              color: "#F59E0B", icon: "bi-eye"          },
+    { label: "Completed",   val: activeFeat.filter(f => f.status === "completed").length,    color: "#10B981", icon: "bi-check2-circle"},
+  ];
+
   return (
+    <>
+    <style>{`
+      .wd-proj-card{background:#fff;border-radius:16px;border:2px solid #F1F5F9;padding:0;cursor:pointer;transition:all .18s;overflow:hidden;}
+      .wd-proj-card:hover{box-shadow:0 4px 18px rgba(99,102,241,.10);border-color:#C7D2FE;}
+      .wd-proj-card.active{border-color:#6366F1;box-shadow:0 4px 20px rgba(99,102,241,.15);}
+      .wd-stat-tile{background:#fff;border-radius:14px;border:1px solid #F1F5F9;padding:16px 18px;display:flex;align-items:center;gap:14px;}
+      .wd-sprint-wrap{background:#fff;border-radius:14px;border:1px solid #F1F5F9;margin-bottom:10px;overflow:hidden;transition:box-shadow .15s;}
+      .wd-sprint-wrap:hover{box-shadow:0 2px 12px rgba(0,0,0,.06);}
+      .wd-sprint-hdr{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;transition:background .12s;}
+      .wd-sprint-hdr:hover{background:#FAFBFF;}
+      .wd-feat-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-radius:10px;cursor:pointer;transition:all .14s;border:1px solid transparent;}
+      .wd-feat-row:hover{background:#F8FAFF;border-color:#E0E7FF;}
+      .wd-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(4px);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px;}
+      .wd-modal{background:#fff;border-radius:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto;box-shadow:0 32px 80px rgba(0,0,0,.22);}
+    `}</style>
+
     <div>
-      {/* Project tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        {projects.map(p => (
-          <button
-            key={p._id}
-            onClick={() => setActiveProj(p._id?.toString())}
-            style={{
-              padding: "8px 16px", borderRadius: 8, border: "1.5px solid",
-              borderColor: activeProj === p._id?.toString() ? "#0EA5E9" : "#E2E8F0",
-              background: activeProj === p._id?.toString() ? "#F0F9FF" : "#fff",
-              color: activeProj === p._id?.toString() ? "#0284C7" : "#475569",
-              fontWeight: activeProj === p._id?.toString() ? 700 : 500,
-              fontSize: 13, cursor: "pointer", transition: "all .15s",
-            }}
-          >
-            {p.name}
-          </button>
-        ))}
+      {/* ── Project selector cards ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12, marginBottom: 24 }}>
+        {projects.map(p => {
+          const isSel = activeProj === p._id?.toString();
+          const ph = WEB_PHASES[p.currentPhase] || WEB_PHASES.development;
+          const pFeat = features.filter(f => f.projectId?.toString() === p._id?.toString());
+          const done = pFeat.filter(f => f.status === "completed").length;
+          const progress = pFeat.length > 0 ? Math.round(done / pFeat.length * 100) : 0;
+          const pAwait = pFeat.filter(f => f.status === "review").length;
+          return (
+            <div key={p._id} className={`wd-proj-card${isSel ? " active" : ""}`} onClick={() => switchProject(p._id?.toString())}>
+              {/* Phase accent bar */}
+              <div style={{ height: 4, background: `linear-gradient(90deg, ${ph.color}, ${ph.color}88)` }} />
+              <div style={{ padding: "14px 16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", lineHeight: 1.35, flex: 1, paddingRight: 8 }}>{p.name}</div>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: ph.color + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={`bi ${ph.icon}`} style={{ color: ph.color, fontSize: 13 }} />
+                  </div>
+                </div>
+                {pFeat.length > 0 ? (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>{done} of {pFeat.length} tasks done</span>
+                      {pAwait > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B", display: "flex", alignItems: "center", gap: 3 }}>
+                          <i className="bi bi-eye" style={{ fontSize: 10 }} /> {pAwait} review
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ height: 5, borderRadius: 10, background: "#F1F5F9", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${progress}%`, borderRadius: 10, background: `linear-gradient(90deg, ${ph.color}, ${ph.color}bb)`, transition: "width .4s" }} />
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: ph.color, marginTop: 5 }}>{progress}% complete</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#CBD5E1", marginTop: 4 }}>No tasks assigned yet</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {activeProject && (
         <>
-          {/* Project header */}
-          <div className="cp-card" style={{ marginBottom: 20, padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{activeProject.name}</div>
-                {activeProject.description && (
-                  <div style={{ fontSize: 13, color: "#64748b" }}>{activeProject.description}</div>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                {activeProject.currentPhase && (
-                  <span style={{
-                    padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700,
-                    background: `${PHASE_META[activeProject.currentPhase]?.color}18`,
-                    color: PHASE_META[activeProject.currentPhase]?.color,
-                  }}>
-                    {PHASE_META[activeProject.currentPhase]?.label || activeProject.currentPhase}
-                  </span>
-                )}
-                {awaitingCount > 0 && (
-                  <span style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700, background: "#EEF2FF", color: "#4F46E5" }}>
-                    {awaitingCount} awaiting your approval
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Stats row */}
-            <div style={{ display: "flex", gap: 20, marginTop: 14, paddingTop: 14, borderTop: "1px solid #F1F5F9", flexWrap: "wrap" }}>
-              {[
-                { label: "Total Tasks",  val: activeFeat.length,                                        color: "#64748B" },
-                { label: "In Progress",  val: activeFeat.filter(f => f.status === "in_progress").length, color: "#1D4ED8" },
-                { label: "For Approval", val: awaitingCount,                                             color: "#4F46E5" },
-                { label: "Completed",    val: activeFeat.filter(f => f.status === "completed").length,   color: "#15803D" },
-              ].map(s => (
-                <div key={s.label}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>{s.label}</div>
+          {/* ── Stats row ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+            {STAT_ITEMS.map(s => (
+              <div key={s.label} className="wd-stat-tile">
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${s.color}20, ${s.color}10)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <i className={`bi ${s.icon}`} style={{ color: s.color, fontSize: 17 }} />
                 </div>
-              ))}
-            </div>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>{s.val}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.label}</div>
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Sprints + features */}
-          {activeSprs.map(sprint => {
+          {/* ── Sprint accordion ── */}
+          {activeSprs.map((sprint, idx) => {
             const sf = activeFeat.filter(f => f.sprintId?.toString() === sprint._id?.toString());
+            const isExp = expandedSprints.has(sprint._id?.toString());
+            const ph = WEB_PHASES[sprint.phase || "development"] || WEB_PHASES.development;
+            const doneCount = sf.filter(f => f.status === "completed").length;
+            const pct = sf.length > 0 ? Math.round(doneCount / sf.length * 100) : 0;
             return (
-              <div key={sprint._id} style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <i className="bi bi-layers" style={{ color: "#0EA5E9" }} />
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>{sprint.name}</span>
-                  {sprint.startDate && (
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                      {fmtDate(sprint.startDate)} – {fmtDate(sprint.endDate)}
-                    </span>
+              <div key={sprint._id} className="wd-sprint-wrap" style={{ borderLeft: `3px solid ${ph.color}` }}>
+                <div className="wd-sprint-hdr" onClick={() => toggleSprint(sprint._id?.toString())}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: ph.color + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={`bi ${ph.icon}`} style={{ color: ph.color, fontSize: 14 }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#1E293B" }}>{sprint.name}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
+                      {sprint.startDate ? fmtDate(sprint.startDate) : `Sprint ${idx + 1}`}
+                      {sprint.endDate ? ` → ${fmtDate(sprint.endDate)}` : ""}
+                    </div>
+                  </div>
+                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: ph.color + "15", color: ph.color, flexShrink: 0 }}>{ph.label}</span>
+                  {sf.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0, minWidth: 64 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: doneCount === sf.length && sf.length > 0 ? "#10B981" : "#64748b" }}>{doneCount}/{sf.length} done</span>
+                      <div style={{ width: 64, height: 4, borderRadius: 4, background: "#E5E7EB", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: doneCount === sf.length && sf.length > 0 ? "#10B981" : ph.color, borderRadius: 4 }} />
+                      </div>
+                    </div>
                   )}
-                  <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b" }}>{sf.length} tasks</span>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: isExp ? "#EEF2FF" : "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={`bi bi-chevron-${isExp ? "up" : "down"}`} style={{ color: isExp ? "#6366F1" : "#94a3b8", fontSize: 11 }} />
+                  </div>
                 </div>
-                <FeatureTable features={sf} onSelect={setSelected} />
+                {isExp && (
+                  <div style={{ borderTop: "1px solid #F8FAFC", padding: "10px 14px 14px" }}>
+                    <FeatureTable features={sf} onSelect={setSelected} />
+                  </div>
+                )}
               </div>
             );
           })}
 
-          {/* Sprint-less features */}
+          {/* Backlog */}
           {(() => {
             const bf = activeFeat.filter(f => !f.sprintId);
-            return bf.length > 0 ? (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <i className="bi bi-list-task" style={{ color: "#94a3b8" }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#64748b" }}>Backlog</span>
+            if (!bf.length) return null;
+            const isExp = expandedSprints.has("backlog");
+            return (
+              <div className="wd-sprint-wrap" style={{ borderLeft: "3px solid #94a3b8" }}>
+                <div className="wd-sprint-hdr" onClick={() => toggleSprint("backlog")}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className="bi bi-inbox" style={{ color: "#94a3b8", fontSize: 14 }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#64748b" }}>Backlog</div>
+                    <div style={{ fontSize: 11, color: "#CBD5E1" }}>Unassigned tasks</div>
+                  </div>
+                  <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>{bf.length} tasks</span>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: isExp ? "#F1F5F9" : "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <i className={`bi bi-chevron-${isExp ? "up" : "down"}`} style={{ color: "#94a3b8", fontSize: 11 }} />
+                  </div>
                 </div>
-                <FeatureTable features={bf} onSelect={setSelected} />
+                {isExp && (
+                  <div style={{ borderTop: "1px solid #F8FAFC", padding: "10px 14px 14px" }}>
+                    <FeatureTable features={bf} onSelect={setSelected} />
+                  </div>
+                )}
               </div>
-            ) : null;
+            );
           })()}
 
           {activeSprs.length === 0 && activeFeat.length === 0 && (
-            <div className="cp-card" style={{ textAlign: "center", padding: "40px 20px", color: "#94a3b8" }}>
-              <i className="bi bi-inbox" style={{ fontSize: 32, display: "block", marginBottom: 10 }} />
-              No tasks assigned to this project yet.
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+              <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <i className="bi bi-kanban" style={{ fontSize: 26, color: "#CBD5E1" }} />
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8", marginBottom: 4 }}>No tasks yet</div>
+              <div style={{ fontSize: 13, color: "#CBD5E1" }}>Your team will assign tasks to this project soon.</div>
             </div>
           )}
         </>
       )}
 
-      {/* Feature detail modal */}
+      {/* ── Feature detail modal ── */}
       {selected && (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 300,
-          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-        }} onClick={e => e.target === e.currentTarget && (setSelected(null), setReviewData({ action:"", note:"" }))}>
-          <div style={{
-            background: "#fff", borderRadius: 14, width: "100%", maxWidth: 560,
-            maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,.2)",
-          }}>
-            {/* Modal header */}
-            <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{selected.title}</div>
+        <div className="wd-modal-overlay" onClick={e => e.target === e.currentTarget && (setSelected(null), setReviewData({ action:"", note:"" }))}>
+          <div className="wd-modal">
+            {/* Modal header with gradient */}
+            <div style={{ background: "linear-gradient(135deg, #F8FAFF 0%, #EEF2FF 100%)", padding: "22px 24px 18px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "flex-start", gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: `${FEAT_STATUS[selected.status]?.color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className="bi bi-puzzle" style={{ color: FEAT_STATUS[selected.status]?.color, fontSize: 16 }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", marginBottom: 8, lineHeight: 1.3 }}>{selected.title}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{
-                    padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                    background: FEAT_STATUS[selected.status]?.bg,
-                    color: FEAT_STATUS[selected.status]?.color,
-                  }}>
+                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: FEAT_STATUS[selected.status]?.bg, color: FEAT_STATUS[selected.status]?.color }}>
                     {FEAT_STATUS[selected.status]?.label}
                   </span>
-                  <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, background: "#F1F5F9", color: "#64748b" }}>
-                    {selected.priority}
-                  </span>
+                  {selected.priority && (
+                    <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "#F1F5F9", color: "#64748b", textTransform: "capitalize" }}>
+                      {selected.priority} priority
+                    </span>
+                  )}
                 </div>
               </div>
-              <button
-                onClick={() => { setSelected(null); setReviewData({ action:"", note:"" }); }}
-                style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#94a3b8", padding: 4 }}
-              >
-                <i className="bi bi-x-lg" />
+              <button onClick={() => { setSelected(null); setReviewData({ action:"", note:"" }); }}
+                style={{ width: 32, height: 32, borderRadius: 10, border: "none", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 1px 4px rgba(0,0,0,.1)" }}>
+                <i className="bi bi-x" style={{ fontSize: 16, color: "#64748b" }} />
               </button>
             </div>
 
@@ -3235,14 +3414,6 @@ function WebDevView() {
                   <div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>Estimated</div>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{selected.estimatedHours}h</div>
-                  </div>
-                )}
-                {selected.assignedTo && (
-                  <div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>Developer</div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>
-                      {selected.assignedTo.firstName} {selected.assignedTo.lastName}
-                    </div>
                   </div>
                 )}
               </div>
@@ -3358,55 +3529,47 @@ function WebDevView() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
+const STATUS_DOTS = { todo: "#94A3B8", in_progress: "#0EA5E9", review: "#F59E0B", completed: "#10B981", blocked: "#EF4444" };
+
 function FeatureTable({ features, onSelect }) {
   if (!features.length) return (
-    <div style={{ color: "#94a3b8", fontSize: 13, padding: "12px 0" }}>No tasks in this sprint.</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 4px", color: "#CBD5E1" }}>
+      <i className="bi bi-inbox" style={{ fontSize: 14 }} />
+      <span style={{ fontSize: 13 }}>No tasks in this sprint yet.</span>
+    </div>
   );
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {features.map(f => (
-        <div
-          key={f._id}
-          onClick={() => onSelect(f)}
-          style={{
-            background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10,
-            padding: "12px 16px", cursor: "pointer", transition: "all .15s",
-            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-          }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "#0EA5E9"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "#E2E8F0"}
-        >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{f.title}</div>
-            {f.assignedTo && (
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                <i className="bi bi-person me-1" />
-                {f.assignedTo.firstName} {f.assignedTo.lastName}
-              </div>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-            {f.dueDate && (
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                <i className="bi bi-calendar3 me-1" />{fmtDate(f.dueDate)}
-              </span>
-            )}
-            <span style={{
-              padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-              background: FEAT_STATUS[f.status]?.bg,
-              color: FEAT_STATUS[f.status]?.color,
-            }}>
-              {FEAT_STATUS[f.status]?.label}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {features.map(f => {
+        const st = FEAT_STATUS[f.status] || FEAT_STATUS.todo;
+        const dot = STATUS_DOTS[f.status] || "#94A3B8";
+        return (
+          <div key={f._id} className="wd-feat-row" onClick={() => onSelect(f)}>
+            {/* Status dot */}
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+            {/* Title */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#1E293B" }}>{f.title}</span>
+              {f.dueDate && (
+                <span style={{ fontSize: 11, color: "#CBD5E1", marginLeft: 8 }}>
+                  <i className="bi bi-calendar3" style={{ marginRight: 3 }} />{fmtDate(f.dueDate)}
+                </span>
+              )}
+            </div>
+            {/* Status badge */}
+            <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: st.bg, color: st.color, flexShrink: 0 }}>
+              {st.label}
             </span>
             {f.status === "review" && (
-              <i className="bi bi-arrow-right-circle-fill" style={{ color: "#0EA5E9", fontSize: 16 }} />
+              <i className="bi bi-arrow-right-circle-fill" style={{ color: "#F59E0B", fontSize: 15, flexShrink: 0 }} />
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -4168,6 +4331,7 @@ function AdCampaignsView({ brandSlug }) {
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 20 }}>
         {[
+          { label: "Active Campaigns",  value: activeCampaigns.length.toString(), sub: activeCampaigns.length > 0 ? `of ${campaigns.length} total` : "none running", color: "#10B981", icon: "bi-broadcast" },
           { label: "Total Spend",       value: activeCampaigns.length > 0 ? fmtCurrFull(totalSpent) : currSym + "0",   sub: activeCampaigns.length > 0 ? `${activeCampaigns.length} active campaign${activeCampaigns.length > 1 ? "s" : ""}` : "no active campaigns", color: "#F97316", icon: "bi-credit-card" },
           { label: "Reach",             value: fmtNum(totalReach),        sub: activeCampaigns.length > 0 ? (totalReach ? "unique people" : "no data yet") : "no active campaigns",  color: "#8B5CF6", icon: "bi-eye" },
           { label: "Impressions",       value: fmtNum(totalImpr),         sub: activeCampaigns.length > 0 ? (totalImpr ? "total impressions" : "no data yet") : "no active campaigns", color: "#0EA5E9", icon: "bi-bar-chart" },
@@ -4333,6 +4497,7 @@ const NAV = {
     { key: "seo",        label: "SEO",             icon: "bi-graph-up-arrow" },
     { key: "web",        label: "Web Development", icon: "bi-code-slash" },
     { key: "ads",        label: "Ad Campaigns",    icon: "bi-megaphone" },
+    { key: "branding",   label: "Branding",        icon: "bi-palette" },
   ],
   socialMedia: [
     { key: "calendar",   label: "Content Calendar",icon: "bi-calendar3" },
@@ -4346,6 +4511,155 @@ const NAV = {
   ],
 };
 
+/* ─── BrandingView ──────────────────────────────────────────────────────── */
+function BrandingView({ brandSlug }) {
+  const [tasks,   setTasks]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selTask, setSelTask] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/client/branding-tasks?brandSlug=${brandSlug}`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setTasks(d.tasks || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [brandSlug]);
+
+  const STATUS_COLOR = { todo:"#64748b", in_progress:"#1D4ED8", review:"#B45309", completed:"#15803D", blocked:"#DC2626" };
+  const STATUS_BG    = { todo:"#F1F5F9", in_progress:"#DBEAFE", review:"#FEF3C7", completed:"#DCFCE7", blocked:"#FEE2E2" };
+  const STATUS_LABEL = { todo:"To Do", in_progress:"In Progress", review:"Under Review", completed:"Completed", blocked:"On Hold" };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:24 }}>
+        <div style={{ width:44, height:44, borderRadius:12, background:"linear-gradient(135deg,#8B5CF6,#6D28D9)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <i className="bi bi-palette-fill" style={{ fontSize:20, color:"#fff" }} />
+        </div>
+        <div>
+          <div style={{ fontWeight:800, fontSize:20, color:"#0f172a" }}>Branding</div>
+          <div style={{ fontSize:13, color:"#64748b" }}>Track your branding and design tasks</div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ display:"flex", justifyContent:"center", padding:48 }}><div className="cp-spinner" /></div>
+      ) : tasks.length === 0 ? (
+        <div className="cp-card" style={{ textAlign:"center", padding:"60px 24px" }}>
+          <i className="bi bi-palette" style={{ fontSize:40, color:"#C4B5FD", display:"block", marginBottom:14 }} />
+          <div style={{ fontSize:16, fontWeight:700, color:"#7C3AED", marginBottom:6 }}>No branding tasks yet</div>
+          <div style={{ fontSize:13, color:"#94a3b8" }}>Your branding and design tasks will appear here</div>
+        </div>
+      ) : (
+        <>
+          {/* Summary bar */}
+          <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+            {[
+              { label:"Total Tasks", value:tasks.length, color:"#7C3AED", bg:"#F5F3FF" },
+              { label:"In Progress", value:tasks.filter(t => t.status === "in_progress").length, color:"#1D4ED8", bg:"#DBEAFE" },
+              { label:"Under Review", value:tasks.filter(t => t.status === "review").length, color:"#B45309", bg:"#FEF3C7" },
+              { label:"Completed", value:tasks.filter(t => t.status === "completed").length, color:"#15803D", bg:"#DCFCE7" },
+            ].map(s => (
+              <div key={s.label} style={{ flex:1, minWidth:100, background:s.bg, borderRadius:12, padding:"14px 18px", textAlign:"center" }}>
+                <div style={{ fontSize:24, fontWeight:900, color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:s.color, opacity:.75 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Task list */}
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {tasks.map(t => {
+              const stColor = STATUS_COLOR[t.status] || "#64748b";
+              const stBg    = STATUS_BG[t.status]    || "#F1F5F9";
+              const stLabel = STATUS_LABEL[t.status] || t.status;
+              const overdue = t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
+              return (
+                <div key={t._id} onClick={() => setSelTask(t)}
+                  style={{ background:"#fff", border:"1.5px solid #E2E8F0", borderRadius:12, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, cursor:"pointer", transition:"all .12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor="#C4B5FD"; e.currentTarget.style.boxShadow="0 4px 16px rgba(124,58,237,.08)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor="#E2E8F0"; e.currentTarget.style.boxShadow="none"; }}>
+                  <div style={{ width:36, height:36, borderRadius:10, background:"#F5F3FF", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <i className="bi bi-palette-fill" style={{ color:"#7C3AED", fontSize:15 }} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                      {t.taskId && <span style={{ fontSize:10, color:"#94a3b8", fontFamily:"monospace" }}>{t.taskId}</span>}
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#0f172a", marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.title}</div>
+                    {t.dueDate && (
+                      <div style={{ fontSize:12, color: overdue ? "#DC2626" : "#64748b", display:"flex", alignItems:"center", gap:4 }}>
+                        <i className={`bi bi-calendar${overdue ? "-x" : "-check"}`} />
+                        {overdue ? "Overdue — " : "Due: "}{new Date(t.dueDate).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                    <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:700, background:stBg, color:stColor, whiteSpace:"nowrap" }}>{stLabel}</span>
+                    <i className="bi bi-chevron-right" style={{ fontSize:12, color:"#94A3B8" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Task detail modal */}
+      {selTask && (() => {
+        const stColor = STATUS_COLOR[selTask.status] || "#64748b";
+        const stBg    = STATUS_BG[selTask.status]    || "#F1F5F9";
+        const stLabel = STATUS_LABEL[selTask.status] || selTask.status;
+        const overdue = selTask.dueDate && new Date(selTask.dueDate) < new Date() && selTask.status !== "completed";
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+            onClick={() => setSelTask(null)}>
+            <div style={{ background:"#fff", borderRadius:18, width:"100%", maxWidth:520, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ padding:"18px 22px", borderBottom:"1.5px solid #F1F5F9", display:"flex", justifyContent:"space-between", alignItems:"flex-start", background:"linear-gradient(135deg,#F5F3FF,#fff)", borderRadius:"18px 18px 0 0" }}>
+                <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                  <div style={{ width:40, height:40, borderRadius:10, background:"linear-gradient(135deg,#8B5CF6,#6D28D9)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <i className="bi bi-palette-fill" style={{ fontSize:18, color:"#fff" }} />
+                  </div>
+                  <div>
+                    {selTask.taskId && <div style={{ fontSize:10, color:"#94a3b8", fontFamily:"monospace", marginBottom:3 }}>{selTask.taskId}</div>}
+                    <div style={{ fontWeight:800, fontSize:16, color:"#0f172a", lineHeight:1.3 }}>{selTask.title}</div>
+                  </div>
+                </div>
+                <button onClick={() => setSelTask(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#94A3B8", padding:"0 0 0 12px", lineHeight:1, flexShrink:0 }}>×</button>
+              </div>
+              <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:14 }}>
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
+                  <span style={{ padding:"6px 16px", borderRadius:20, fontSize:13, fontWeight:700, background:stBg, color:stColor }}>{stLabel}</span>
+                  {selTask.dueDate && (
+                    <span style={{ fontSize:13, color: overdue ? "#DC2626" : "#64748b", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+                      <i className={`bi bi-calendar${overdue ? "-x" : "-check"}`} />
+                      {overdue ? "Overdue — " : "Due: "}{new Date(selTask.dueDate).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                    </span>
+                  )}
+                </div>
+                {selTask.description && (
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".06em", marginBottom:6 }}>Description</div>
+                    <div style={{ fontSize:13, color:"#374151", lineHeight:1.7, background:"#F8FAFC", borderRadius:10, padding:"12px 14px", whiteSpace:"pre-wrap" }}>
+                      {selTask.description}
+                    </div>
+                  </div>
+                )}
+                <div style={{ paddingTop:6, borderTop:"1px solid #F1F5F9" }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#94A3B8", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>Created</div>
+                  <div style={{ fontSize:12, color:"#374151", fontWeight:600 }}>{new Date(selTask.createdAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 /* ─── Main dashboard ─────────────────────────────────────────────────────── */
 export default function ClientDashboard() {
   const router     = useRouter();
@@ -4356,8 +4670,20 @@ export default function ClientDashboard() {
   const [brand, setBrand]     = useState(null);
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView]       = useState("overview");
+  const VALID_VIEWS = ["overview","social","seo","web","ads","calendar","approvals","messages","myrequests","request","offers"];
+  const [view, setView] = useState(() => {
+    if (typeof window === "undefined") return "overview";
+    const hash = window.location.hash.replace("#", "").trim();
+    return VALID_VIEWS.includes(hash) ? hash : "overview";
+  });
   const { offers: activeOffers } = useOffers(brandSlug);
+
+  // Sync URL hash when tab changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.location.hash = view === "overview" ? "" : view;
+    }
+  }, [view]);
 
   // Search + notification state
   const [searchQ, setSearchQ]       = useState("");
@@ -4689,9 +5015,9 @@ export default function ClientDashboard() {
                 {view === "approvals"  && <ApprovalsView overview={overview} onRefresh={loadOverview} />}
                 {view === "calendar"   && <CalendarView overview={overview} brand={brand} />}
                 {view === "seo"        && <SeoView brandSlug={brandSlug} />}
-                {view === "web"        && <WebDevView />}
+                {view === "web"        && <WebDevView brandSlug={brandSlug} />}
                 {view === "ads"        && <AdCampaignsView brandSlug={brandSlug} />}
-                {view === "branding"   && <ComingSoon icon="bi-palette"        title="Branding"       desc="Brand project tracker coming soon." />}
+                {view === "branding"   && <BrandingView brandSlug={brandSlug} />}
                 {view === "report"     && <ComingSoon icon="bi-bar-chart-line" title="Combined Report" desc="Your full cross-service report coming soon." />}
                 {view === "messages"   && <MessagesView brandSlug={brandSlug} client={client} />}
                 {view === "offers"     && <OffersView brandSlug={brandSlug} />}

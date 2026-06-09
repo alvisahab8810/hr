@@ -17,7 +17,7 @@ import { sendTaskAssignedEmail, sendStageApprovedEmail, sendStageRejectedEmail }
 import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
 import { emitTaskEvent }            from "@/utils/tasks/emitTaskEvent";
 import { logAdminActivity }     from "@/utils/tasks/logAdminActivity";
-import { adminGuard }           from "@/utils/admin/adminAuthGuard";
+import { adminGuard, getAdminUserPayload } from "@/utils/admin/adminAuthGuard";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -62,6 +62,19 @@ export default async function handler(req, res) {
         performedByName  = "Admin",
         ...updates
       } = req.body;
+
+      // Managers (sub-admins) cannot change stage deadlines — only full admin can
+      const subAdmin = getAdminUserPayload(req);
+      if (subAdmin && Array.isArray(updates.stages)) {
+        const existingStages = existing.stages || [];
+        updates.stages = updates.stages.map((s, i) => {
+          const orig = existingStages[i] || {};
+          return { ...s, deadline: orig.deadline ?? s.deadline };
+        });
+      }
+      if (subAdmin && updates.dueDate !== undefined) {
+        delete updates.dueDate;
+      }
 
       // Track meaningful changes for activity log
       const changes = [];

@@ -74,7 +74,9 @@ export default async function handler(req, res) {
     }
 
     const monthly = brand.monthlyDeliverables || {};
-    const posted  = allTasks.filter(t => t.status === "completed").length;
+    // Shipped = status completed OR S4 (posting stage) done OR postedAt set
+    const isShipped = t => t.status === "completed" || !!t.stages?.[3]?.done || !!t.postedAt;
+    const posted  = allTasks.filter(isShipped).length;
 
     // Strip token from brand before sending to client
     const { instagram: igRaw, ...brandSafe } = brand;

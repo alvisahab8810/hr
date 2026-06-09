@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
 import Link from "next/link";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -51,13 +53,22 @@ function getInitials(name) {
 const AV_COLORS = [["#EEF2FF","#4F46E5"],["#D1FAE5","#065F46"],["#FEE2E2","#DC2626"],["#FEF3C7","#B45309"],["#F3E8FF","#7C3AED"]];
 function avCol(n) { return AV_COLORS[(n?.charCodeAt(0)||0) % AV_COLORS.length]; }
 
+const EMPTY_CF = { title: "", description: "", priority: "medium", assignedTo: "", dueDate: "" };
+
 export default function SEOHubPage() {
-  const [tab,      setTab]      = useState("overview");
-  const [tasks,    setTasks]    = useState([]);
-  const [brands,   setBrands]   = useState([]);
-  const [brandId,  setBrandId]  = useState("");
-  const [loading,  setLoading]  = useState(true);
-  const [statusF,  setStatusF]  = useState("");
+  const [tab,       setTab]       = useState("overview");
+  const [tasks,     setTasks]     = useState([]);
+  const [brands,    setBrands]    = useState([]);
+  const [brandId,   setBrandId]   = useState("");
+  const [loading,   setLoading]   = useState(true);
+  const [statusF,   setStatusF]   = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [employees,  setEmployees]  = useState([]);
+  const [adminUser,  setAdminUser]  = useState(null);
+  const [cf,         setCf]         = useState(EMPTY_CF);
+  const [cfBrandId,  setCfBrandId]  = useState("");
+  const [cfCategory, setCfCategory] = useState("blog");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +84,47 @@ export default function SEOHubPage() {
   }, [brandId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/admin/assets/employees", { credentials: "include" })
+      .then(r => r.json()).then(d => { if (d.success) setEmployees(d.employees || []); }).catch(() => {});
+    fetch("/api/admin-users/me", { credentials: "include" })
+      .then(r => r.json()).then(d => { if (d.success) setAdminUser(d.user); }).catch(() => {});
+  }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!cf.title.trim()) { toast.error("Title is required"); return; }
+    if (!cf.dueDate && !adminUser) { toast.error("Deadline is required"); return; }
+    const activeBrandId = cfBrandId || brandId || (brands[0]?._id || "");
+    if (!activeBrandId)    { toast.error("Please select a brand"); return; }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/tasks", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title:       cf.title.trim(),
+          description: cf.description,
+          priority:    cf.priority,
+          assignedTo:  cf.assignedTo || null,
+          taskType:    "manual",
+          brandId:     activeBrandId,
+          seoCategory: cfCategory,
+          tags:        ["seo", cfCategory],
+          dueDate:     cf.dueDate || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("SEO task created!");
+        setShowCreate(false);
+        setCf(EMPTY_CF);
+        load();
+      } else toast.error(data.message || "Failed to create task");
+    } catch { toast.error("Network error"); }
+    finally { setSubmitting(false); }
+  };
 
   // Filter to current tab's seoCategory (or all for overview)
   const visibleTasks = tasks.filter(t => {
@@ -96,6 +148,7 @@ export default function SEOHubPage() {
   ];
 
   return (
+    <>
     <div className="leaves-management-admin">
       <Head>
         <title>SEO Hub — Viralon</title>
@@ -147,11 +200,10 @@ export default function SEOHubPage() {
                     <option value="">All Brands</option>
                     {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
-                  <Link href="/dashboard/admin/tasks?create=1">
-                    <button style={{ background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                      <i className="bi bi-plus-circle-fill" /> New SEO Task
-                    </button>
-                  </Link>
+                  <button onClick={() => { setCfCategory(tab === "overview" ? "blog" : tab); setCfBrandId(brandId); setShowCreate(true); }}
+                    style={{ background: "#4F46E5", color: "#fff", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <i className="bi bi-plus-circle-fill" /> New SEO Task
+                  </button>
                 </div>
               </div>
 
@@ -284,11 +336,10 @@ export default function SEOHubPage() {
                           <option value="">All status</option>
                           {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
-                        <Link href="/dashboard/admin/tasks?create=1">
-                          <button style={{ background: tabMeta.color, color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-                            <i className="bi bi-plus-lg" /> New Task
-                          </button>
-                        </Link>
+                        <button onClick={() => { setCfCategory(tab === "overview" ? "blog" : tab); setCfBrandId(brandId); setShowCreate(true); }}
+                          style={{ background: tabMeta.color, color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                          <i className="bi bi-plus-lg" /> New Task
+                        </button>
                       </div>
                     </div>
 
@@ -334,8 +385,92 @@ export default function SEOHubPage() {
         </div>
       </div>
     </div>
+
+    <ToastContainer position="bottom-right" />
+
+    {/* ── Inline Create Modal ── */}
+    {showCreate && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,15,35,.55)", backdropFilter:"blur(4px)", zIndex:1050, display:"flex", alignItems:"stretch", justifyContent:"flex-end" }}
+        onClick={() => setShowCreate(false)}>
+        <style>{`@keyframes seoDrawerIn { from { transform:translateX(100%); } to { transform:translateX(0); } }`}</style>
+        <div style={{ background:"#fff", width:480, maxWidth:"100vw", height:"100vh", display:"flex", flexDirection:"column", boxShadow:"-10px 0 60px rgba(0,0,0,.2)", animation:"seoDrawerIn .22s cubic-bezier(.4,0,.2,1)" }}
+          onClick={e => e.stopPropagation()}>
+          <div style={{ padding:"18px 24px", display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:"1.5px solid #F1F5F9" }}>
+            <div style={{ fontWeight:800, fontSize:15, color:"#1E293B" }}>
+              <i className="bi bi-plus-circle-fill me-2" style={{color:"#4F46E5"}} />New SEO Task
+            </div>
+            <button onClick={() => setShowCreate(false)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#64748B", lineHeight:1 }}>×</button>
+          </div>
+          <div style={{ flex:1, overflowY:"auto", padding:"22px 24px" }}>
+            <form id="seo-create-form" onSubmit={handleCreate}>
+              <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Brand *</label>
+                  <select className="sh-select" style={{ width:"100%" }} value={cfBrandId || brandId} onChange={e => setCfBrandId(e.target.value)}>
+                    <option value="">Select brand…</option>
+                    {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Category</label>
+                  <select className="sh-select" style={{ width:"100%" }} value={cfCategory} onChange={e => setCfCategory(e.target.value)}>
+                    <option value="blog">Blog</option>
+                    <option value="technical">Technical SEO</option>
+                    <option value="onpage">On-Page</option>
+                    <option value="offpage">Off-Page</option>
+                    <option value="backlinks">Backlinks</option>
+                    <option value="keywords">Keywords</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Title *</label>
+                  <input className="sh-select" style={{ width:"100%", outline:"none" }} placeholder="Task title" value={cf.title} onChange={e => setCf(f => ({...f, title: e.target.value}))} />
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Priority</label>
+                    <select className="sh-select" style={{ width:"100%" }} value={cf.priority} onChange={e => setCf(f => ({...f, priority: e.target.value}))}>
+                      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Assigned To</label>
+                    <select className="sh-select" style={{ width:"100%" }} value={cf.assignedTo} onChange={e => setCf(f => ({...f, assignedTo: e.target.value}))}>
+                      <option value="">Unassigned</option>
+                      {employees.map(emp => {
+                        const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
+                        return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Due Date *</label>
+                  <input type="date" className="sh-select" style={{ width:"100%", opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                    disabled={!!adminUser}
+                    value={cf.dueDate} onChange={e => setCf(f => ({...f, dueDate: e.target.value}))} />
+                  {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:"#64748B", textTransform:"uppercase", letterSpacing:".06em", display:"block", marginBottom:5 }}>Description</label>
+                  <textarea className="sh-select" style={{ width:"100%", height:80, resize:"vertical", fontFamily:"inherit" }} placeholder="Task notes or context…"
+                    value={cf.description} onChange={e => setCf(f => ({...f, description: e.target.value}))} />
+                </div>
+              </div>
+            </form>
+          </div>
+          <div style={{ padding:"14px 24px", display:"flex", gap:8, justifyContent:"flex-end", borderTop:"1.5px solid #F1F5F9", background:"#fff" }}>
+            <button type="button" onClick={() => setShowCreate(false)} style={{ background:"#F1F5F9", color:"#475569", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer" }}>Cancel</button>
+            <button form="seo-create-form" type="submit" disabled={submitting} style={{ background:"#4F46E5", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+              {submitting ? <><div className="spinner-border spinner-border-sm" style={{width:14,height:14}} /> Creating…</> : <><i className="bi bi-plus-circle-fill" /> Create Task</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
-}
+}  // end SEOHubPage
 
 function TaskList({ tasks, loading }) {
   if (loading) return (

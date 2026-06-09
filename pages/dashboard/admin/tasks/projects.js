@@ -94,6 +94,7 @@ export default function WebProjectsPage() {
   const [editTeamPhase,   setEditTeamPhase]   = useState(null);
   const [submitting,      setSubmitting]      = useState(false);
   const [webBrands,       setWebBrands]       = useState([]);
+  const [brandFilter,     setBrandFilter]     = useState("");
 
   const [projectForm, setProjectForm] = useState({ name: "", description: "", status: "active", currentPhase: "development", startDate: "", endDate: "", clientId: "", brandId: "" });
   const [sprintForm,  setSprintForm]  = useState({ name: "", durationDays: 14, startDate: "", phase: "development" });
@@ -266,6 +267,7 @@ export default function WebProjectsPage() {
         toast.success("Feature added!");
         const sId = featureForm.sprintId;
         setFeatures(f => ({ ...f, [sId]: [...(f[sId] || []), d.feature] }));
+        setExpandedSp(sId);
         setShowAddFeature(false);
         setFeatureForm({ title: "", sprintId: "", assignedTo: "" });
       } else toast.error(d.message || "Failed");
@@ -700,9 +702,39 @@ export default function WebProjectsPage() {
                 </div>
               ) : (
                 <>
-                  {/* Project cards row */}
+                  {/* Brand filter + Project cards row */}
+                  {(() => {
+                    const brandOpts = [];
+                    const seen = new Set();
+                    for (const p of projects) {
+                      const bId = typeof p.brandId === "object" ? p.brandId?._id?.toString() : p.brandId?.toString() || "";
+                      const bName = p.brandId?.name || p.clientId?.name || p.clientId?.company || "Unknown";
+                      if (bId && !seen.has(bId)) { seen.add(bId); brandOpts.push({ id: bId, label: bName }); }
+                    }
+                    const activeBrand = brandFilter || brandOpts[0]?.id || "";
+                    if (!brandFilter && brandOpts[0]?.id) setBrandFilter(brandOpts[0].id);
+                    return brandOpts.length > 1 ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#64748B" }}>Brand:</span>
+                        <select
+                          value={activeBrand}
+                          onChange={e => setBrandFilter(e.target.value)}
+                          className="wp-input"
+                          style={{ width: "auto", minWidth: 160 }}
+                        >
+                          {brandOpts.map(b => {
+                            const cnt = projects.filter(p => (typeof p.brandId === "object" ? p.brandId?._id?.toString() : p.brandId?.toString()) === b.id).length;
+                            return <option key={b.id} value={b.id}>{b.label} ({cnt})</option>;
+                          })}
+                        </select>
+                      </div>
+                    ) : null;
+                  })()}
                   <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 14, marginBottom: 20 }}>
-                    {projects.map(p => {
+                    {projects.filter(p => {
+                      const bId = typeof p.brandId === "object" ? p.brandId?._id?.toString() : p.brandId?.toString() || "";
+                      return !brandFilter || bId === brandFilter;
+                    }).map(p => {
                       const sm  = PROJ_STATUS[p.status] || {};
                       const ph  = PHASE_MAP[p.currentPhase || "development"] || {};
                       const isSel = p._id === selectedId;

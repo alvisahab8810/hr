@@ -1315,12 +1315,17 @@ export default function TaskDetail() {
               {/* Deadline */}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 5 }}>
-                  Deadline {stageForm.assignedTo.length > 0 && <span style={{ color: "#EF4444" }}>*</span>}
+                  Deadline {stageForm.assignedTo.length > 0 && !adminUser && <span style={{ color: "#EF4444" }}>*</span>}
                 </label>
                 <input type="datetime-local" className="td-input" value={stageForm.deadline}
-                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline ? "#FCA5A5" : "" }}
+                  disabled={!!adminUser}
+                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !adminUser ? "#FCA5A5" : "", opacity: adminUser ? 0.55 : 1, cursor: adminUser ? "not-allowed" : "auto", background: adminUser ? "#F8FAFC" : "" }}
                   onChange={(e) => setStageForm((f) => ({ ...f, deadline: e.target.value }))} />
-                {stageForm.assignedTo.length > 0 && !stageForm.deadline && (
+                {adminUser ? (
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                    <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change deadlines
+                  </div>
+                ) : stageForm.assignedTo.length > 0 && !stageForm.deadline && (
                   <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
                 )}
               </div>

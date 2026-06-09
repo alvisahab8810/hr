@@ -47,7 +47,10 @@
       "Bash(node -e \"const fs = require\\('fs'\\); const code = fs.readFileSync\\('pages/client/[brand]/index.js', 'utf8'\\); console.log\\('File size:', code.length, 'chars'\\); console.log\\('Lines:', code.split\\('\\\\n'\\).length\\);\")",
       "Bash(git log *)",
       "Bash(Get-ChildItem -Path \"d:\\\\viralon-payroll\\\\pages\" -Recurse -Filter \"*task*\" -File)",
-      "Bash(xargs ls -la)"
+      "Bash(xargs ls -la)",
+      "Bash(node fix-vn1017-lunch.mjs)",
+      "Bash(del fix-vn1017-lunch.mjs)",
+      "Bash(node --input-type=module --eval \"import\\('./pages/dashboard/admin/tasks/projects.js'\\).catch\\(e => console.error\\(e.message\\)\\)\")"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

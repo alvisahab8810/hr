@@ -36,9 +36,12 @@ export default async function handler(req, res) {
       const { title, sprintId, projectId, assignedTo, priority } = req.body;
       if (!title?.trim()) return res.status(400).json({ success: false, message: "Feature title is required" });
 
+      const taskId = `F-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
       const feature = await Task.create({
         title:      title.trim(),
         taskType:   "project",
+        taskId,
         status:     "todo",
         priority:   priority   || "medium",
         sprintId:   sprintId   || null,

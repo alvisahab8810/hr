@@ -381,20 +381,20 @@ export default function TasksListPage() {
         } else if (["offpage","technical"].includes(seoForm.seoCategory)) {
           if (!seoTitle) seoTitle = seoDesc.slice(0, 80) || (seoForm.seoCategory === "offpage" ? "Off-Page SEO Task" : "Technical SEO Task");
         }
-        if (!seoTitle)       { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!seoForm.dueDate){ toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!seoTitle)                       { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!seoForm.dueDate && !adminUser) { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { title: seoTitle, description: seoDesc, pillar: pillarVal, priority: seoForm.priority,
           assignedTo: seoForm.assignedTo || null, taskType: "manual", brandId: topBrandId || null,
           seoCategory: seoForm.seoCategory, tags: ["seo", seoForm.seoCategory], dueDate: seoForm.dueDate || null,
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else if (["ads","branding"].includes(createMode)) {
-        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { ...genForm, taskType: "manual", brandId: topBrandId || genForm.brandId || null, tags: [createMode],
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else {
-        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { ...genForm, taskType: genForm.taskType || "manual", brandId: topBrandId || genForm.brandId || null,
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       }
@@ -556,9 +556,9 @@ export default function TasksListPage() {
           .tl-btn-primary:hover { background:#4338CA; }
           .tl-btn-ghost { background:#F1F5F9; color:#475569; }
           .tl-btn-ghost:hover { background:#E2E8F0; }
-          .tl-input { padding:7px 11px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:13px; outline:none; background:#fff; }
+          .tl-input { padding:7px 11px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:13px; outline:none; background:#fff; width:auto; flex-shrink:0; }
           .tl-input:focus { border-color:#6366F1; }
-          .tl-select { padding:7px 10px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:12px; outline:none; background:#fff; cursor:pointer; }
+          .tl-select { padding:7px 10px; border-radius:10px; border:1.5px solid #E5E7EB; font-size:12px; outline:none; background:#fff; cursor:pointer; width:auto; flex-shrink:0; }
           .tl-table { width:100%; border-collapse:collapse; }
           .tl-table th { padding:10px 12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#94A3B8; border-bottom:2px solid #F1F5F9; background:#FAFAFA; text-align:left; white-space:nowrap; }
           .tl-table td { padding:11px 12px; border-bottom:1px solid #F8FAFC; font-size:13px; vertical-align:middle; }
@@ -1280,8 +1280,12 @@ export default function TasksListPage() {
                         </div>
                         <div>
                           <label style={LBL}>Due Date</label>
-                          <input type="date" className="tmd-input" value={seoForm.dueDate} onChange={e => setSeoForm(f => ({ ...f, dueDate: e.target.value }))} />
-                          {seoForm.dueDate && <div style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, marginTop: 5 }}><i className="bi bi-calendar-check me-1" />{seoDayName(seoForm.dueDate)}</div>}
+                          <input type="date" className="tmd-input" value={seoForm.dueDate}
+                            disabled={!!adminUser}
+                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                            onChange={e => setSeoForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
+                          {!adminUser && seoForm.dueDate && <div style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700, marginTop: 5 }}><i className="bi bi-calendar-check me-1" />{seoDayName(seoForm.dueDate)}</div>}
                           {isBlog && (selectedBrand?.seoSettings?.blogSchedule || []).length > 0 && (
                             <div style={{ marginTop: 8 }}>
                               <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 5 }}>Brand schedule — pick a day</div>
@@ -1318,7 +1322,14 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div><label style={LBL}>Due Date</label><input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
+                        <div>
+                          <label style={LBL}>Due Date</label>
+                          <input type="date" className="tmd-input" value={genForm.dueDate}
+                            disabled={!!adminUser}
+                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                            onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
+                        </div>
                         <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 70, resize: "vertical" }} placeholder="Task details…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -1334,11 +1345,14 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div><label style={LBL}>Project</label><select className="tmd-select" value={genForm.projectId} onChange={e => setGenForm(f => ({ ...f, projectId: e.target.value, sprintId: "" }))}><option value="">No project</option>{projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
-                        <div><label style={LBL}>Sprint</label><select className="tmd-select" value={genForm.sprintId} disabled={!genForm.projectId} onChange={e => setGenForm(f => ({ ...f, sprintId: e.target.value }))}><option value="">No sprint</option>{sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</select></div>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div><label style={LBL}>Due Date</label><input type="date" className="tmd-input" value={genForm.dueDate} onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} /></div>
+                        <div>
+                          <label style={LBL}>Due Date</label>
+                          <input type="date" className="tmd-input" value={genForm.dueDate}
+                            disabled={!!adminUser}
+                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                            onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
+                        </div>
                         <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 80, resize: "vertical" }} placeholder="Task description…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -1403,12 +1417,17 @@ export default function TasksListPage() {
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label className="tl-field-label">
-                  Deadline {stageForm.assignedTo.length > 0 && <span style={{ color: "#EF4444" }}>*</span>}
+                  Deadline {stageForm.assignedTo.length > 0 && !adminUser && <span style={{ color: "#EF4444" }}>*</span>}
                 </label>
                 <input type="datetime-local" className="tl-field-input" value={stageForm.deadline}
-                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline ? "#FCA5A5" : "" }}
+                  disabled={!!adminUser}
+                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !adminUser ? "#FCA5A5" : "", opacity: adminUser ? 0.55 : 1, cursor: adminUser ? "not-allowed" : "auto", background: adminUser ? "#F8FAFC" : "" }}
                   onChange={e => setStageForm(f => ({ ...f, deadline: e.target.value }))} />
-                {stageForm.assignedTo.length > 0 && !stageForm.deadline && (
+                {adminUser ? (
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                    <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change deadlines
+                  </div>
+                ) : stageForm.assignedTo.length > 0 && !stageForm.deadline && (
                   <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
                 )}
               </div>

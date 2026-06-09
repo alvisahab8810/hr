@@ -103,19 +103,31 @@ export default async function handler(req, res) {
         console.error(`[instagram/sync] reach+saved failed ${media.id}(${mediaType}):`, e.message);
       }
 
-      // Stage 2 — plays + shares for video/reel. Fails silently (reach already saved).
-      const extras = extraMetrics(mediaType);
-      if (extras) {
+      // Stage 2 — plays + shares for video/reel.
+      // "plays" is lifetime-only on IG API — must pass period=lifetime or the call is rejected.
+      // Fallback: try video_views if plays returns 0 (older media uses different metric name).
+      if (extraMetrics(mediaType)) {
         try {
           const r = await igGet(
             `https://graph.facebook.com/v19.0/${media.id}/insights` +
-            `?metric=${extras}&access_token=${token}`
+            `?metric=plays,shares&period=lifetime&access_token=${token}`
           );
           const d = r.data || [];
           post.videoViews = extractValue(d, "plays");
           post.shares     = extractValue(d, "shares");
         } catch (e) {
-          extraErrors.push(`${mediaType}:${media.id.slice(-6)} ${e.message.slice(0, 60)}`);
+          extraErrors.push(`plays:${media.id.slice(-6)} ${e.message.slice(0, 60)}`);
+          // Fallback: video_views (deprecated but still returns for some accounts)
+          try {
+            const r2 = await igGet(
+              `https://graph.facebook.com/v19.0/${media.id}/insights` +
+              `?metric=video_views&period=lifetime&access_token=${token}`
+            );
+            const d2 = r2.data || [];
+            post.videoViews = extractValue(d2, "video_views");
+          } catch (e2) {
+            extraErrors.push(`video_views:${media.id.slice(-6)} ${e2.message.slice(0, 60)}`);
+          }
         }
       }
 
