@@ -50,7 +50,10 @@
       "Bash(xargs ls -la)",
       "Bash(node fix-vn1017-lunch.mjs)",
       "Bash(del fix-vn1017-lunch.mjs)",
-      "Bash(node --input-type=module --eval \"import\\('./pages/dashboard/admin/tasks/projects.js'\\).catch\\(e => console.error\\(e.message\\)\\)\")"
+      "Bash(node --input-type=module --eval \"import\\('./pages/dashboard/admin/tasks/projects.js'\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node scripts/delete-tourwatchout-tasks.mjs)",
+      "Bash(del \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\")",
+      "PowerShell(Remove-Item \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\" -Confirm:$false)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

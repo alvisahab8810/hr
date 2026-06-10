@@ -139,6 +139,60 @@ function StageDots({ stage, size = 22 }) {
   );
 }
 
+// ─── Employee Stage Pips — shows only this employee's assigned stages ─────────
+function EmployeeStagePips({ task, empId, size = 22 }) {
+  const STAGE_KEYS = ["S1", "S2", "S3", "S4"];
+  const STAGE_FILL = { S1: "#F97316", S2: "#3B82F6", S3: "#EAB308", S4: "#22C55E" };
+  const stages = task.stages || [];
+
+  let myIndices = stages.reduce((acc, s, i) => {
+    const ids = Array.isArray(s.assignedTo) ? s.assignedTo : (s.assignedTo ? [s.assignedTo] : []);
+    const isAssigned = empId && ids.some(a => {
+      const aid = a?._id ? String(a._id) : String(a || "");
+      return aid === String(empId);
+    });
+    if (isAssigned) acc.push(i);
+    return acc;
+  }, []);
+
+  if (myIndices.length === 0 && task.stage) {
+    const fi = STAGE_KEYS.indexOf(task.stage);
+    if (fi >= 0) myIndices = [fi];
+  }
+  if (myIndices.length === 0) return <span style={{ color: "#D1D5DB", fontSize: 11 }}>—</span>;
+
+  return (
+    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+      {myIndices.map(i => {
+        const s = stages[i];
+        const key = STAGE_KEYS[i];
+        const color = STAGE_FILL[key];
+        const approved = !!s?.approved;
+        const inReview = !!s?.done && !approved && !s?.rejected;
+
+        let bg = "#fff", textColor = color, icon = String(i + 1);
+        if (approved) { bg = color; textColor = "#fff"; icon = "✓"; }
+        else if (inReview) { bg = color + "18"; icon = "⏳"; }
+
+        return (
+          <div key={i} title={`${key} · ${STAGE_LABEL[key]}`}
+            style={{
+              width: size, height: size, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: icon === "⏳" ? Math.max(7, size * 0.36) : Math.max(8, size * 0.42),
+              fontWeight: 800, flexShrink: 0,
+              background: bg, color: textColor,
+              border: `2px solid ${color}`,
+              boxShadow: approved ? `0 0 0 2px ${color}33` : "none",
+            }}>
+            {icon}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── TaskRow (used in Dashboard) ─────────────────────────────────────────────
 function TaskRow({ task }) {
   const now = new Date(); now.setHours(0, 0, 0, 0);
@@ -453,10 +507,10 @@ function DashboardTab({ employee, tasks, role, switchTab }) {
 }
 
 // ─── MY TASKS TAB ─────────────────────────────────────────────────────────────
-function MyTasksTab({ tasks, openInEditor }) {
-  const [brandF,  setBrandF]  = useState("");
-  const [typeF,   setTypeF]   = useState("");
-  const [statusF, setStatusF] = useState("");
+function MyTasksTab({ tasks, openInEditor, empId }) {
+  const [brandF,  setBrandF]  = useState(() => (typeof window !== "undefined" ? sessionStorage.getItem("mtab_brand")  : null) || "");
+  const [typeF,   setTypeF]   = useState(() => (typeof window !== "undefined" ? sessionStorage.getItem("mtab_type")   : null) || "");
+  const [statusF, setStatusF] = useState(() => (typeof window !== "undefined" ? sessionStorage.getItem("mtab_status") : null) || "");
 
   const brands = [...new Map(tasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
   const types  = [...new Set(tasks.map(t => t.contentType).filter(Boolean))];
@@ -474,15 +528,15 @@ function MyTasksTab({ tasks, openInEditor }) {
     <>
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={brandF} onChange={e => setBrandF(e.target.value)} style={selStyle}>
+        <select value={brandF} onChange={e => { setBrandF(e.target.value); sessionStorage.setItem("mtab_brand", e.target.value); }} style={selStyle}>
           <option value="">All Brands</option>
           {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
         </select>
-        <select value={typeF} onChange={e => setTypeF(e.target.value)} style={selStyle}>
+        <select value={typeF} onChange={e => { setTypeF(e.target.value); sessionStorage.setItem("mtab_type", e.target.value); }} style={selStyle}>
           <option value="">All Types</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={statusF} onChange={e => setStatusF(e.target.value)} style={selStyle}>
+        <select value={statusF} onChange={e => { setStatusF(e.target.value); sessionStorage.setItem("mtab_status", e.target.value); }} style={selStyle}>
           <option value="">All Status</option>
           {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
@@ -524,7 +578,7 @@ function MyTasksTab({ tasks, openInEditor }) {
                       {t.contentType ? <span style={{ padding: "2px 8px", borderRadius: 4, background: (CTYPE_COLOR[t.contentType] || "#6366F1") + "22", color: CTYPE_COLOR[t.contentType] || "#6366F1", fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>
                         : <span style={{ color: "#D1D5DB" }}>—</span>}
                     </td>
-                    <td style={{ padding: "13px 14px" }}><StageDots stage={t.stage} size={22} /></td>
+                    <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
                     {(() => {
                       const dl  = getStageDeadline(t);
                       const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
@@ -708,6 +762,17 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
   const inpStyle = { width: "100%", padding: "10px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", outline: "none", resize: "vertical" };
   const lblStyle = { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#6B7280", marginBottom: 6, display: "block" };
 
+  // 24-hour edit window: if S4 is done, content team can still edit/add content
+  // • If NO content was added at all → always open (so they can add missing content)
+  // • If content exists → open for 24h after S4 was marked done
+  const s4Stage       = task?.stages?.[3];
+  const s4DoneAt      = s4Stage?.doneAt ? new Date(s4Stage.doneAt) : null;
+  const s4IsDone      = !!(s4Stage?.done || s4Stage?.approved);
+  const hoursElapsed  = s4DoneAt ? (Date.now() - s4DoneAt.getTime()) / 3600000 : Infinity;
+  const hasContent    = !!(task?.description?.trim() || task?.caption?.trim());
+  const editWindowOpen = s4IsDone && (!hasContent || hoursElapsed < 24);
+  const hoursLeft      = (editWindowOpen && hasContent) ? Math.max(1, Math.ceil(24 - hoursElapsed)) : 0;
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 290px", gap: 20, alignItems: "start" }}>
       {/* Main column */}
@@ -736,7 +801,22 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
 
             {/* Status banners */}
-            {(task.status === "review" || (task.stages?.[0]?.done && !task.stages?.[0]?.approved && !task.stages?.[0]?.rejected)) && (
+            {editWindowOpen && (
+              <div style={{ marginTop:14, padding:"12px 16px", borderRadius:8, background: hasContent ? "rgba(79,70,229,.07)" : "rgba(239,68,68,.06)", border: `1.5px solid ${hasContent ? "rgba(79,70,229,.3)" : "rgba(239,68,68,.3)"}`, display:"flex", alignItems:"center", gap:10 }}>
+                <i className={`bi ${hasContent ? "bi-pencil-square" : "bi-exclamation-triangle-fill"}`} style={{ color: hasContent ? "#4F46E5" : "#DC2626", fontSize:18, flexShrink:0 }} />
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13, color: hasContent ? "#3730A3" : "#991B1B" }}>
+                    {hasContent ? `Edit Window Open — ${hoursLeft}h remaining` : "No Content Added — Please add script/caption now"}
+                  </div>
+                  <div style={{ fontSize:12, color: hasContent ? "#4F46E5" : "#DC2626", marginTop:2 }}>
+                    {hasContent
+                      ? `S4 is done. You can still update your content for ${hoursLeft} more hour${hoursLeft !== 1 ? "s" : ""}. After that it will lock.`
+                      : "S4 is posted but no content was saved. Add your script and caption below so the record is complete."}
+                  </div>
+                </div>
+              </div>
+            )}
+            {!editWindowOpen && task.stages?.[0]?.done && (task.status === "review" || (!task.stages?.[0]?.approved && !task.stages?.[0]?.rejected)) && (
               <>
                 <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "#FFFBEB", border: "1.5px solid #FCD34D", display: "flex", alignItems: "center", gap: 10 }}>
                   <i className="bi bi-hourglass-split" style={{ color: "#D97706", fontSize: 18, flexShrink: 0 }} />
@@ -844,8 +924,10 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
         {task && (<>
           {(() => {
             const s0 = task.stages?.[0];
-            const isLocked = task.status === "review" || task.status === "completed"
-              || (task.taskType === "production" && s0?.done && !s0?.rejected);
+            // Lock ONLY when S1 has actually been submitted (s0.done === true) and not rejected.
+            // If Sakshi never submitted S1, keep the editor open regardless of task status.
+            const s1Submitted = task.taskType === "production" && !!s0?.done && !s0?.rejected;
+            const isLocked = !editWindowOpen && s1Submitted;
             const lockedStyle = { opacity: isLocked ? 0.75 : 1, pointerEvents: isLocked ? "none" : undefined };
             return (<>
           {/* Content Pillar */}
@@ -929,7 +1011,8 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
             const isProd = task.taskType === "production";
             const s1Pending = isProd && s0?.done && !s0?.approved && !s0?.rejected;
             const s1Approved = isProd && s0?.approved;
-            const isUnderReview = s1Pending || task.status === "review";
+            // Only show "Under Review" when S1 is actually submitted; don't block Sakshi if she never submitted
+            const isUnderReview = s1Pending || (!!s0?.done && task.status === "review");
             const isApproved = s1Approved || task.status === "completed";
             const isRejected = task.status === "blocked" || (s0?.rejected && !s0?.done);
             const lockDraft  = saving || isUnderReview || isApproved;
@@ -3257,18 +3340,7 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
                         {t.contentType && <span style={{ padding:"2px 8px", borderRadius:5, background:(CTYPE_COLORS[t.contentType]||"#6366F1")+"18", color:CTYPE_COLORS[t.contentType]||"#6366F1", fontSize:11, fontWeight:700, textTransform:"capitalize" }}>{t.contentType}</span>}
                       </td>
                       <td style={{ padding:"11px 14px" }}>
-                        <div style={{ display:"flex", gap:4 }}>
-                          {["S1","S2","S3","S4"].map(s => {
-                            const stg = t.stages?.find(x => x.name?.includes(s.replace("S","")) || (s==="S1"&&(x.name?.toLowerCase().includes("script")||x.name?.toLowerCase().includes("concept"))));
-                            const active = t.stage === s;
-                            const done = stg?.approved || stg?.done;
-                            return (
-                              <div key={s} style={{ width:22, height:22, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, background: done ? STAGE_COLORS[s] : active ? STAGE_COLORS[s]+"33" : "#F1F5F9", color: done ? "#fff" : active ? STAGE_COLORS[s] : "#9CA3AF", border: active&&!done ? `1.5px solid ${STAGE_COLORS[s]}` : "none" }}>
-                                {s.replace("S","")}
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <EmployeeStagePips task={t} empId={empId} size={22} />
                       </td>
                       <td style={{ padding:"11px 14px", whiteSpace:"nowrap" }}>
                         {od && <span style={{ background:"#FEE2E2", color:"#DC2626", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, marginRight:5 }}>LATE</span>}
@@ -4355,7 +4427,20 @@ function DarkPortal() {
   const [loading,    setLoading]    = useState(true);
   const [view,       setView]       = useState("today");
   const [editorTask, setEditorTask] = useState(null);
+  const prevViewRef = useRef("today"); // tracks where editor was opened from
   const empRole = getTMSRole(employee);
+
+  // Restore last active tab on mount (persists through refresh)
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? sessionStorage.getItem("ep_view") : null;
+    if (saved && saved !== "editor") setView(saved);
+  }, []);
+
+  // Wrap setView so non-editor tabs are saved to sessionStorage
+  const changeView = (v) => {
+    if (v !== "editor" && typeof window !== "undefined") sessionStorage.setItem("ep_view", v);
+    setView(v);
+  };
 
   useEffect(() => {
     const headers = authH();
@@ -4384,10 +4469,14 @@ function DarkPortal() {
 
   // Listen for "View →" clicks from content-team Today/Upcoming table rows
   useEffect(() => {
-    const handler = e => { setEditorTask(e.detail); setView("editor"); };
+    const handler = e => {
+      prevViewRef.current = view;
+      setEditorTask(e.detail);
+      setView("editor");
+    };
     window.addEventListener("openInEditor", handler);
     return () => window.removeEventListener("openInEditor", handler);
-  }, []);
+  }, [view]);
 
   const NAV = [
     { key:"today",       label:"Dashboard",        icon:"bi-house" },
@@ -4439,7 +4528,7 @@ function DarkPortal() {
           </div>
           <nav className="ep-side-nav">
             {NAV.map(n => (
-              <button key={n.key} className={`ep-nav ${view===n.key?"active":""}`} onClick={() => setView(n.key)}>
+              <button key={n.key} className={`ep-nav ${view===n.key?"active":""}`} onClick={() => changeView(n.key)}>
                 <i className={`bi ${n.icon}`} />{n.label}
               </button>
             ))}
@@ -4482,7 +4571,7 @@ function DarkPortal() {
 
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "tasks"       && (isContent
-            ? <div className="ep-content"><MyTasksTab tasks={tasks} openInEditor={t => { setEditorTask(t); setView("editor"); }} /></div>
+            ? <div className="ep-content"><MyTasksTab tasks={tasks} openInEditor={t => { prevViewRef.current = "tasks"; setEditorTask(t); setView("editor"); }} empId={employee?._id} /></div>
             : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} />
           )}
           {view === "week"        && <PortalThisWeekView />}
@@ -4494,7 +4583,7 @@ function DarkPortal() {
           {view === "profile"     && <PortalProfileView       emp={employee} empRole={empRole} loading={loading} />}
           {view === "editor"      && (
             <div className="ep-content">
-              <ContentEditorTab tasks={tasks} initialTask={editorTask} onBack={() => setView("tasks")} />
+              <ContentEditorTab tasks={tasks} initialTask={editorTask} onBack={() => changeView(prevViewRef.current || "tasks")} />
             </div>
           )}
           {view === "library"     && (
@@ -4514,7 +4603,7 @@ function DarkPortal() {
       <div className="ep-mob-tabs">
         <div className="ep-mob-tabs-inner">
           {NAV.map(n => (
-            <button key={n.key} className={`ep-mob-tab ${view===n.key?"active":""}`} onClick={() => setView(n.key)}>
+            <button key={n.key} className={`ep-mob-tab ${view===n.key?"active":""}`} onClick={() => changeView(n.key)}>
               <i className={`bi ${n.icon}`} />
               {n.label}
             </button>
