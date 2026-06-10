@@ -151,7 +151,7 @@ export default function TaskDetail() {
   // Stage editor
   const [stageModal,        setStageModal]        = useState(false);
   const [stageIdx,          setStageIdx]          = useState(0);
-  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: nowForInput() });
+  const [stageForm,         setStageForm]         = useState({ name: "", assignedTo: [], deadline: "" });
   const [stageSaving,       setStageSaving]       = useState(false);
   const [stageRejectMode,   setStageRejectMode]   = useState(false);
   const [stageRejectReason, setStageRejectReason] = useState("");
@@ -208,7 +208,7 @@ export default function TaskDetail() {
     setStageForm({
       name:       stg?.name || STAGE_NAMES[i],
       assignedTo: normalizeAssignedTo(stg?.assignedTo),
-      deadline:   fmtDateTimeInput(stg?.deadline) || nowForInput(),
+      deadline:   fmtDateTimeInput(stg?.deadline) || "",
     });
     setStageRejectMode(false);
     setStageRejectReason("");
@@ -1313,22 +1313,32 @@ export default function TaskDetail() {
               </div>
 
               {/* Deadline */}
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 5 }}>
-                  Deadline {stageForm.assignedTo.length > 0 && !adminUser && <span style={{ color: "#EF4444" }}>*</span>}
-                </label>
-                <input type="datetime-local" className="td-input" value={stageForm.deadline}
-                  disabled={!!adminUser}
-                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !adminUser ? "#FCA5A5" : "", opacity: adminUser ? 0.55 : 1, cursor: adminUser ? "not-allowed" : "auto", background: adminUser ? "#F8FAFC" : "" }}
-                  onChange={(e) => setStageForm((f) => ({ ...f, deadline: e.target.value }))} />
-                {adminUser ? (
-                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
-                    <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change deadlines
-                  </div>
-                ) : stageForm.assignedTo.length > 0 && !stageForm.deadline && (
-                  <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
-                )}
-              </div>
+              {(() => {
+                const origDL = task?.stages?.[stageIdx]?.deadline;
+                const dlLocked = !!adminUser && !!origDL;
+                return (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".06em", display: "block", marginBottom: 5 }}>
+                    Deadline {stageForm.assignedTo.length > 0 && !dlLocked && <span style={{ color: "#EF4444" }}>*</span>}
+                  </label>
+                  <input type="datetime-local" className="td-input" value={stageForm.deadline}
+                    disabled={dlLocked}
+                    style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !dlLocked ? "#FCA5A5" : "", opacity: dlLocked ? 0.55 : 1, cursor: dlLocked ? "not-allowed" : "auto", background: dlLocked ? "#F8FAFC" : "" }}
+                    onChange={(e) => setStageForm((f) => ({ ...f, deadline: e.target.value }))} />
+                  {dlLocked ? (
+                    <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                      <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change an existing deadline
+                    </div>
+                  ) : adminUser && !origDL ? (
+                    <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                      <i className="bi bi-info-circle-fill" style={{ fontSize:10 }} /> Set once — only admin can change it after saving
+                    </div>
+                  ) : stageForm.assignedTo.length > 0 && !stageForm.deadline ? (
+                    <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
+                  ) : null}
+                </div>
+                );
+              })()}
 
               {/* Status row (read-only for admin) */}
               {(() => {

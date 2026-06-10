@@ -72,7 +72,8 @@ export default async function handler(req, res) {
           return { ...s, deadline: orig.deadline ?? s.deadline };
         });
       }
-      if (subAdmin && updates.dueDate !== undefined) {
+      // Managers can set dueDate only if none exists yet; block changes to an existing one
+      if (subAdmin && updates.dueDate !== undefined && existing.dueDate) {
         delete updates.dueDate;
       }
 

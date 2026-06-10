@@ -1415,22 +1415,32 @@ export default function TasksListPage() {
                   })}
                 </div>
               </div>
-              <div style={{ marginBottom: 14 }}>
-                <label className="tl-field-label">
-                  Deadline {stageForm.assignedTo.length > 0 && !adminUser && <span style={{ color: "#EF4444" }}>*</span>}
-                </label>
-                <input type="datetime-local" className="tl-field-input" value={stageForm.deadline}
-                  disabled={!!adminUser}
-                  style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !adminUser ? "#FCA5A5" : "", opacity: adminUser ? 0.55 : 1, cursor: adminUser ? "not-allowed" : "auto", background: adminUser ? "#F8FAFC" : "" }}
-                  onChange={e => setStageForm(f => ({ ...f, deadline: e.target.value }))} />
-                {adminUser ? (
-                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
-                    <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change deadlines
-                  </div>
-                ) : stageForm.assignedTo.length > 0 && !stageForm.deadline && (
-                  <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
-                )}
-              </div>
+              {(() => {
+                const origDL = stageTask?.stages?.[stageIdx]?.deadline;
+                const dlLocked = !!adminUser && !!origDL; // locked only when deadline already set
+                return (
+                <div style={{ marginBottom: 14 }}>
+                  <label className="tl-field-label">
+                    Deadline {stageForm.assignedTo.length > 0 && !dlLocked && <span style={{ color: "#EF4444" }}>*</span>}
+                  </label>
+                  <input type="datetime-local" className="tl-field-input" value={stageForm.deadline}
+                    disabled={dlLocked}
+                    style={{ borderColor: stageForm.assignedTo.length > 0 && !stageForm.deadline && !dlLocked ? "#FCA5A5" : "", opacity: dlLocked ? 0.55 : 1, cursor: dlLocked ? "not-allowed" : "auto", background: dlLocked ? "#F8FAFC" : "" }}
+                    onChange={e => setStageForm(f => ({ ...f, deadline: e.target.value }))} />
+                  {dlLocked ? (
+                    <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                      <i className="bi bi-lock-fill" style={{ fontSize:10 }} /> Only admin can change an existing deadline
+                    </div>
+                  ) : adminUser && !origDL ? (
+                    <div style={{ fontSize: 11, color: "#7C3AED", marginTop: 4, display:"flex", alignItems:"center", gap:4 }}>
+                      <i className="bi bi-info-circle-fill" style={{ fontSize:10 }} /> Set once — only admin can change it after saving
+                    </div>
+                  ) : stageForm.assignedTo.length > 0 && !stageForm.deadline ? (
+                    <div style={{ fontSize: 11, color: "#EF4444", marginTop: 4 }}>Required — stage has assignees</div>
+                  ) : null}
+                </div>
+                );
+              })()}
               {(() => {
                 const stg = stageTask?.stages?.[stageIdx] || {};
                 if (stg.done && !stg.approved && !stg.rejected) return (
