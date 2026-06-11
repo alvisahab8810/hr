@@ -58,7 +58,7 @@ function renderText(text, mentions, isOutgoing = false) {
     if (/^https?:\/\//.test(part)) {
       return (
         <a key={i} href={part} target="_blank" rel="noreferrer"
-          style={{ color: linkColor, textDecoration: "underline", wordBreak: "break-all", cursor: "pointer" }}>
+          style={{ color: linkColor, textDecoration: "underline", wordBreak: "break-all", cursor: "pointer", pointerEvents: "auto" }}>
           {part}
         </a>
       );
@@ -250,9 +250,10 @@ export default function EmployeeCommunity() {
   }, []);
 
   useEffect(() => {
+    const markSeen = () => fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
     loadMessages();
-    fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
-    pollRef.current = setInterval(() => loadMessages(), 10000);
+    markSeen();
+    pollRef.current = setInterval(() => { loadMessages(); markSeen(); }, 10000);
     return () => clearInterval(pollRef.current);
   }, [loadMessages]);
 
@@ -533,11 +534,7 @@ export default function EmployeeCommunity() {
   }
 
   function getSeenNames(seenList) {
-    return seenList.map(s => {
-      if (s.userType === "admin") return "Admin";
-      const emp = members.find(mb => String(mb._id) === String(s.userId));
-      return emp?.name || "Someone";
-    });
+    return seenList.map(s => s.name || (s.userType === "admin" ? "Admin" : "Someone"));
   }
 
   return (

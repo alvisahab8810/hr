@@ -21,14 +21,15 @@ export default async function handler(req, res) {
 
   await dbConnect();
   const employees = await Employee.find({ status: { $ne: "inactive" } })
-    .select("firstName lastName professional.department professional.designation _id")
+    .select("firstName lastName professional.department professional.designation personal.avatar _id")
     .lean();
 
   const members = employees.map(e => ({
-    _id:   e._id,
-    name:  `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-    dept:  e.professional?.department || "",
-    type:  "employee",
+    _id:    e._id,
+    name:   `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+    dept:   e.professional?.department || "",
+    type:   "employee",
+    avatar: e.personal?.avatar || null,
   })).filter(m => m.name);
 
   return res.json({ success: true, members });

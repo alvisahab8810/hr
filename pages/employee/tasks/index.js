@@ -257,7 +257,7 @@ function DashboardTab({ employee, tasks, role, switchTab }) {
       const diff = Math.round((dc - now) / 86400000);
       return diff > 0 && diff <= 7;
     });
-    const grade     = calcGrade(tasks);
+    const grade     = calcGrade(filterTasksByMonth(tasks, now.getMonth(), now.getFullYear()));
     const todayList = [...new Map([...overdue, ...dueToday].map(t => [t._id, t])).values()];
 
     const CTASK_STATUS = { todo:"To Do", in_progress:"In Progress", review:"Under Review", completed:"Approved", blocked:"Rejected" };
@@ -274,17 +274,18 @@ function DashboardTab({ employee, tasks, role, switchTab }) {
             You're at <span style={{ background:"linear-gradient(90deg,#FF6F61,#FBA065)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>{grade.letter}</span> this month
           </div>
           <div style={{ fontSize:13, color:"rgba(255,255,255,.7)", marginBottom:22, lineHeight:1.55 }}>
-            You have <strong style={{ color:"#fff" }}>{todayList.length} task{todayList.length!==1?"s":""} today</strong>
-            {overdue.length>0 && <> including <strong style={{ color:"#fca5a5" }}>{overdue.length} overdue</strong></>}.
+            You have <strong style={{ color:"#fff" }}>{grade.total} task{grade.total!==1?"s":""}</strong> this month
+            {overdue.length>0 && <> — <strong style={{ color:"#fca5a5" }}>{overdue.length} overdue</strong></>}
+            {todayList.length>0 && <>, <strong style={{ color:"#fde68a" }}>{todayList.length} due today</strong></>}.
             {" "}Submit on time to lock in your grade.
           </div>
           {/* Stats row */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
             {[
-              { lbl:"Today's Tasks",  val:todayList.length, trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : null, color:"#fff" },
-              { lbl:"Active Tasks",   val:active.length,    trend:<span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>in progress</span>, color:"#fff" },
-              { lbl:"On-Time Rate",   val:`${grade.rate}%`, trend:<span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span>, color:grade.color },
-              { lbl:"Done This Week", val:doneWeek.length,  trend:<span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>submissions</span>, color:"#86efac" },
+              { lbl:"Total Tasks",   val:grade.total,                trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : <span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>this month</span>, color:"#fff" },
+              { lbl:"Completed",     val:grade.completed,            trend:<span style={{ color:"#86efac",fontSize:11 }}>{grade.total>0?Math.round(grade.completed/grade.total*100):0}% done</span>, color:"#86efac" },
+              { lbl:"Rating",        val:`${grade.rating}/5`,        trend:<span style={{ color:grade.color,fontSize:11 }}>{grade.letter} Grade</span>, color:grade.color },
+              { lbl:"On-Time",       val:`${grade.rate}%`,           trend:<span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span>, color:grade.rate>=80?"#86efac":"#fcd34d" },
             ].map(s => (
               <div key={s.lbl} style={{ background:"rgba(255,255,255,.1)", borderRadius:10, padding:"12px 14px", backdropFilter:"blur(8px)" }}>
                 <div style={{ fontSize:9, color:"rgba(255,255,255,.6)", textTransform:"uppercase", letterSpacing:".06em", fontWeight:600, marginBottom:6 }}>{s.lbl}</div>
@@ -515,10 +516,35 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
   const brands = [...new Map(tasks.filter(t => t.brandId).map(t => [t.brandId._id, t.brandId])).values()];
   const types  = [...new Set(tasks.map(t => t.contentType).filter(Boolean))];
 
+  // Compute stage-aware status key for a task (matches what the Status column actually displays)
+  function getMyStatus(t) {
+    const stagesArr = t.stages || [];
+    let myIdx = empId ? stagesArr.findIndex(s => {
+      const ids = Array.isArray(s.assignedTo) ? s.assignedTo : (s.assignedTo ? [s.assignedTo] : []);
+      return ids.some(a => (a?._id ? String(a._id) : String(a || "")) === String(empId));
+    }) : -1;
+    if (myIdx < 0 && t.stage) { const fi = ["S1","S2","S3","S4"].indexOf(t.stage); if (fi >= 0) myIdx = fi; }
+    const ms = myIdx >= 0 ? stagesArr[myIdx] : null;
+    if (ms) {
+      if (ms.approved)              return "approved";
+      if (ms.done && !ms.rejected)  return "pending_review";
+      if (ms.rejected)              return "rejected";
+    }
+    return t.status || "todo";
+  }
+
+  const STAGE_STATUS_OPTIONS = [
+    { value: "todo",           label: "To Do" },
+    { value: "in_progress",    label: "In Progress" },
+    { value: "pending_review", label: "Pending Review" },
+    { value: "approved",       label: "Approved" },
+    { value: "rejected",       label: "Rejected" },
+  ];
+
   const filtered = tasks.filter(t => {
-    if (brandF  && t.brandId?._id !== brandF)  return false;
-    if (typeF   && t.contentType  !== typeF)   return false;
-    if (statusF && t.status       !== statusF) return false;
+    if (brandF  && t.brandId && String(t.brandId?._id) !== brandF)  return false;
+    if (typeF   && t.contentType  !== typeF)                         return false;
+    if (statusF && getMyStatus(t) !== statusF)                       return false;
     return true;
   });
 
@@ -526,19 +552,27 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
 
   return (
     <>
+      {/* Brand dropdown */}
+      {brands.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+          {(() => { const sel = brands.find(b => String(b._id) === brandF); return sel ? <span style={{ width:10, height:10, borderRadius:"50%", background:sel.color||"#6366F1", display:"inline-block", flexShrink:0 }} /> : null; })()}
+          <select value={brandF} onChange={e => { setBrandF(e.target.value); sessionStorage.setItem("mtab_brand", e.target.value); }}
+            style={{ padding:"7px 12px", border:"1.5px solid #E5E7EB", borderRadius:8, fontSize:13, fontWeight:600, color:"#374151", outline:"none", cursor:"pointer", background:"#fff" }}>
+            <option value="">All Brands</option>
+            {brands.map(b => <option key={b._id} value={String(b._id)}>{b.name}</option>)}
+          </select>
+        </div>
+      )}
+
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={brandF} onChange={e => { setBrandF(e.target.value); sessionStorage.setItem("mtab_brand", e.target.value); }} style={selStyle}>
-          <option value="">All Brands</option>
-          {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-        </select>
         <select value={typeF} onChange={e => { setTypeF(e.target.value); sessionStorage.setItem("mtab_type", e.target.value); }} style={selStyle}>
           <option value="">All Types</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={statusF} onChange={e => { setStatusF(e.target.value); sessionStorage.setItem("mtab_status", e.target.value); }} style={selStyle}>
           <option value="">All Status</option>
-          {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          {STAGE_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF" }}>{filtered.length} task{filtered.length !== 1 ? "s" : ""}</span>
       </div>
@@ -552,61 +586,91 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #F0F0F0", background: "#FAFAFA" }}>
-                  {["#", "Task", "Brand", "Type", "Stage", "Deadline", "Status", "Action"].map(h => (
+                  {["#", "Task", "Brand", "Type", "Stage", "Deadline", "Status", "Submitted", "Action"].map(h => (
                     <th key={h} style={{ padding: "11px 14px", textAlign: "left", fontSize: 10.5, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: ".5px", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t, idx) => (
-                  <tr key={t._id} style={{ borderBottom: "1px solid #F5F5F5" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#FAFAFA"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <td style={{ padding: "13px 14px", color: "#9CA3AF", fontSize: 11, fontFamily: "monospace" }}>{String(idx + 1).padStart(3, "0")}</td>
-                    <td style={{ padding: "13px 14px", maxWidth: 240 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.nomenclature || t.title || "Untitled"}</div>
-                    </td>
-                    <td style={{ padding: "13px 14px" }}>
-                      {t.brandId ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", borderRadius: 20, background: t.brandId.color + "20", fontSize: 11, fontWeight: 700, color: t.brandId.color, whiteSpace: "nowrap" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.brandId.color, display: "inline-block" }} />
-                          {t.brandId.name}
-                        </span>
-                      ) : <span style={{ color: "#D1D5DB" }}>—</span>}
-                    </td>
-                    <td style={{ padding: "13px 14px" }}>
-                      {t.contentType ? <span style={{ padding: "2px 8px", borderRadius: 4, background: (CTYPE_COLOR[t.contentType] || "#6366F1") + "22", color: CTYPE_COLOR[t.contentType] || "#6366F1", fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>
-                        : <span style={{ color: "#D1D5DB" }}>—</span>}
-                    </td>
-                    <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
-                    {(() => {
-                      const dl  = getStageDeadline(t);
-                      const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
-                      return (
-                        <td style={{ padding: "13px 14px", fontSize: 11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
-                          {od && <i className="bi bi-exclamation-circle-fill me-1" />}
-                          {od && <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", marginRight: 5 }}>LATE</span>}
-                          {dl ? fmtDT(dl) : "—"}
-                        </td>
-                      );
-                    })()}
-                    <td style={{ padding: "13px 14px" }}>
-                      <span className={`tms-badge ${STATUS_MAP[t.status]?.cls || "tms-badge-todo"}`}>{STATUS_MAP[t.status]?.label || t.status}</span>
-                    </td>
-                    <td style={{ padding: "13px 14px" }}>
-                      <button onClick={() => openInEditor(t)} style={{
-                        padding: "5px 14px", borderRadius: 7, border: "1.5px solid #7C3AED",
-                        background: "#F5F3FF", color: "#7C3AED", fontSize: 12, fontWeight: 700,
-                        cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
-                        transition: "all .15s",
-                      }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "#7C3AED"; e.currentTarget.style.color = "#fff"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "#F5F3FF"; e.currentTarget.style.color = "#7C3AED"; }}>
-                        View <i className="bi bi-arrow-right" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((t, idx) => {
+                  // Compute employee's assigned stage for this task
+                  const stagesArr = t.stages || [];
+                  let myStageIdx = empId ? stagesArr.findIndex(s => {
+                    const ids = Array.isArray(s.assignedTo) ? s.assignedTo : (s.assignedTo ? [s.assignedTo] : []);
+                    return ids.some(a => (a?._id ? String(a._id) : String(a || "")) === String(empId));
+                  }) : -1;
+                  if (myStageIdx < 0 && t.stage) { const fi = ["S1","S2","S3","S4"].indexOf(t.stage); if (fi >= 0) myStageIdx = fi; }
+                  const myStage = myStageIdx >= 0 ? stagesArr[myStageIdx] : null;
+
+                  // Stage-aware status — use getMyStatus() so filter and display stay in sync
+                  const myStatusKey = getMyStatus(t);
+                  const STATUS_DISPLAY = {
+                    approved:       { bg: "#ECFDF5", color: "#15803D", label: "Approved" },
+                    pending_review: { bg: "#FFFBEB", color: "#B45309", label: "Pending Review" },
+                    rejected:       { bg: "#FEF2F2", color: "#DC2626", label: "Rejected" },
+                  };
+                  const stageStatusMeta = STATUS_DISPLAY[myStatusKey] || null;
+                  const rawStatusMeta   = STATUS_MAP[t.status] || STATUS_MAP.todo;
+
+                  // Submission datetime: stage doneAt (production) or task submittedAt
+                  const submittedAt = myStage?.doneAt || t.submittedAt;
+
+                  return (
+                    <tr key={t._id} style={{ borderBottom: "1px solid #F5F5F5" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#FAFAFA"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <td style={{ padding: "13px 14px", color: "#9CA3AF", fontSize: 11, fontFamily: "monospace" }}>{String(idx + 1).padStart(3, "0")}</td>
+                      <td style={{ padding: "13px 14px", maxWidth: 240 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.nomenclature || t.title || "Untitled"}</div>
+                      </td>
+                      <td style={{ padding: "13px 14px" }}>
+                        {t.brandId ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", borderRadius: 20, background: t.brandId.color + "20", fontSize: 11, fontWeight: 700, color: t.brandId.color, whiteSpace: "nowrap" }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.brandId.color, display: "inline-block" }} />
+                            {t.brandId.name}
+                          </span>
+                        ) : <span style={{ color: "#D1D5DB" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "13px 14px" }}>
+                        {t.contentType ? <span style={{ padding: "2px 8px", borderRadius: 4, background: (CTYPE_COLOR[t.contentType] || "#6366F1") + "22", color: CTYPE_COLOR[t.contentType] || "#6366F1", fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>
+                          : <span style={{ color: "#D1D5DB" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
+                      {(() => {
+                        const dl  = getStageDeadline(t);
+                        const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
+                        return (
+                          <td style={{ padding: "13px 14px", fontSize: 11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
+                            {od && <i className="bi bi-exclamation-circle-fill me-1" />}
+                            {od && <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", marginRight: 5 }}>LATE</span>}
+                            {dl ? fmtDT(dl) : "—"}
+                          </td>
+                        );
+                      })()}
+                      <td style={{ padding: "13px 14px" }}>
+                        {stageStatusMeta
+                          ? <span style={{ display:"inline-block", padding:"3px 9px", borderRadius:5, fontSize:11, fontWeight:700, background:stageStatusMeta.bg, color:stageStatusMeta.color, whiteSpace:"nowrap" }}>{stageStatusMeta.label}</span>
+                          : <span className={`tms-badge ${rawStatusMeta.cls || "tms-badge-todo"}`}>{rawStatusMeta.label}</span>
+                        }
+                      </td>
+                      <td style={{ padding: "13px 14px", fontSize: 11, color: "#6B7280", whiteSpace: "nowrap" }}>
+                        {submittedAt ? fmtDT(new Date(submittedAt)) : <span style={{ color: "#D1D5DB" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "13px 14px" }}>
+                        <button onClick={() => openInEditor(t)} style={{
+                          padding: "5px 14px", borderRadius: 7, border: "1.5px solid #7C3AED",
+                          background: "#F5F3FF", color: "#7C3AED", fontSize: 12, fontWeight: 700,
+                          cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+                          transition: "all .15s",
+                        }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#7C3AED"; e.currentTarget.style.color = "#fff"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "#F5F3FF"; e.currentTarget.style.color = "#7C3AED"; }}>
+                          View <i className="bi bi-arrow-right" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2128,7 +2192,7 @@ function SubmissionsTab({ tasks }) {
                     </div>
                     <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
                       {t.brandId && <span style={{ fontSize: 11, color: "#9CA3AF" }}><i className="bi bi-building me-1" />{t.brandId.name}</span>}
-                      {submittedAt && <span style={{ fontSize: 11, color: "#9CA3AF" }}><i className="bi bi-calendar me-1" />{fmtD(submittedAt)}</span>}
+                      {submittedAt && <span style={{ fontSize: 11, color: "#9CA3AF" }}><i className="bi bi-clock me-1" />Submitted {fmtDT(submittedAt)}</span>}
                       {t.pillar && <span style={{ fontSize: 11, color: "#9CA3AF" }}><i className="bi bi-tag me-1" />{t.pillar}</span>}
                     </div>
                   </div>
@@ -2399,13 +2463,74 @@ const STATUS_COLOR = { todo: "#64748b", in_progress: "#3b82f6", review: "#f59e0b
 const SL           = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Rejected" };
 const RL           = { content: "Content Writer", design: "Designer", editor: "Video Editor", developer: "Developer", general: "Team Member" };
 
+// filterTasksByMonth — shared helper used by callers of calcGrade
+function filterTasksByMonth(tasks, month, year) {
+  return tasks.filter(t => {
+    const dl = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
+    return dl && dl.getFullYear() === year && dl.getMonth() === month;
+  });
+}
+
 function calcGrade(tasks) {
-  const comp   = tasks.filter(t => t.status === "completed");
-  const onTime = comp.filter(t => !t.dueDate || !isOverdue(t.dueDate)).length;
-  const rate   = comp.length ? Math.round(onTime / comp.length * 100) : 0;
-  const letter = rate >= 90 ? "A" : rate >= 80 ? "A-" : rate >= 70 ? "B+" : rate >= 60 ? "B" : rate >= 50 ? "C" : "D";
-  const color  = rate >= 80 ? "#22c55e" : rate >= 60 ? "#f5a623" : "#ef4444";
-  return { rate, letter, color };
+  // Score each task 0-5 based on submission lateness vs deadline
+  // 5=A(on time), 4=B(0-4h late), 3=C(4-12h late), 2=D(12-24h late), 1=F(24h+ late), 0=Incomplete
+  // NOTE: callers are responsible for pre-filtering tasks to the desired month
+
+  const total = tasks.length;
+  if (total === 0) {
+    return { letter:"—", color:"#94a3b8", rating:0, rate:0, total:0, completed:0, incomplete:0, aCnt:0, bCnt:0, cCnt:0, dCnt:0, fCnt:0 };
+  }
+
+  const scores = tasks.map(t => {
+    const deadline = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
+    if (!deadline) return null;
+
+    // Get submission time: stage doneAt for production, else submittedAt
+    let submittedAt = null;
+    if (t.taskType === "production" && t.stages?.length) {
+      const doneStages = t.stages.filter(s => s.done || s.approved);
+      const first = doneStages[0];
+      if (first?.doneAt) submittedAt = new Date(first.doneAt);
+    }
+    if (!submittedAt && t.submittedAt) submittedAt = new Date(t.submittedAt);
+
+    if (!submittedAt) {
+      if (t.status === "completed") return 5; // completed but no time tracked → assume on time
+      if (isOverdue(deadline))     return 0; // overdue, not submitted
+      return null; // not yet due — exclude from scoring
+    }
+
+    const diffH = (submittedAt - deadline) / 3600000;
+    if (diffH <= 0)  return 5; // A
+    if (diffH <= 4)  return 4; // B
+    if (diffH <= 12) return 3; // C
+    if (diffH <= 24) return 2; // D
+    return 1;                  // F
+  }).filter(s => s !== null);
+
+  const aCnt = scores.filter(s => s === 5).length;
+  const bCnt = scores.filter(s => s === 4).length;
+  const cCnt = scores.filter(s => s === 3).length;
+  const dCnt = scores.filter(s => s === 2).length;
+  const fCnt = scores.filter(s => s === 1).length;
+  const incomplete = scores.filter(s => s === 0).length;
+  const completed  = scores.filter(s => s > 0).length;
+
+  const sum    = scores.reduce((a, b) => a + b, 0);
+  const rating = scores.length > 0 ? Math.round((sum / scores.length) * 10) / 10 : 0;
+
+  let letter, color;
+  if (rating >= 4.5)     { letter = "A+"; color = "#16a34a"; }
+  else if (rating >= 4.0) { letter = "A";  color = "#22c55e"; }
+  else if (rating >= 3.5) { letter = "B+"; color = "#84cc16"; }
+  else if (rating >= 3.0) { letter = "B";  color = "#f5a623"; }
+  else if (rating >= 2.5) { letter = "C";  color = "#f59e0b"; }
+  else if (rating >= 1.5) { letter = "D";  color = "#ef4444"; }
+  else                    { letter = "F";  color = "#dc2626"; }
+
+  const rate = total > 0 ? Math.round(aCnt / total * 100) : 0;
+
+  return { letter, color, rating, rate, total, completed, incomplete, aCnt, bCnt, cCnt, dCnt, fCnt };
 }
 
 function getDeadlineInfo(task) {
@@ -2649,10 +2774,11 @@ const STAGE_BADGE = {
 
 // ─── Non-SMM Submit Modal ──────────────────────────────────────────────────────
 function NonSMMSubmitModal({ task, onClose, onSubmit, submitting }) {
-  const [notes, setNotes] = useState("");
+  const [notes,     setNotes]     = useState("");
+  const [proofLink, setProofLink] = useState("");
   return (
     <div className="ep-overlay" onClick={onClose}>
-      <div className="ep-modal" style={{ maxWidth:480 }} onClick={e => e.stopPropagation()}>
+      <div className="ep-modal" style={{ maxWidth:500 }} onClick={e => e.stopPropagation()}>
         <div className="ep-modal-hd">
           <div className="ep-modal-title">✓ Submit for Approval</div>
           <button className="ep-btn ep-btn-ghost ep-btn-sm" onClick={onClose}>✕</button>
@@ -2662,16 +2788,22 @@ function NonSMMSubmitModal({ task, onClose, onSubmit, submitting }) {
           {task.brandId && <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>{task.brandId.name}</div>}
         </div>
         <div className="ep-form-g">
+          <label className="ep-label">Delivery / Proof URL <span style={{ color:"#ef4444" }}>*</span></label>
+          <input className="ep-input" placeholder="https://docs.google.com/… or published link"
+            value={proofLink} onChange={e => setProofLink(e.target.value)} />
+          <div style={{ fontSize:10.5, color:"#64748b", marginTop:3 }}>Paste the Google Doc, published URL, Drive link, or any delivery link</div>
+        </div>
+        <div className="ep-form-g">
           <label className="ep-label">Notes for Admin (optional)</label>
-          <textarea className="ep-textarea" rows={3} placeholder="Describe what you've completed, links, or any context for the admin…"
+          <textarea className="ep-textarea" rows={3} placeholder="Describe what you've completed or any context for the admin…"
             value={notes} onChange={e => setNotes(e.target.value)} />
         </div>
         <div style={{ fontSize:12, color:"#64748b", marginBottom:14, background:"rgba(99,102,241,.06)", border:"1px solid rgba(99,102,241,.2)", borderRadius:8, padding:"10px 14px", lineHeight:1.55 }}>
-          <strong>After submission:</strong> Admin will review and either approve the task (marks it Completed) or request revisions.
+          <strong>After submission:</strong> Admin will review and either approve the task or request revisions.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button className="ep-btn ep-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="ep-btn ep-btn-primary" onClick={() => onSubmit(notes)} disabled={submitting}>
+          <button className="ep-btn ep-btn-primary" onClick={() => onSubmit(notes, proofLink)} disabled={submitting || !proofLink.trim()}>
             {submitting ? "Submitting…" : "Submit for Approval ✓"}
           </button>
         </div>
@@ -2851,17 +2983,19 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
   const dl         = getDeadlineInfo(localTask);
   const status     = localTask.status;
 
-  async function doSubmit(notes) {
+  async function doSubmit(notes, proofLink) {
     setSubmitting(true);
     try {
+      const body = { status: "review", reviewNote: notes || "", submittedAt: new Date().toISOString() };
+      if (proofLink?.trim()) body.proofLink = proofLink.trim();
       const r = await fetch(`/api/employee/tasks/${localTask._id}`, {
         method: "PATCH", headers: authH(),
-        body: JSON.stringify({ status: "review", reviewNote: notes || "" }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (d.success) {
         toast.success("Submitted for approval!");
-        setLocalTask(prev => ({ ...prev, status: "review", reviewNote: notes || "" }));
+        setLocalTask(prev => ({ ...prev, status: "review", reviewNote: notes||"", proofLink: proofLink?.trim()||prev.proofLink, submittedAt: body.submittedAt }));
         setShowModal(false);
       } else toast.error(d.message || "Submission failed");
     } catch { toast.error("Network error"); }
@@ -2869,38 +3003,34 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
   }
 
   return (
-    <div className={`ep-tcard ${dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`} style={{ display:"flex", flexDirection:"column" }}>
+    <div className={`ep-tcard ${dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`} style={{ display:"flex", flexDirection:"column", borderLeft:`3px solid ${brandColor}`, paddingLeft:10 }}>
       {/* Header row */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-        <span style={{ fontFamily:"monospace", fontSize:11, color:"#94A3B8" }}>#{localTask._id?.slice(-4)}</span>
-        {localTask.brandId && (
-          <span style={{ padding:"3px 9px", borderRadius:20, background:brandColor+"20", color:brandColor, fontSize:10.5, fontWeight:700, maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {localTask.brandId.name}
-          </span>
-        )}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+        <span style={{ fontFamily:"monospace", fontSize:10, color:"#94A3B8" }}>#{localTask._id?.slice(-4)}</span>
+        <span style={{ padding:"2px 8px", borderRadius:20, background:catBg, fontSize:10, fontWeight:700, color:catColor, display:"flex", alignItems:"center", gap:3 }}>
+          <i className={`bi ${catIcon}`} style={{ fontSize:9 }} />{catLabel}
+        </span>
       </div>
 
-      {/* Title — clickable to open details */}
+      {/* Title — clickable to open details, clamped to 2 lines */}
       <div
         onClick={viewDetail}
-        style={{ fontSize:14, fontWeight:600, lineHeight:1.4, marginBottom:10, color:"#1e293b", flex:1, cursor: viewDetail ? "pointer" : "default" }}
+        style={{ fontSize:13.5, fontWeight:700, lineHeight:1.35, marginBottom:7, color:"#1e293b", flex:1, cursor: viewDetail ? "pointer" : "default",
+          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}
       >
         {localTask.title || localTask.nomenclature}
         {viewDetail && <i className="bi bi-arrow-up-right" style={{ fontSize:10, marginLeft:5, color:"#94A3B8" }} />}
       </div>
 
-      {/* Category + Due Date badges */}
-      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14, flexWrap:"wrap" }}>
-        <span style={{ padding:"3px 10px", borderRadius:20, background:catBg, fontSize:11, fontWeight:700, color:catColor, display:"flex", alignItems:"center", gap:4 }}>
-          <i className={`bi ${catIcon}`} style={{ fontSize:10 }} />{catLabel}
-        </span>
+      {/* Due Date */}
+      <div style={{ marginBottom:10 }}>
         {dl && (
-          <span style={{ display:"inline-flex", flexDirection:"column", gap:1 }}>
+          <div>
             <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:400, display:"inline-flex", alignItems:"center", gap:3 }}>
               <i className="bi bi-clock" style={{ fontSize:10 }} />{dl.text}
             </span>
-            {dl.sub && <span style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</span>}
-          </span>
+            {dl.sub && <div style={{ fontSize:10, color:"#94a3b8", marginTop:1 }}>{dl.sub}</div>}
+          </div>
         )}
       </div>
 
@@ -2921,6 +3051,11 @@ function NonSMMCard({ task, onOpenModal, onViewDetail }) {
               <i className={`bi bi-chevron-${showNotes ? "up" : "down"}`} style={{ fontSize:10 }} />
             )}
           </div>
+          {localTask.submittedAt && (
+            <div style={{ textAlign:"center", fontSize:10, color:"#94a3b8", padding:"4px 0 6px", background:"rgba(245,158,11,.04)" }}>
+              <i className="bi bi-clock" style={{ marginRight:3 }} />Submitted {fmtDT(localTask.submittedAt)}
+            </div>
+          )}
           {showNotes && localTask.reviewNote && (
             <div style={{ padding:"10px 12px", background:"#fffbeb", borderTop:"1px solid rgba(245,158,11,.2)" }}>
               <div style={{ fontSize:10.5, fontWeight:700, color:"#92400e", marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Your Submission Notes</div>
@@ -2996,102 +3131,110 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
   const blockedByS1  = submitStageKey !== "S1" && !s1Approved;
 
   return (
-    <div className={`ep-tcard ${isRejected ? "rejected-card" : dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-        <span style={{ fontFamily:"monospace", fontSize:11, color:"#64748b" }}>#{task._id?.slice(-4)}</span>
-        {task.brandId && (
-          <span style={{ padding:"3px 9px", borderRadius:20, background:brandColor+"20", color:brandColor, fontSize:10.5, fontWeight:700 }}>
-            {task.brandId.name}
-          </span>
-        )}
+    <div className={`ep-tcard ${isRejected ? "rejected-card" : dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`}
+      style={{ borderLeft:`3px solid ${brandColor}`, paddingLeft:10 }}>
+
+      {/* Header: ID + stage badge */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+        <span style={{ fontFamily:"monospace", fontSize:10, color:"#94a3b8" }}>#{task._id?.slice(-4)}</span>
+        <span style={{ padding:"2px 8px", borderRadius:20, background:sbadge.bg, fontSize:10, fontWeight:600, color:sbadge.color, whiteSpace:"nowrap" }}>
+          S{submitStageNum} · {STAGE_LABEL[submitStageKey]}
+        </span>
       </div>
-      <div style={{ fontSize:14, fontWeight:600, lineHeight:1.4, marginBottom:12, color:"#1e293b" }}>
+
+      {/* Title — clamp to 2 lines */}
+      <div style={{ fontSize:13.5, fontWeight:700, lineHeight:1.35, marginBottom:7, color:"#1e293b",
+        display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
         {task.nomenclature || task.title}
       </div>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-        <span style={{ padding:"3px 10px", borderRadius:20, background:sbadge.bg, fontSize:11, fontWeight:600, color:sbadge.color }}>
-          Stage {submitStageNum} · {STAGE_LABEL[submitStageKey]}
-        </span>
 
-        {/* Stage status badge — approved / pending review / deadline */}
+      {/* Status / deadline row */}
+      <div style={{ marginBottom:9, minHeight:28 }}>
         {myStage?.approved ? (
           <span style={{ fontSize:11, fontWeight:700, color:"#15803d", display:"inline-flex", alignItems:"center", gap:3 }}>
             <i className="bi bi-check-circle-fill" style={{ fontSize:11 }} /> Approved
+            {deadlineSrc && <span style={{ marginLeft:5, fontWeight:400, color:"#94a3b8", fontSize:10 }}>· Due {fmtDT(deadlineSrc)}</span>}
           </span>
         ) : myStage?.done && !myStage?.rejected ? (
-          <span style={{ fontSize:11, fontWeight:600, color:"#b45309", display:"inline-flex", alignItems:"center", gap:3 }}>
-            <i className="bi bi-hourglass-split" style={{ fontSize:10 }} /> Pending Review
-          </span>
-        ) : dl ? (
-          <span style={{ display:"inline-flex", flexDirection:"column", gap:1 }}>
-            <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:500, display:"inline-flex", alignItems:"center", gap:3 }}>
-              <i className="bi bi-clock" style={{ fontSize:10 }} />
-              {dl.text}
+          <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:"#b45309", display:"inline-flex", alignItems:"center", gap:3 }}>
+              <i className="bi bi-hourglass-split" style={{ fontSize:10 }} /> Pending Review
             </span>
-            {dl.sub && <span style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</span>}
-          </span>
+            {deadlineSrc && <span style={{ fontSize:10, color:"#94a3b8" }}>Due {fmtD(deadlineSrc)}</span>}
+          </div>
+        ) : dl ? (
+          <div>
+            <span style={{ fontSize:11, color:dl.color, fontWeight:dl.urgent||dl.today?700:500, display:"inline-flex", alignItems:"center", gap:3 }}>
+              <i className="bi bi-clock" style={{ fontSize:10 }} />{dl.text}
+            </span>
+            {dl.sub && <div style={{ fontSize:10, color:"#94a3b8", marginTop:1 }}>{dl.sub}</div>}
+          </div>
         ) : null}
       </div>
-      <div style={{ display:"flex", gap:4, marginBottom:14 }}>
+
+      {/* Stage progress bars */}
+      <div style={{ display:"flex", gap:3, marginBottom:10 }}>
         {stagesArr.map((s,i) => (
-          <div key={s} style={{ flex:1, height:5, borderRadius:3,
+          <div key={s} style={{ flex:1, height:4, borderRadius:2,
             background: i<barIdx ? "#22c55e" : i===barIdx ? barColor : "#e2e8f0" }} />
         ))}
       </div>
+
+      {/* Action area */}
       {blockedByS1 ? (
-        <div style={{ width:"100%", padding:"11px 14px", background:"rgba(124,58,237,.06)", border:"1px solid rgba(124,58,237,.22)", borderRadius:8, textAlign:"center" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, color:"#6d28d9", fontWeight:700, fontSize:12.5, marginBottom:3 }}>
-            <i className="bi bi-lock-fill" style={{ fontSize:12 }} />
-            Waiting for S1 Approval
+        <div style={{ padding:"9px 12px", background:"rgba(124,58,237,.05)", border:"1px solid rgba(124,58,237,.18)", borderRadius:8, textAlign:"center" }}>
+          <div style={{ fontSize:12, color:"#6d28d9", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+            <i className="bi bi-lock-fill" style={{ fontSize:11 }} /> Waiting for S1 Approval
           </div>
-          <div style={{ fontSize:11, color:"#7c3aed", opacity:.8 }}>
-            Script/Concept must be approved by admin before you can submit your stage.
-          </div>
+          <div style={{ fontSize:10.5, color:"#7c3aed", opacity:.75, marginTop:2 }}>Script must be approved before you can submit.</div>
         </div>
       ) : hasClientFeedback ? (
-        <div>
-          <div style={{ padding:"8px 12px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"8px 8px 0 0" }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"#92400e", marginBottom:4, display:"flex", alignItems:"center", gap:5 }}>
+        <div style={{ borderRadius:8, overflow:"hidden", border:"1px solid #fde68a" }}>
+          <div style={{ padding:"7px 10px", background:"#fffbeb" }}>
+            <div style={{ fontSize:10.5, fontWeight:700, color:"#92400e", marginBottom:3, display:"flex", alignItems:"center", gap:4 }}>
               <i className="bi bi-chat-left-text-fill" /> Client Requested Changes
             </div>
-            <div style={{ fontSize:11.5, color:"#78350f", lineHeight:1.5, whiteSpace:"pre-wrap", maxHeight:60, overflowY:"auto" }}>
-              {task.reviewNote}
-            </div>
+            <div style={{ fontSize:11, color:"#78350f", lineHeight:1.4, maxHeight:50, overflowY:"auto", whiteSpace:"pre-wrap" }}>{task.reviewNote}</div>
           </div>
           <button onClick={() => onSubmit(task, submitStageKey)}
-            style={{ width:"100%", padding:"9px", background:"#f59e0b", color:"#fff", border:"none", borderRadius:"0 0 8px 8px", fontWeight:700, fontSize:12.5, cursor:"pointer", fontFamily:"inherit" }}>
-            Revise &amp; Resubmit Stage {submitStageNum}
+            style={{ width:"100%", padding:"8px", background:"#f59e0b", color:"#fff", border:"none", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+            Revise &amp; Resubmit S{submitStageNum}
           </button>
         </div>
       ) : isRejected ? (
-        <div>
-          <div style={{ padding:"8px 12px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:"8px 8px 0 0", color:"#dc2626", fontSize:11.5, fontWeight:600 }}>
+        <div style={{ borderRadius:8, overflow:"hidden", border:"1px solid #fecaca" }}>
+          <div style={{ padding:"7px 10px", background:"#fef2f2", color:"#dc2626", fontSize:11, fontWeight:600 }}>
             ✕ Rejected{myStage?.rejectReason ? ` — ${myStage.rejectReason}` : " — Admin requested revision"}
           </div>
           <button onClick={() => onSubmit(task, submitStageKey)}
-            style={{ width:"100%", padding:"9px", background:"#dc2626", color:"#fff", border:"none", borderRadius:"0 0 8px 8px", fontWeight:700, fontSize:12.5, cursor:"pointer", fontFamily:"inherit" }}>
-            Resubmit Stage {submitStageNum} ✓
+            style={{ width:"100%", padding:"8px", background:"#dc2626", color:"#fff", border:"none", fontWeight:700, fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+            Resubmit S{submitStageNum} ✓
           </button>
         </div>
       ) : isDone ? (
-        <div style={{ borderRadius:8, border:"1px solid rgba(34,197,94,.3)", overflow:"hidden" }}>
+        <div style={{ borderRadius:8, border:"1px solid rgba(34,197,94,.25)", overflow:"hidden" }}>
           <div
             onClick={() => (myStage?.proofUrls?.length || myStage?.doneNote) && setShowProof(v => !v)}
-            style={{ width:"100%", padding:"10px 12px", background:"rgba(34,197,94,.1)", color:"#16a34a", fontWeight:600, fontSize:12.5, textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            style={{ padding:"9px 12px", background:"rgba(34,197,94,.08)", color:"#16a34a", fontWeight:600, fontSize:12.5, textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
               cursor:(myStage?.proofUrls?.length || myStage?.doneNote) ? "pointer" : "default" }}>
             ✓ Stage {submitStageNum} Done
             {(myStage?.proofUrls?.length > 0 || myStage?.doneNote) && (
               <i className={`bi bi-chevron-${showProof ? "up" : "down"}`} style={{ fontSize:10 }} />
             )}
           </div>
+          {myStage?.doneAt && (
+            <div style={{ textAlign:"center", fontSize:10, color:"#94a3b8", padding:"3px 0 5px", background:"rgba(34,197,94,.04)" }}>
+              <i className="bi bi-clock" style={{ marginRight:3 }} />Submitted {fmtDT(myStage.doneAt)}
+            </div>
+          )}
           {showProof && (myStage?.proofUrls?.length > 0 || myStage?.doneNote) && (
-            <div style={{ padding:"10px 12px", background:"#f0fdf4", borderTop:"1px solid rgba(34,197,94,.2)" }}>
+            <div style={{ padding:"8px 12px", background:"#f0fdf4", borderTop:"1px solid rgba(34,197,94,.15)" }}>
               {myStage.proofUrls?.length > 0 && (
-                <div style={{ marginBottom: myStage.doneNote ? 8 : 0 }}>
-                  <div style={{ fontSize:10.5, fontWeight:700, color:"#166534", marginBottom:5, textTransform:"uppercase", letterSpacing:.5 }}>Submitted Links</div>
+                <div style={{ marginBottom: myStage.doneNote ? 6 : 0 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#166534", marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Submitted Links</div>
                   {myStage.proofUrls.map((url, i) => (
                     <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                      style={{ display:"block", fontSize:11.5, color:"#5A57FB", wordBreak:"break-all", marginBottom:3, textDecoration:"underline" }}>
+                      style={{ display:"block", fontSize:11, color:"#5A57FB", wordBreak:"break-all", marginBottom:2, textDecoration:"underline" }}>
                       {url}
                     </a>
                   ))}
@@ -3099,8 +3242,8 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
               )}
               {myStage?.doneNote && (
                 <div>
-                  <div style={{ fontSize:10.5, fontWeight:700, color:"#166534", marginBottom:4, textTransform:"uppercase", letterSpacing:.5 }}>Notes</div>
-                  <div style={{ fontSize:12, color:"#374151", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{myStage.doneNote}</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#166534", marginBottom:3, textTransform:"uppercase", letterSpacing:.5 }}>Notes</div>
+                  <div style={{ fontSize:11.5, color:"#374151", lineHeight:1.4, whiteSpace:"pre-wrap" }}>{myStage.doneNote}</div>
                 </div>
               )}
             </div>
@@ -3108,7 +3251,7 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
         </div>
       ) : (
         <button onClick={() => onSubmit(task, submitStageKey)}
-          style={{ width:"100%", padding:"10px", background:"#5A57FB", color:"#fff", border:"none", borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+          style={{ width:"100%", padding:"9px", background:"#5A57FB", color:"#fff", border:"none", borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
           Submit Stage {submitStageNum} ✓
         </button>
       )}
@@ -3209,26 +3352,180 @@ function PSubmitModal({ task, stageKey, onClose, onSuccess }) {
 }
 
 // ─── PORTAL TODAY VIEW ────────────────────────────────────────────────────────
+// ─── TASK VIEW MODAL (production + non-production) ───────────────────────────
+function TaskViewModal({ task, onClose, onSubmit }) {
+  if (!task) return null;
+  const isProduction = task.taskType === "production";
+  const stagesArr = ["S1","S2","S3","S4"];
+  const brandColor = task.brandId?.color || "#5A57FB";
+
+  // Non-production category label
+  const tags = task.tags || [];
+  const seoCat = task.seoCategory;
+  const SEO_CAT_LABELS = { blog:"Blog Post", technical:"Technical SEO", onpage:"On-Page", offpage:"Off-Page", backlinks:"Backlinks" };
+  let catLabel = "General Task";
+  if (seoCat && SEO_CAT_LABELS[seoCat]) catLabel = SEO_CAT_LABELS[seoCat];
+  else if (tags.includes("seo")) catLabel = "SEO Task";
+  else if (tags.includes("ads")) catLabel = "Ads Task";
+  else if (tags.includes("branding")) catLabel = "Branding Task";
+
+  const canSubmit = !isProduction && !["review","completed"].includes(task.status);
+
+  const stageRows = (task.stages || []).map((s, i) => {
+    const key = stagesArr[i];
+    const hasData = s.done || s.approved || s.proofUrls?.length || s.rejected;
+    if (!hasData) return null;
+    return (
+      <div key={key} style={{ border:"1px solid #e2e8f0", borderRadius:10, overflow:"hidden", marginBottom:8 }}>
+        <div style={{ padding:"8px 12px", background: s.approved ? "#f0fdf4" : s.rejected ? "#fef2f2" : "#f8fafc", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontSize:11, fontWeight:700, color: s.approved ? "#16a34a" : s.rejected ? "#dc2626" : "#64748b" }}>
+            {key} · {STAGE_LABEL[key]}
+          </span>
+          {s.approved && <span style={{ fontSize:10, color:"#16a34a", fontWeight:700 }}>✓ Approved</span>}
+          {s.rejected && !s.approved && <span style={{ fontSize:10, color:"#dc2626", fontWeight:700 }}>✕ Rejected</span>}
+          {s.done && !s.approved && !s.rejected && <span style={{ fontSize:10, color:"#b45309", fontWeight:700 }}>⏳ Pending Review</span>}
+        </div>
+        <div style={{ padding:"10px 12px" }}>
+          {s.doneAt && <div style={{ fontSize:10.5, color:"#94a3b8", marginBottom:6 }}><i className="bi bi-clock" style={{ marginRight:4 }} />Submitted {fmtDT(s.doneAt)}</div>}
+          {s.proofUrls?.length > 0 && (
+            <div style={{ marginBottom: s.doneNote ? 8 : 0 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:.4, marginBottom:4 }}>Submitted Links</div>
+              {s.proofUrls.map((url, j) => (
+                <a key={j} href={url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:"block", fontSize:11.5, color:"#5A57FB", wordBreak:"break-all", marginBottom:3, textDecoration:"underline" }}>
+                  {url}
+                </a>
+              ))}
+            </div>
+          )}
+          {s.doneNote && (
+            <div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:.4, marginBottom:4 }}>Notes</div>
+              <div style={{ fontSize:12, color:"#374151", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{s.doneNote}</div>
+            </div>
+          )}
+          {s.rejected && s.rejectReason && (
+            <div style={{ marginTop:6, fontSize:11.5, color:"#dc2626", fontWeight:600 }}>Reason: {s.rejectReason}</div>
+          )}
+        </div>
+      </div>
+    );
+  }).filter(Boolean);
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:16, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.18)" }}>
+        {/* Header */}
+        <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div style={{ flex:1, paddingRight:12 }}>
+            {task.brandId && (
+              <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:brandColor+"22", color:brandColor, marginBottom:6, display:"inline-block" }}>
+                {task.brandId.name}
+              </span>
+            )}
+            <div style={{ fontWeight:800, fontSize:15, color:"#1e293b", lineHeight:1.4, marginTop:4 }}>
+              {task.nomenclature || task.title}
+            </div>
+            {task.dueDate && (
+              <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>
+                <i className="bi bi-calendar3" style={{ marginRight:4 }} />{fmtDT(task.dueDate)}
+                {isOverdue(task.dueDate) && task.status !== "completed" && <span style={{ color:"#ef4444", fontWeight:600, marginLeft:6 }}>· Overdue</span>}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} style={{ border:"none", background:"#f1f5f9", borderRadius:8, width:30, height:30, cursor:"pointer", fontSize:14, flexShrink:0 }}>
+            <i className="bi bi-x" />
+          </button>
+        </div>
+
+        <div style={{ padding:20, display:"flex", flexDirection:"column", gap:12 }}>
+          {isProduction ? (
+            stageRows.length > 0 ? stageRows
+              : <div style={{ textAlign:"center", padding:"24px 0", color:"#94a3b8" }}>No submissions yet.</div>
+          ) : (
+            <>
+              {task.description && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", marginBottom:6 }}>Description</div>
+                  <div style={{ fontSize:13, color:"#374151", background:"#f8fafc", borderRadius:8, padding:"12px 14px", lineHeight:1.7, whiteSpace:"pre-wrap", maxHeight:140, overflowY:"auto", border:"1px solid #e2e8f0" }}>
+                    {task.description}
+                  </div>
+                </div>
+              )}
+              {task.proofLink && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", marginBottom:6 }}>Delivery / Proof Link</div>
+                  <a href={task.proofLink} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:12, color:"#4f46e5", display:"inline-flex", alignItems:"center", gap:6, background:"#eef2ff", padding:"7px 12px", borderRadius:8, textDecoration:"none", wordBreak:"break-all" }}>
+                    <i className="bi bi-link-45deg" /> {task.proofLink}
+                  </a>
+                </div>
+              )}
+              {task.referenceLink && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", marginBottom:6 }}>Reference Link</div>
+                  <a href={task.referenceLink} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:12, color:"#4f46e5", display:"inline-flex", alignItems:"center", gap:6, background:"#eef2ff", padding:"7px 12px", borderRadius:8, textDecoration:"none", wordBreak:"break-all" }}>
+                    <i className="bi bi-link-45deg" /> {task.referenceLink}
+                  </a>
+                </div>
+              )}
+              {task.submittedAt && (
+                <div style={{ padding:"10px 12px", background:"#f8fafc", borderRadius:8, border:"1px solid #e2e8f0" }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", marginBottom:4 }}>Submitted At</div>
+                  <div style={{ fontSize:12.5, color:"#1e293b" }}><i className="bi bi-clock" style={{ marginRight:5 }} />{fmtDT(task.submittedAt)}</div>
+                </div>
+              )}
+              {task.reviewNote && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color: task.status==="blocked" ? "#dc2626" : "#94a3b8", textTransform:"uppercase", marginBottom:6 }}>
+                    {task.status==="blocked" ? "Revision Requested" : "Submission Notes"}
+                  </div>
+                  <div style={{ fontSize:12.5, color:"#374151", background: task.status==="blocked" ? "#fef2f2" : "#f8fafc", borderRadius:8, padding:"10px 12px", lineHeight:1.6, whiteSpace:"pre-wrap", border:`1px solid ${task.status==="blocked" ? "#fecaca" : "#e2e8f0"}` }}>
+                    {task.reviewNote}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
+            <button onClick={onClose} style={{ padding:"8px 18px", borderRadius:8, border:"1px solid #e2e8f0", background:"#fff", color:"#64748b", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Close</button>
+            {canSubmit && onSubmit && (
+              <button onClick={() => { onSubmit(task); onClose(); }}
+                style={{ padding:"8px 18px", borderRadius:8, border:"none", background:"#5A57FB", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                Submit for Approval
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PortalTodayView({ emp, tasks, loading, empId }) {
   const [submitInfo,   setSubmitInfo]   = useState(null);
   const [nonSMMTask,   setNonSMMTask]   = useState(null);
   const [nonSMMSaving, setNonSMMSaving] = useState(false);
   const [detailTask,   setDetailTask]   = useState(null);
+  const [viewTask,     setViewTask]     = useState(null);
   const [time,         setTime]         = useState("");
   const [localTasks,   setLocalTasks]   = useState(tasks);
   useEffect(() => { setLocalTasks(tasks); }, [tasks]);
 
-  async function handleNonSMMSubmit(notes) {
+  async function handleNonSMMSubmit(notes, proofLink) {
     setNonSMMSaving(true);
     try {
+      const body = { status: "review", reviewNote: notes || "", submittedAt: new Date().toISOString() };
+      if (proofLink?.trim()) body.proofLink = proofLink.trim();
       const r = await fetch(`/api/employee/tasks/${nonSMMTask._id}`, {
         method: "PATCH", headers: authH(),
-        body: JSON.stringify({ status: "review", reviewNote: notes || "" }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (d.success) {
         toast.success("Submitted for approval!");
-        setLocalTasks(prev => prev.map(t => t._id === nonSMMTask._id ? { ...t, status: "review" } : t));
+        setLocalTasks(prev => prev.map(t => t._id === nonSMMTask._id ? { ...t, status: "review", reviewNote: notes||"", proofLink: proofLink?.trim()||t.proofLink, submittedAt: body.submittedAt } : t));
         setNonSMMTask(null);
       } else toast.error(d.message || "Submission failed");
     } catch { toast.error("Network error"); }
@@ -3257,7 +3554,7 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
     const diff = Math.round((dc - now) / 86400000);
     return diff > 0 && diff <= 7;
   });
-  const grade      = calcGrade(localTasks);
+  const grade      = calcGrade(filterTasksByMonth(localTasks, now.getMonth(), now.getFullYear()));
   const todayTasks = [...new Map([...overdue, ...dueToday].map(t => [t._id, t])).values()];
 
   return (
@@ -3277,8 +3574,8 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
           {[
             { lbl:"Total Tasks",  val:loading?"—":localTasks.length,                                              color:"#fff",      trend: overdue.length>0 ? <span style={{ color:"#fca5a5",fontSize:11 }}>{overdue.length} overdue</span> : <span style={{ color:"rgba(255,255,255,.6)",fontSize:11 }}>assigned</span> },
             { lbl:"Active Tasks", val:loading?"—":active.length,                                                  color:"#fff",      trend: <span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>in progress</span> },
-            { lbl:"On-Time Rate", val:loading?"—":`${grade.rate}%`,                                               color:grade.color, trend: <span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span> },
-            { lbl:"Completed",    val:loading?"—":localTasks.filter(t=>t.status==="completed").length,            color:"#86efac",   trend: <span style={{ color:"rgba(255,255,255,.7)",fontSize:11 }}>all time</span> },
+            { lbl:"Rating",       val:loading?"—":`${grade.rating}/5`,                                            color:grade.color, trend: <span style={{ color:grade.color,fontSize:11 }}>{grade.letter} Grade</span> },
+            { lbl:"On-Time",      val:loading?"—":`${grade.rate}%`,                                              color:grade.rate>=80?"#86efac":"#fcd34d", trend: <span style={{ color:grade.rate>=80?"#86efac":"#fcd34d",fontSize:11 }}>{grade.rate>=80?"↑ Good":"↓ Improve"}</span> },
           ].map(s => (
             <div key={s.lbl} className="ep-hstat">
               <div style={{ fontSize:10, color:"#fff", textTransform:"uppercase", letterSpacing:".06em", fontWeight:600 }}>{s.lbl}</div>
@@ -3288,131 +3585,6 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
           ))}
         </div>
       </div>
-
-      {!loading && overdue.length>0 && (
-        <div className="ep-alert-banner" style={{ background:"rgba(239,68,68,.06)", border:"1px solid rgba(239,68,68,.3)" }}>
-          <span style={{ fontSize:18, flexShrink:0 }}>⚠️</span>
-          <div style={{ flex:1, fontSize:12.5, color:"#1e293b" }}>
-            <strong>"{overdue[0].nomenclature||overdue[0].title}" is overdue.</strong>
-            {overdue[0].brandId && ` ${overdue[0].brandId.name} needs this`} — submit now to minimize grade impact.
-          </div>
-          <button className="ep-btn ep-btn-ghost ep-btn-sm" onClick={() => setSubmitInfo({task:overdue[0],stageKey:null})}>Submit Now</button>
-        </div>
-      )}
-
-      <div className="ep-sec-hd">
-        <div className="ep-sec-title">📌 Today's Tasks <span className="ep-sec-count">{todayTasks.length}</span></div>
-      </div>
-      {loading ? <div className="ep-empty"><div className="ep-spinner" /></div>
-        : todayTasks.length === 0 ? (
-          <div className="ep-card" style={{ textAlign:"center", padding:"28px 20px", marginBottom:22 }}>
-            <i className="bi bi-check2-all" style={{ fontSize:32, color:"#22c55e", display:"block", marginBottom:8 }} />
-            <div style={{ color:"#64748b" }}>No tasks due today — you're all caught up!</div>
-          </div>
-        ) : getTMSRole(emp) === "content" ? (
-          // Content team — table format matching My Tasks
-          <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, overflow:"hidden", marginBottom:22 }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-              <thead>
-                <tr style={{ borderBottom:"1px solid #F0F0F0" }}>
-                  {["#","Task","Brand","Type","Stage","Deadline","Status","Action"].map(h => (
-                    <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:".4px", whiteSpace:"nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {todayTasks.map((t, ri) => {
-                  const dl  = effectiveDL(t);
-                  const od  = dl && isOverdue(dl) && t.status !== "completed";
-                  const sm  = STATUS_MAP[t.status] || STATUS_MAP.todo;
-                  const STAGE_COLORS = { S1:"#F97316", S2:"#3B82F6", S3:"#EAB308", S4:"#22C55E" };
-                  const CTYPE_COLORS = { reel:"#7C3AED", post:"#1D4ED8", carousel:"#B45309", story:"#065F46" };
-                  return (
-                    <tr key={t._id} style={{ borderBottom:"1px solid #F9F9F9" }}>
-                      <td style={{ padding:"11px 14px", color:"#9CA3AF", fontSize:11, fontFamily:"monospace" }}>{String(ri+1).padStart(3,"0")}</td>
-                      <td style={{ padding:"11px 14px", fontWeight:600, fontSize:12, maxWidth:160, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.nomenclature || t.title || "—"}</td>
-                      <td style={{ padding:"11px 14px" }}>
-                        {t.brandId && <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:6, background:(t.brandId.color||"#6366F1")+"18", color:t.brandId.color||"#6366F1", fontSize:11.5, fontWeight:700 }}>
-                          <span style={{ width:6, height:6, borderRadius:"50%", background:t.brandId.color||"#6366F1", display:"inline-block" }} />{t.brandId.name}
-                        </span>}
-                      </td>
-                      <td style={{ padding:"11px 14px" }}>
-                        {t.contentType && <span style={{ padding:"2px 8px", borderRadius:5, background:(CTYPE_COLORS[t.contentType]||"#6366F1")+"18", color:CTYPE_COLORS[t.contentType]||"#6366F1", fontSize:11, fontWeight:700, textTransform:"capitalize" }}>{t.contentType}</span>}
-                      </td>
-                      <td style={{ padding:"11px 14px" }}>
-                        <EmployeeStagePips task={t} empId={empId} size={22} />
-                      </td>
-                      <td style={{ padding:"11px 14px", whiteSpace:"nowrap" }}>
-                        {od && <span style={{ background:"#FEE2E2", color:"#DC2626", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, marginRight:5 }}>LATE</span>}
-                        <span style={{ fontSize:11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400 }}>{dl ? fmtDT(dl) : "—"}</span>
-                      </td>
-                      <td style={{ padding:"11px 14px" }}>
-                        <span className={`tms-badge ${sm.cls}`} style={{ fontSize:10 }}>{sm.label}</span>
-                      </td>
-                      <td style={{ padding:"11px 14px" }}>
-                        <button onClick={() => window.dispatchEvent(new CustomEvent("openInEditor", { detail: t }))}
-                          style={{ background:"none", border:"1.5px solid #7C3AED", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#7C3AED", cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
-                          View →
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="ep-tgrid" style={{ marginBottom:22 }}>
-            {todayTasks.map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}
-          </div>
-        )
-      }
-
-      {upcoming.length>0 && (
-        <>
-          <div className="ep-sec-hd">
-            <div className="ep-sec-title">📅 Coming Up This Week <span className="ep-sec-count">{upcoming.length}</span></div>
-          </div>
-          {getTMSRole(emp) === "content" ? (
-            <div style={{ background:"#fff", border:"1px solid #E5E7EB", borderRadius:12, overflow:"hidden", marginBottom:22 }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                <tbody>
-                  {upcoming.slice(0,6).map((t, ri) => {
-                    const dl = effectiveDL(t); const sm = STATUS_MAP[t.status] || STATUS_MAP.todo;
-                    const CTYPE_COLORS = { reel:"#7C3AED", post:"#1D4ED8", carousel:"#B45309", story:"#065F46" };
-                    return (
-                      <tr key={t._id} style={{ borderBottom:"1px solid #F9F9F9" }}>
-                        <td style={{ padding:"11px 14px", color:"#9CA3AF", fontSize:11, fontFamily:"monospace" }}>{String(ri+1).padStart(3,"0")}</td>
-                        <td style={{ padding:"11px 14px", fontWeight:600, fontSize:12 }}>{t.nomenclature || t.title || "—"}</td>
-                        <td style={{ padding:"11px 14px" }}>
-                          {t.brandId && <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:6, background:(t.brandId.color||"#6366F1")+"18", color:t.brandId.color||"#6366F1", fontSize:11.5, fontWeight:700 }}>
-                            <span style={{ width:6, height:6, borderRadius:"50%", background:t.brandId.color||"#6366F1", display:"inline-block" }} />{t.brandId.name}
-                          </span>}
-                        </td>
-                        <td style={{ padding:"11px 14px" }}>
-                          {t.contentType && <span style={{ padding:"2px 8px", borderRadius:5, background:(CTYPE_COLORS[t.contentType]||"#6366F1")+"18", color:CTYPE_COLORS[t.contentType]||"#6366F1", fontSize:11, fontWeight:700, textTransform:"capitalize" }}>{t.contentType}</span>}
-                        </td>
-                        <td style={{ padding:"11px 14px", fontSize:11, color:"#374151" }}>{dl ? fmtDT(dl) : "—"}</td>
-                        <td style={{ padding:"11px 14px" }}><span className={`tms-badge ${sm.cls}`} style={{ fontSize:10 }}>{sm.label}</span></td>
-                        <td style={{ padding:"11px 14px" }}>
-                          <button onClick={() => window.dispatchEvent(new CustomEvent("openInEditor", { detail: t }))}
-                            style={{ background:"none", border:"1.5px solid #7C3AED", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#7C3AED", cursor:"pointer" }}>
-                            View →
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="ep-tgrid" style={{ marginBottom:22 }}>
-              {upcoming.slice(0,4).map(t => <PTaskCard key={t._id} task={t} onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})} onNonSMMSubmit={setNonSMMTask} onNonSMMDetail={setDetailTask} empId={empId} />)}
-            </div>
-          )}
-        </>
-      )}
 
       <div className="ep-perf-grid">
         <div className="ep-card">
@@ -3442,14 +3614,16 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
             {new Date().toLocaleDateString("en-IN",{month:"long",year:"numeric"})} Grade
           </div>
           <div className="ep-grade-letter" style={{ color:grade.color, margin:"8px 0" }}>{loading ? "—" : grade.letter}</div>
-          <div style={{ fontSize:11, color:"#64748b" }}>On-time rate: {grade.rate}%</div>
-          <div className="ep-grade-bar">
-            {[0,1,2,3,4].map(i => (
-              <div key={i} className="ep-grade-bar-cell" style={{ background: i<Math.round(grade.rate/20) ? grade.color : "#1e2330" }} />
-            ))}
+          <div style={{ fontSize:13, color:"#64748b" }}>Rating: <strong style={{ color:grade.color }}>{grade.rating}</strong> / 5.0</div>
+          <div style={{ height:5, background:"#1e2330", borderRadius:4, margin:"10px 0", overflow:"hidden" }}>
+            <div style={{ height:"100%", background:grade.color, borderRadius:4, width:`${Math.min(100, grade.rating/5*100)}%`, transition:"width .4s" }} />
           </div>
-          <div style={{ fontSize:12, color:"#64748b", marginTop:14, lineHeight:1.5 }}>
-            {grade.rate>=80 ? "Keep submitting on time to maintain your grade!" : grade.rate>=60 ? "Aim for on-time submissions to reach A this month." : "Focus on completing overdue tasks to boost your grade."}
+          <div style={{ fontSize:11, color:"#64748b", display:"flex", justifyContent:"space-between" }}>
+            <span>On-time: {grade.rate}%</span>
+            <span>{grade.completed}/{grade.total} done</span>
+          </div>
+          <div style={{ fontSize:11.5, color:"#64748b", marginTop:14, lineHeight:1.5 }}>
+            {grade.rating>=4.5 ? "Exceptional! Keep it up." : grade.rating>=3.5 ? "Good — submit before deadlines to reach A+." : grade.rating>=2.5 ? "Reduce delays to improve your grade." : "Focus on timely submissions to boost your rating."}
           </div>
         </div>
       </div>
@@ -3464,7 +3638,160 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
       {detailTask && (
         <NonSMMDetailModal task={detailTask} onClose={() => setDetailTask(null)} onSubmit={t => { setDetailTask(null); setNonSMMTask(t); }} />
       )}
+      {viewTask && (
+        <TaskViewModal task={viewTask} onClose={() => setViewTask(null)} onSubmit={setNonSMMTask} />
+      )}
     </div>
+  );
+}
+
+// ─── PORTAL MY TASKS TABLE ROW ────────────────────────────────────────────────
+function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
+  const stagesArr  = ["S1","S2","S3","S4"];
+  const brandColor = task.brandId?.color || "#94a3b8";
+  const isProduction = task.taskType === "production";
+
+  const toArr = v => Array.isArray(v) ? v : (v ? [v] : []);
+  const myStageIdx = empId && isProduction
+    ? (task.stages||[]).findIndex(s => toArr(s.assignedTo).some(a => String(a?._id||a||"") === String(empId)))
+    : -1;
+  const myStage       = myStageIdx >= 0 ? task.stages[myStageIdx] : null;
+  const submitStageKey = myStageIdx >= 0 ? stagesArr[myStageIdx] : (task.stage || "S1");
+  const submitStageNum = myStageIdx >= 0 ? myStageIdx + 1 : (STAGE_NUM[task.stage] || "");
+
+  const deadlineSrc = (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline : task.dueDate;
+  const dl = getDeadlineInfo({ ...task, dueDate: deadlineSrc });
+
+  const s1Approved  = task.stages?.[0]?.approved === true;
+  const blockedByS1 = isProduction && submitStageKey !== "S1" && !s1Approved;
+  const isDone      = myStage?.done === true;
+  const isRejected  = myStage?.rejected === true && !myStage?.done;
+  const isApproved  = myStage?.approved === true;
+
+  const status = task.status;
+
+  // Non-production category
+  const tags = task.tags || [];
+  const seoCat = task.seoCategory;
+  const SEO_CAT_LABELS = { blog:"Blog Post", technical:"Technical SEO", onpage:"On-Page", offpage:"Off-Page", backlinks:"Backlinks" };
+  let catLabel = "General";
+  if (seoCat && SEO_CAT_LABELS[seoCat]) catLabel = SEO_CAT_LABELS[seoCat];
+  else if (tags.includes("seo")) catLabel = "SEO";
+  else if (tags.includes("ads")) catLabel = "Ads";
+  else if (tags.includes("branding")) catLabel = "Branding";
+
+  const td = { padding:"11px 14px", borderBottom:"1px solid #f1f5f9", verticalAlign:"middle" };
+  const sbadge = STAGE_BADGE[submitStageKey] || STAGE_BADGE.S1;
+  const barIdx = myStageIdx >= 0 ? myStageIdx : stagesArr.indexOf(task.stage);
+  const barColor = isDone ? "#22c55e" : isRejected ? "#ef4444" : "#f5a623";
+
+  return (
+    <tr onMouseEnter={e => e.currentTarget.style.background="#f8fafc"} onMouseLeave={e => e.currentTarget.style.background=""}>
+      <td style={{ ...td, color:"#94a3b8", fontSize:11, fontFamily:"monospace", width:48 }}>{String(idx+1).padStart(3,"0")}</td>
+      <td style={{ ...td, maxWidth:260 }}>
+        <div style={{ fontWeight:600, fontSize:13, color:"#1e293b", lineHeight:1.35,
+          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>
+          {task.nomenclature || task.title || "Untitled"}
+        </div>
+        {(dl?.urgent && !isDone && !isApproved) && (
+          <span style={{ fontSize:10, color:"#ef4444", fontWeight:600 }}>⚠ {dl.text}</span>
+        )}
+      </td>
+      <td style={{ ...td, whiteSpace:"nowrap" }}>
+        {task.brandId ? (
+          <span style={{ padding:"2px 8px", borderRadius:20, background:brandColor+"22", color:brandColor, fontSize:10.5, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
+            <span style={{ width:5, height:5, borderRadius:"50%", background:brandColor, display:"inline-block" }} />{task.brandId.name}
+          </span>
+        ) : <span style={{ color:"#cbd5e1", fontSize:11 }}>—</span>}
+      </td>
+      <td style={{ ...td }}>
+        {isProduction ? (
+          <div>
+            <span style={{ padding:"2px 8px", borderRadius:20, background:sbadge.bg, color:sbadge.color, fontSize:10.5, fontWeight:600, whiteSpace:"nowrap", display:"inline-block" }}>
+              S{submitStageNum} · {STAGE_LABEL[submitStageKey]}
+            </span>
+            <div style={{ display:"flex", gap:2, marginTop:4, width:56 }}>
+              {stagesArr.map((s,i) => (
+                <div key={s} style={{ flex:1, height:3, borderRadius:2,
+                  background: i<barIdx ? "#22c55e" : i===barIdx ? barColor : "#e2e8f0" }} />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <span style={{ padding:"2px 8px", borderRadius:20, background:"#f1f5f9", color:"#475569", fontSize:10.5, fontWeight:600 }}>{catLabel}</span>
+        )}
+      </td>
+      <td style={{ ...td, whiteSpace:"nowrap" }}>
+        {dl ? (
+          <div>
+            <div style={{ fontSize:11.5, color: (isDone||isApproved) ? "#94a3b8" : dl.color, fontWeight:dl.urgent && !isDone && !isApproved ? 700 : 400 }}>{dl.text}</div>
+            {dl.sub && <div style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</div>}
+          </div>
+        ) : <span style={{ color:"#cbd5e1" }}>—</span>}
+      </td>
+      <td style={{ ...td }}>
+        {isProduction ? (
+          isApproved   ? <span style={{ fontSize:11, color:"#16a34a", fontWeight:700 }}>✓ Approved</span>
+          : isDone     ? <span style={{ fontSize:11, color:"#b45309", fontWeight:600 }}>⏳ Pending Review</span>
+          : isRejected ? <span style={{ fontSize:11, color:"#dc2626", fontWeight:600 }}>✕ Rejected</span>
+          : blockedByS1 ? (() => {
+              const s1 = task.stages?.[0];
+              let reason, rColor;
+              if (s1?.rejected)              { reason = "S1 was rejected — awaiting resubmission"; rColor = "#dc2626"; }
+              else if (s1?.done && !s1?.approved) { reason = "S1 submitted — awaiting admin approval"; rColor = "#b45309"; }
+              else                           { reason = "S1 not yet submitted by scriptwriter"; rColor = "#64748b"; }
+              return (
+                <div>
+                  <span style={{ fontSize:11, color:"#7c3aed", fontWeight:700 }}>🔒 Locked</span>
+                  <div style={{ fontSize:10, color:rColor, marginTop:2, lineHeight:1.3 }}>{reason}</div>
+                </div>
+              );
+            })()
+          : <span style={{ fontSize:11, color:"#5A57FB", fontWeight:600 }}>Ready</span>
+        ) : (
+          status === "completed" ? <span style={{ fontSize:11, color:"#16a34a", fontWeight:700 }}>✓ Approved</span>
+          : status === "review"  ? <span style={{ fontSize:11, color:"#b45309", fontWeight:600 }}>⏳ Pending</span>
+          : status === "blocked" ? <span style={{ fontSize:11, color:"#dc2626", fontWeight:600 }}>✕ Rejected</span>
+          : <span style={{ fontSize:11, color:"#5A57FB", fontWeight:600 }}>Open</span>
+        )}
+      </td>
+      <td style={{ ...td, whiteSpace:"nowrap" }}>
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          {isProduction ? (
+            <>
+              {(isDone || isApproved) && (
+                <button onClick={() => onView && onView(task)}
+                  style={{ padding:"5px 12px", borderRadius:7, border:"1px solid #e2e8f0", background:"#f8fafc", color:"#64748b", fontSize:11.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  View
+                </button>
+              )}
+              {!isDone && !isApproved && !blockedByS1 && (
+                <button onClick={() => onSubmit(task, submitStageKey)}
+                  style={{ padding:"5px 12px", borderRadius:7, border:"1.5px solid #5A57FB", background:"#EEF2FF", color:"#5A57FB", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                  Submit S{submitStageNum} ✓
+                </button>
+              )}
+              {blockedByS1 && <span style={{ fontSize:13, color:"#a78bfa" }} title="Locked until S1 is approved">🔒</span>}
+            </>
+          ) : (
+            <>
+              {(status === "review" || status === "completed") && (
+                <button onClick={() => onView && onView(task)}
+                  style={{ padding:"5px 12px", borderRadius:7, border:"1px solid #e2e8f0", background:"#f8fafc", color:"#64748b", fontSize:11.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  View
+                </button>
+              )}
+              {status !== "completed" && status !== "review" && (
+                <button onClick={() => onNonSMMSubmit(task)}
+                  style={{ padding:"5px 12px", borderRadius:7, border:"1.5px solid #5A57FB", background:"#EEF2FF", color:"#5A57FB", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                  Submit ✓
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -3480,19 +3807,28 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   const [nonSMMSaving, setNonSMMSaving] = useState(false);
   const [detailTask,   setDetailTask]   = useState(null);
   const [localTasks,   setLocalTasks]   = useState(tasks);
+  const [brandFilter,  setBrandFilter]  = useState("");
+  const [typeFilter,   setTypeFilter]   = useState("");
+  const [page,         setPage]         = useState(0);
+  const [viewTask,     setViewTask]     = useState(null);
   useEffect(() => { setLocalTasks(tasks); }, [tasks]);
+  // No auto-select — "All Brands" is the default (brandFilter = "")
+  // Reset page when filter/tab changes
+  useEffect(() => { setPage(0); }, [tab, brandFilter, search, typeFilter]);
 
-  async function handleNonSMMSubmit(notes) {
+  async function handleNonSMMSubmit(notes, proofLink) {
     setNonSMMSaving(true);
     try {
+      const body = { status: "review", reviewNote: notes || "", submittedAt: new Date().toISOString() };
+      if (proofLink?.trim()) body.proofLink = proofLink.trim();
       const r = await fetch(`/api/employee/tasks/${nonSMMTask._id}`, {
         method: "PATCH", headers: authH(),
-        body: JSON.stringify({ status: "review", reviewNote: notes || "" }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (d.success) {
         toast.success("Submitted for approval!");
-        setLocalTasks(prev => prev.map(t => t._id === nonSMMTask._id ? { ...t, status: "review" } : t));
+        setLocalTasks(prev => prev.map(t => t._id === nonSMMTask._id ? { ...t, status: "review", reviewNote: notes||"", proofLink: proofLink?.trim()||t.proofLink, submittedAt: body.submittedAt } : t));
         setNonSMMTask(null);
       } else toast.error(d.message || "Submission failed");
     } catch { toast.error("Network error"); }
@@ -3523,18 +3859,35 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
   const weekEnd    = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7);
 
-  // Base: month-filtered tasks
-  const monthTasks = localTasks.filter(inSelectedMonth);
+  // Unique brands and content types for filters
+  const allBrands = [...new Map(localTasks.filter(t => t.brandId).map(t => [String(t.brandId._id), t.brandId])).values()];
+  const allTypes  = [...new Set(localTasks.map(t => t.contentType).filter(Boolean))];
 
-  const byTab = monthTasks.filter(t => {
-    if (tab === "today") { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }
+  // Base: month-filtered, then brand-filtered tasks
+  // Tasks with no brandId are always included regardless of brand filter (can't be branded)
+  const monthTasks = localTasks.filter(inSelectedMonth);
+  const brandTasks = brandFilter && allBrands.length > 0
+    ? monthTasks.filter(t => !t.brandId || String(t.brandId._id) === brandFilter)
+    : monthTasks;
+
+  // All tasks for the active brand (no month scope) — used for overdue detection across months
+  const allBrandTasks = brandFilter && allBrands.length > 0
+    ? localTasks.filter(t => !t.brandId || String(t.brandId._id) === brandFilter)
+    : localTasks;
+
+  const isApprovedTask = t => t.status === "completed" || (t.stages||[]).some(s => s.approved === true);
+
+  const byTab = (tab === "overdue" ? allBrandTasks : brandTasks).filter(t => {
+    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }
     if (tab === "week")     { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }
-    if (tab === "overdue")  return isOverdue(t.dueDate) && t.status !== "completed";
+    if (tab === "overdue")  { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }
+    if (tab === "approved") return isApprovedTask(t);
     if (tab === "rejected") return (t.stages||[]).some(s => s.rejected === true && !s.done);
     return true;
   });
 
   const filtered = byTab.filter(t => {
+    if (typeFilter && t.contentType !== typeFilter) return false;
     if (search) {
       const s = search.toLowerCase();
       return (t.nomenclature||t.title||"").toLowerCase().includes(s) || (t.brandId?.name||"").toLowerCase().includes(s);
@@ -3543,18 +3896,19 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   });
 
   const counts = {
-    all:      monthTasks.length,
-    today:    monthTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }).length,
-    week:     monthTasks.filter(t => { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }).length,
-    overdue:  monthTasks.filter(t => isOverdue(t.dueDate) && t.status !== "completed").length,
-    rejected: monthTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
+    all:      brandTasks.length,
+    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }).length,
+    week:     brandTasks.filter(t => { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }).length,
+    overdue:  allBrandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }).length,
+    approved: brandTasks.filter(isApprovedTask).length,
+    rejected: brandTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
   };
 
   const TABS = [
-    { key:"all",      label:"All" },
     { key:"today",    label:"Today" },
     { key:"week",     label:"This Week" },
     { key:"overdue",  label:"Overdue" },
+    { key:"approved", label:"Approved" },
     { key:"rejected", label:"Rejected" },
   ];
 
@@ -3573,8 +3927,23 @@ function PortalMyTasksView({ tasks, loading, empId }) {
         )}
       </div>
 
-      {/* Tab row */}
-      <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+      {/* Brand dropdown */}
+      {allBrands.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+          {(() => { const sel = allBrands.find(b => String(b._id) === brandFilter); return sel ? <span style={{ width:10, height:10, borderRadius:"50%", background:sel.color||"#6366F1", display:"inline-block", flexShrink:0 }} /> : null; })()}
+          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setTab("all"); setPage(0); }}
+            style={{ padding:"7px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, fontWeight:600, color:"#1e293b", outline:"none", cursor:"pointer", background:"#fff" }}>
+            <option value="">All Brands ({monthTasks.length})</option>
+            {allBrands.map(b => {
+              const cnt = monthTasks.filter(t => t.brandId && String(t.brandId._id) === String(b._id)).length;
+              return <option key={b._id} value={String(b._id)}>{b.name} ({cnt})</option>;
+            })}
+          </select>
+        </div>
+      )}
+
+      {/* Tab row + type filter + search */}
+      <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{ padding:"6px 16px", borderRadius:20, border:"1px solid", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
@@ -3585,23 +3954,65 @@ function PortalMyTasksView({ tasks, loading, empId }) {
             {t.label}{counts[t.key] > 0 ? ` (${counts[t.key]})` : ""}
           </button>
         ))}
+        {allTypes.length > 0 && (
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+            style={{ padding:"6px 12px", border:"1px solid #e2e8f0", borderRadius:20, fontSize:12.5, fontWeight:600, color: typeFilter ? "#1e293b" : "#64748b", outline:"none", cursor:"pointer", background:"#fff", fontFamily:"inherit" }}>
+            <option value="">All Types</option>
+            {allTypes.map(tp => <option key={tp} value={tp} style={{ textTransform:"capitalize" }}>{tp.charAt(0).toUpperCase()+tp.slice(1)}</option>)}
+          </select>
+        )}
         <div style={{ flex:1, minWidth:160 }}>
           <input className="ep-input" style={{ padding:"6px 12px", height:"auto" }} placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
       {loading ? <div className="ep-empty"><div className="ep-spinner" /></div>
-        : (
-          <div className="ep-tgrid">
-            {filtered.length === 0
-              ? <div className="ep-empty" style={{ gridColumn:"1/-1" }}><i className="bi bi-inbox" /><p>No tasks found</p></div>
-              : filtered.map(t => <PTaskCard key={t._id} task={t}
-                  onSubmit={(tk,sk)=>setSubmitInfo({task:tk,stageKey:sk})}
-                  onNonSMMSubmit={setNonSMMTask}
-                  onNonSMMDetail={setDetailTask}
-                  empId={empId} />)
-            }
-          </div>
-        )
+        : (() => {
+          const PAGE_SIZE = 20;
+          const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+          const safePage = Math.min(page, totalPages - 1);
+          const paginated = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+          const TH = { padding:"10px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:".5px", whiteSpace:"nowrap", background:"#f8fafc", borderBottom:"1px solid #e2e8f0" };
+          const PG = (disabled) => ({ padding:"5px 10px", borderRadius:6, border:"1px solid #e2e8f0", background: disabled ? "#f8fafc" : "#fff", color: disabled ? "#cbd5e1" : "#374151", cursor: disabled ? "default" : "pointer", fontSize:12, fontFamily:"inherit" });
+          return (
+            <div style={{ background:"#fff", borderRadius:12, border:"1px solid #e2e8f0", overflow:"hidden" }}>
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead>
+                    <tr>
+                      {["#","Task","Brand","Category / Stage","Deadline","Status","Action"].map(h => <th key={h} style={TH}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0
+                      ? <tr><td colSpan={7} style={{ padding:40, textAlign:"center", color:"#94a3b8" }}>
+                          <i className="bi bi-inbox" style={{ fontSize:28, display:"block", marginBottom:8 }} />No tasks found
+                        </td></tr>
+                      : paginated.map((t, i) => <TaskTableRow key={t._id} task={t} idx={safePage*PAGE_SIZE+i} empId={empId}
+                          onSubmit={(tk,sk) => setSubmitInfo({task:tk,stageKey:sk})}
+                          onNonSMMSubmit={setNonSMMTask}
+                          onView={setViewTask} />)
+                    }
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div style={{ padding:"12px 16px", borderTop:"1px solid #e2e8f0", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                  <span style={{ fontSize:12, color:"#64748b" }}>{filtered.length} task{filtered.length!==1?"s":""} · Page {safePage+1} of {totalPages}</span>
+                  <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                    <button onClick={() => setPage(p => Math.max(0,p-1))} disabled={safePage===0} style={PG(safePage===0)}>← Prev</button>
+                    {Array.from({length:totalPages},(_,i)=>i).slice(Math.max(0,safePage-2), safePage+5).map(i => (
+                      <button key={i} onClick={() => setPage(i)}
+                        style={{ ...PG(false), background: i===safePage?"#5A57FB":"#fff", color: i===safePage?"#fff":"#374151", borderColor: i===safePage?"#5A57FB":"#e2e8f0", fontWeight: i===safePage?700:400 }}>
+                        {i+1}
+                      </button>
+                    ))}
+                    <button onClick={() => setPage(p => Math.min(totalPages-1,p+1))} disabled={safePage===totalPages-1} style={PG(safePage===totalPages-1)}>Next →</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()
       }
       {submitInfo && (
         <PSubmitModal task={submitInfo.task} stageKey={submitInfo.stageKey} onClose={() => setSubmitInfo(null)}
@@ -3612,6 +4023,9 @@ function PortalMyTasksView({ tasks, loading, empId }) {
       )}
       {detailTask && (
         <NonSMMDetailModal task={detailTask} onClose={() => setDetailTask(null)} onSubmit={t => { setDetailTask(null); setNonSMMTask(t); }} />
+      )}
+      {viewTask && (
+        <TaskViewModal task={viewTask} onClose={() => setViewTask(null)} onSubmit={setNonSMMTask} />
       )}
     </div>
   );
@@ -3926,63 +4340,149 @@ function PortalHistoryView({ tasks, loading }) {
 
 // ─── PORTAL GRADES VIEW ───────────────────────────────────────────────────────
 function PortalGradesView({ tasks, loading }) {
-  const grade = calcGrade(tasks);
-  const BREAKDOWN = [
-    { g:"A", title:"On Time",     range:"0h or before",  color:"#22c55e" },
-    { g:"B", title:"Slightly Late", range:"+0 to +4h",   color:"#f5a623" },
-    { g:"C", title:"Late",        range:"+4 to +12h",    color:"#f59e0b" },
-    { g:"D", title:"Very Late",   range:"+12 to +24h",   color:"#ef4444" },
-    { g:"F", title:"Over 24h",    range:"+24h or more",  color:"#ef4444" },
+  const now = new Date();
+  const [selMonth, setSelMonth] = useState(now.getMonth());
+  const [selYear,  setSelYear]  = useState(now.getFullYear());
+
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  function shiftMonth(dir) {
+    let m = selMonth + dir, y = selYear;
+    if (m < 0)  { m = 11; y--; }
+    if (m > 11) { m = 0;  y++; }
+    setSelMonth(m); setSelYear(y);
+  }
+
+  const monthTasks = tasks.filter(t => {
+    const dl = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
+    return dl && dl.getFullYear() === selYear && dl.getMonth() === selMonth;
+  });
+
+  const grade = calcGrade(monthTasks);
+
+  const GRADE_SCALE = [
+    { g:"A+", range:"4.5 – 5.0", color:"#16a34a", desc:"Exceptional" },
+    { g:"A",  range:"4.0 – 4.4", color:"#22c55e", desc:"On Time" },
+    { g:"B+", range:"3.5 – 3.9", color:"#84cc16", desc:"Slightly Late" },
+    { g:"B",  range:"3.0 – 3.4", color:"#f5a623", desc:"0–4h Late" },
+    { g:"C",  range:"2.5 – 2.9", color:"#f59e0b", desc:"4–12h Late" },
+    { g:"D",  range:"1.5 – 2.4", color:"#ef4444", desc:"12–24h Late" },
+    { g:"F",  range:"0 – 1.4",   color:"#dc2626", desc:"Over 24h" },
   ];
+
+  const TASK_ROWS = [
+    { label:"Total No of Tasks",        val: grade.total,      color:"#1e293b" },
+    { label:"Tasks Completed",          val: grade.completed,  color:"#16a34a" },
+    { label:"Tasks Incomplete / Overdue", val: grade.incomplete, color:"#ef4444" },
+    { label:"On-Time Submissions",      val: grade.aCnt,       color:"#22c55e" },
+    { label:"Rating (out of 5)",        val: grade.rating,     color: grade.color, bold:true },
+    { label:"Grade",                    val: grade.letter,     color: grade.color, bold:true, large:true },
+  ];
+
+  const BREAKDOWN = [
+    { g:"A",  label:"On Time",      range:"On or before deadline",   color:"#22c55e", cnt:grade.aCnt },
+    { g:"B",  label:"Slightly Late",range:"0 – 4h after deadline",   color:"#f5a623", cnt:grade.bCnt },
+    { g:"C",  label:"Late",         range:"4 – 12h after deadline",  color:"#f59e0b", cnt:grade.cCnt },
+    { g:"D",  label:"Very Late",    range:"12 – 24h after deadline", color:"#ef4444", cnt:grade.dCnt },
+    { g:"F",  label:"Over 24h",     range:"24h+ after deadline",     color:"#dc2626", cnt:grade.fCnt },
+  ];
+
   if (loading) return <div className="ep-content"><div className="ep-empty"><div className="ep-spinner" /></div></div>;
+
+  const tip = grade.rating >= 4.5 ? "Excellent performance! Keep it up." : grade.rating >= 3.5 ? "Good work — aim to submit before deadlines to reach A+." : grade.rating >= 2.5 ? "Try to reduce delays. Submitting on time will improve your grade." : "Focus on timely submissions. Overdue tasks significantly hurt your rating.";
+
   return (
-    <div className="ep-content">
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:18, marginBottom:18 }}>
-        <div className="ep-grade-card" style={{ padding:30 }}>
-          <div style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:".08em", fontWeight:600 }}>Current Grade</div>
-          <div className="ep-grade-letter" style={{ color:grade.color, fontSize:80, margin:"10px 0" }}>{grade.letter}</div>
-          <div style={{ fontSize:11, color:"#64748b" }}>
-            {new Date().toLocaleDateString("en-IN",{month:"long",year:"numeric"})} · On-time {grade.rate}%
+    <div className="ep-content" style={{ maxWidth: 900 }}>
+      {/* Month navigator */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
+        <button onClick={() => shiftMonth(-1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #e2e8f0", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+        <div style={{ fontWeight:700, fontSize:15, color:"#1e293b", minWidth:140, textAlign:"center" }}>{MONTHS[selMonth]} {selYear}</div>
+        <button onClick={() => shiftMonth(1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #e2e8f0", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+      </div>
+
+      {/* ── DEEP PERFORMANCE CARD ── */}
+      <div style={{ background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:16, overflow:"hidden", marginBottom:18, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg,#1e1b4b 0%,#4F46E5 100%)", padding:"16px 24px", textAlign:"center" }}>
+          <div style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,.7)", letterSpacing:"0.15em", textTransform:"uppercase" }}>Deep Performance Card</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,.5)", marginTop:2 }}>{MONTHS[selMonth]} {selYear} · Task Report</div>
+        </div>
+
+        {/* Big grade + rating */}
+        <div style={{ display:"grid", gridTemplateColumns:"220px 1fr", borderBottom:"1.5px solid #f1f5f9" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 20px", borderRight:"1.5px solid #f1f5f9", background:"#fafbfc" }}>
+            <div style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:".1em", fontWeight:600, marginBottom:8 }}>Current Grade</div>
+            <div style={{ fontSize:96, fontWeight:900, color:grade.color, lineHeight:1, fontFamily:"system-ui" }}>{grade.letter === "—" ? "—" : grade.letter}</div>
+            <div style={{ fontSize:13, color:"#64748b", marginTop:8 }}>Rating: <strong style={{ color:grade.color }}>{grade.rating}</strong> / 5.0</div>
+            <div style={{ width:"100%", height:6, background:"#f1f5f9", borderRadius:4, marginTop:12, overflow:"hidden" }}>
+              <div style={{ height:"100%", borderRadius:4, background:grade.color, width:`${Math.min(100, grade.rating / 5 * 100)}%`, transition:"width .4s" }} />
+            </div>
+            <div style={{ fontSize:11, color:"#94a3b8", marginTop:6 }}>{tip}</div>
           </div>
-          <div className="ep-grade-bar">
-            {[0,1,2,3,4].map(i => (
-              <div key={i} className="ep-grade-bar-cell" style={{ background: i<Math.round(grade.rate/20)?grade.color:"#1e2330" }} />
-            ))}
-          </div>
-          <div style={{ fontSize:12, color:"#64748b", marginTop:14, lineHeight:1.5 }}>
-            {grade.rate>=80 ? "Excellent! Keep submitting on time." : grade.rate>=60 ? "Aim to reduce delays to reach A." : "Focus on timely submissions to improve your grade."}
+
+          {/* Task Report table */}
+          <div style={{ padding:"20px 24px" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".1em", marginBottom:12 }}>Task Report</div>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#f8fafc" }}>
+                  {["Metric", "Value", "Scale"].map(h => (
+                    <th key={h} style={{ padding:"8px 10px", fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:".05em", textAlign: h==="Value"?"center":"left", borderBottom:"1px solid #f1f5f9" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TASK_ROWS.map((r, i) => (
+                  <tr key={r.label} style={{ borderBottom:"1px solid #f8fafc", background: i%2===0?"#fff":"#fafbfc" }}>
+                    <td style={{ padding:"9px 10px", fontSize:12.5, color:"#374151", fontWeight: r.bold ? 700 : 400 }}>{r.label}</td>
+                    <td style={{ padding:"9px 10px", textAlign:"center", fontSize: r.large ? 22 : 14, fontWeight:800, color:r.color }}>{r.val}</td>
+                    <td style={{ padding:"9px 10px", fontSize:11, color:"#94a3b8" }}>
+                      {r.large ? <span style={{ padding:"2px 8px", borderRadius:12, background:grade.color+"18", color:grade.color, fontWeight:700, fontSize:11 }}>{grade.letter}</span>
+                       : r.bold ? <span style={{ fontStyle:"italic" }}>0 – 5 scale</span>
+                       : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="ep-card">
-          <div className="ep-card-title"><i className="bi bi-trophy" style={{ color:"#f5a623" }} /> Grade Breakdown</div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }}>
-            {BREAKDOWN.map(b => (
-              <div key={b.g} style={{ background:b.color+"22", border:`1px solid ${b.color}44`, borderRadius:10, padding:"12px 10px", textAlign:"center" }}>
-                <div style={{ fontSize:32, fontWeight:800, color:b.color }}>{b.g}</div>
-                <div style={{ fontSize:11, fontWeight:600, marginTop:4, color:"#111" }}>{b.title}</div>
-                <div style={{ fontSize:10, color:"#64748b", marginTop:2, fontFamily:"monospace" }}>{b.range}</div>
+
+        {/* Grade Scale legend */}
+        <div style={{ padding:"16px 24px", background:"#fafbfc", borderBottom:"1.5px solid #f1f5f9" }}>
+          <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".1em", marginBottom:10 }}>Grade Scale</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {GRADE_SCALE.map(gs => (
+              <div key={gs.g} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, background:gs.color+"15", border:`1.5px solid ${gs.color}40` }}>
+                <span style={{ fontWeight:800, fontSize:13, color:gs.color }}>{gs.g}</span>
+                <span style={{ fontSize:10, color:"#64748b" }}>{gs.range}</span>
+                <span style={{ fontSize:10, color:gs.color, fontWeight:600 }}>{gs.desc}</span>
+                {grade.letter === gs.g && <span style={{ background:gs.color, color:"#fff", borderRadius:10, fontSize:9, fontWeight:800, padding:"1px 5px" }}>YOU</span>}
               </div>
             ))}
           </div>
-          <div style={{ background:"#161a24", borderRadius:9, padding:14, fontSize:12.5, lineHeight:1.6, color:"#64748b", marginTop:14 }}>
-            💡 <strong style={{ color:"#e2e8f0" }}>Pro tip:</strong> Grade is calculated against your stage deadline. Submit before the deadline = A!
+        </div>
+
+        {/* Per-grade breakdown bars */}
+        <div style={{ padding:"16px 24px" }}>
+          <div style={{ fontSize:11, fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:".1em", marginBottom:12 }}>Submission Breakdown</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }}>
+            {BREAKDOWN.map(b => (
+              <div key={b.g} style={{ background:b.color+"0e", border:`1.5px solid ${b.color}33`, borderRadius:10, padding:"12px", textAlign:"center" }}>
+                <div style={{ fontSize:28, fontWeight:900, color:b.color }}>{b.cnt}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:"#374151", marginTop:2 }}>{b.label}</div>
+                <div style={{ fontSize:10, color:"#94a3b8", marginTop:2 }}>{b.range}</div>
+                <div style={{ height:3, background:"#f1f5f9", borderRadius:2, marginTop:8, overflow:"hidden" }}>
+                  <div style={{ height:"100%", background:b.color, borderRadius:2, width: grade.total > 0 ? `${(b.cnt/grade.total)*100}%` : "0%", transition:"width .4s" }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-      <div className="ep-card">
-        <div className="ep-card-title"><i className="bi bi-list-check" style={{ color:"#f5a623" }} /> Task Summary</div>
-        <div className="ep-grid4">
-          {[
-            { label:"Total Assigned", val:tasks.length,                                                         color:"#e2e8f0" },
-            { label:"Completed",      val:tasks.filter(t=>t.status==="completed").length,                       color:"#22c55e" },
-            { label:"In Progress",    val:tasks.filter(t=>t.status==="in_progress").length,                     color:"#3b82f6" },
-            { label:"Overdue",        val:tasks.filter(t=>isOverdue(t.dueDate)&&t.status!=="completed").length, color:"#ef4444" },
-          ].map(s => (
-            <div key={s.label} style={{ background:"#161a24", border:"1px solid #252a36", borderRadius:10, padding:"14px 18px" }}>
-              <div style={{ fontSize:28, fontWeight:800, color:s.color }}>{s.val}</div>
-              <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{s.label}</div>
-            </div>
-          ))}
+
+        {/* Pro tip */}
+        <div style={{ margin:"0 24px 20px", background:"#1e1b4b", borderRadius:10, padding:"12px 16px", fontSize:12.5, color:"#94a3b8", lineHeight:1.6 }}>
+          💡 <strong style={{ color:"#e2e8f0" }}>How your grade is calculated:</strong> Each task is scored A(5) → F(0) based on how late you submitted vs the stage deadline. Your rating is the average score across all tasks this month. Incomplete/overdue tasks count as 0.
         </div>
       </div>
     </div>

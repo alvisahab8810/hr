@@ -54,7 +54,9 @@
       "Bash(node scripts/delete-tourwatchout-tasks.mjs)",
       "Bash(del \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\")",
       "PowerShell(Remove-Item \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\" -Confirm:$false)",
-      "Bash(node -e \"require\\('socket.io-client'\\); console.log\\('ok'\\)\")"
+      "Bash(node -e \"require\\('socket.io-client'\\); console.log\\('ok'\\)\")",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('pages/employee/tasks/index.js', 'utf8'\\); console.log\\('file readable, size:', require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\).size\\)\")",
+      "Bash(node -e \"const s=require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\); console.log\\('size:', s.size, 'bytes'\\)\")"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

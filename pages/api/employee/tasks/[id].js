@@ -15,7 +15,7 @@ function verifyToken(req) {
   catch { return null; }
 }
 
-const ALLOWED_FIELDS = ["status", "stage", "description", "caption", "referenceLink", "pillar", "tags", "dueDate", "scheduledFor", "postedAt", "submittedAt", "reviewNote"];
+const ALLOWED_FIELDS = ["status", "stage", "description", "caption", "referenceLink", "proofLink", "pillar", "tags", "dueDate", "scheduledFor", "postedAt", "submittedAt", "reviewNote"];
 
 export default async function handler(req, res) {
   if (req.method !== "PATCH") return res.status(405).end();

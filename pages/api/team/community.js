@@ -65,10 +65,19 @@ export default async function handler(req, res) {
     let seenBy = null;
     if (req.query.seen === "1") {
       const allSeen = await TeamChatSeen.find({}).lean();
+      // Batch-fetch names for employee entries
+      const empIds = allSeen.filter(s => s.userType === "employee").map(s => s.userId);
+      const empNameMap = new Map();
+      if (empIds.length > 0) {
+        const emps = await Employee.find({ _id: { $in: empIds } })
+          .select("firstName lastName").lean();
+        emps.forEach(e => empNameMap.set(String(e._id), `${e.firstName || ""} ${e.lastName || ""}`.trim() || "Employee"));
+      }
       seenBy = allSeen.map(s => ({
         userId:    String(s.userId),
         userType:  s.userType,
         lastSeenAt: s.lastSeenAt,
+        name:      s.userType === "admin" ? "Admin" : (empNameMap.get(String(s.userId)) || "Employee"),
       }));
     }
 

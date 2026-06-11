@@ -1321,16 +1321,13 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Priority</label><select className="tmd-select" value={genForm.priority} onChange={e => setGenForm(f => ({ ...f, priority: e.target.value }))}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{PRIORITY_META_C[p].label}</option>)}</select></div>
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div>
-                          <label style={LBL}>Due Date</label>
-                          <input type="date" className="tmd-input" value={genForm.dueDate}
-                            disabled={!!adminUser}
-                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
-                            onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
-                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
-                        </div>
-                        <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
+                      <div>
+                        <label style={LBL}>Due Date &amp; Time</label>
+                        <input type="datetime-local" className="tmd-input" value={genForm.dueDate}
+                          disabled={!!adminUser}
+                          style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                          onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                        {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 70, resize: "vertical" }} placeholder="Task details…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
                     </div>
@@ -1344,16 +1341,13 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Priority</label><select className="tmd-select" value={genForm.priority} onChange={e => setGenForm(f => ({ ...f, priority: e.target.value }))}>{PRIORITIES_LIST.map(p => <option key={p} value={p}>{PRIORITY_META_C[p].label}</option>)}</select></div>
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <div>
-                          <label style={LBL}>Due Date</label>
-                          <input type="date" className="tmd-input" value={genForm.dueDate}
-                            disabled={!!adminUser}
-                            style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
-                            onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
-                          {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
-                        </div>
-                        <div><label style={LBL}>Est. Hours</label><input type="number" className="tmd-input" placeholder="0" min="0" value={genForm.estimatedHours} onChange={e => setGenForm(f => ({ ...f, estimatedHours: e.target.value }))} /></div>
+                      <div>
+                        <label style={LBL}>Due Date &amp; Time</label>
+                        <input type="datetime-local" className="tmd-input" value={genForm.dueDate}
+                          disabled={!!adminUser}
+                          style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
+                          onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
+                        {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 80, resize: "vertical" }} placeholder="Task description…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
                     </div>

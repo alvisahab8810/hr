@@ -200,7 +200,7 @@ function AdminPreviewModal({ task, stg, stageIdx, type, onClose, onApprove, onRe
               <div style={{ fontSize: 12, color: "#94a3b8" }}>
                 {stageName
                   ? <span>Stage: <strong style={{ color: stageColor }}>{stageName}</strong></span>
-                  : <span>Submitted: {stg?.doneAt ? new Date(stg.doneAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : fmtDate(task.updatedAt || task.createdAt)}</span>
+                  : <span>Submitted: {stg?.doneAt ? new Date(stg.doneAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : fmtDate(task.updatedAt || task.createdAt)}</span>
                 }
               </div>
               {task.brandId?.name && (
@@ -351,6 +351,11 @@ export default function ApprovalsPage() {
   const [expanded,  setExpanded]  = useState({});
   const [statusTab, setStatusTab] = useState("pending"); // pending | approved | rejected | all
   const [preview,   setPreview]   = useState(null); // { task, stg, stageIdx, type }
+  const [searchF,   setSearchF]   = useState("");
+  const [brandF,    setBrandF]    = useState("");
+  const [typeF,     setTypeF]     = useState("");
+  const [stageF,    setStageF]    = useState("");
+  const [empF,      setEmpF]      = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -524,6 +529,51 @@ export default function ApprovalsPage() {
   const rejectedCount = rejectedItems.length;
   const totalCount    = allItems.length;
 
+  // Derive filter options from all tasks
+  const allBrands = [...new Map(allTasks.filter(t => t.brandId).map(t => [String(t.brandId._id), t.brandId])).values()];
+  const allTypes  = [...new Set(allTasks.map(t => t.contentType).filter(Boolean))];
+  // Flatten all assigned employees from all stage assignedTo arrays
+  const allEmps = (() => {
+    const map = new Map();
+    allTasks.forEach(t => {
+      (t.stages || []).forEach(s => {
+        const ids = Array.isArray(s.assignedTo) ? s.assignedTo : (s.assignedTo ? [s.assignedTo] : []);
+        ids.forEach(e => { if (e?._id) map.set(String(e._id), e); });
+      });
+      // also top-level assignedTo
+      const at = t.assignedTo;
+      if (at?._id) map.set(String(at._id), at);
+    });
+    return [...map.values()];
+  })();
+
+  const filteredItems = displayedItems.filter(({ task: t, stageIdx }) => {
+    if (brandF && String(t.brandId?._id) !== brandF) return false;
+    if (typeF  && t.contentType !== typeF) return false;
+    if (stageF) {
+      const si = STAGE_KEYS.indexOf(stageF);
+      if (stageIdx !== si) return false;
+    }
+    if (empF) {
+      const stages = t.stages || [];
+      const matchStage = stages.some(s => {
+        const ids = Array.isArray(s.assignedTo) ? s.assignedTo : (s.assignedTo ? [s.assignedTo] : []);
+        return ids.some(a => (a?._id ? String(a._id) : String(a || "")) === empF);
+      });
+      const matchTop = t.assignedTo ? String(t.assignedTo._id || t.assignedTo) === empF : false;
+      if (!matchStage && !matchTop) return false;
+    }
+    if (searchF.trim()) {
+      const q = searchF.trim().toLowerCase();
+      const name = (t.nomenclature || t.title || "").toLowerCase();
+      const brand = (t.brandId?.name || "").toLowerCase();
+      if (!name.includes(q) && !brand.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const hasFilter = !!(searchF || brandF || typeF || stageF || empF);
+
   return (
     <div className="leaves-management-admin">
       <Head>
@@ -582,7 +632,7 @@ export default function ApprovalsPage() {
               </div>
 
               {/* Status tabs */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
                 {[
                   { key: "pending",  label: "Pending",  count: pendingCount,  color: "#EF4444", bg: "#FEE2E2"  },
                   { key: "approved", label: "Approved", count: approvedCount, color: "#10B981", bg: "#DCFCE7"  },
@@ -604,23 +654,79 @@ export default function ApprovalsPage() {
                 ))}
               </div>
 
+              {/* Filter bar */}
+              {(() => {
+                const fs = { padding: "7px 11px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", cursor: "pointer", background: "#fff", color: "#374151", fontFamily: "inherit" };
+                return (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+                    {/* Search */}
+                    <div style={{ position: "relative", flex: "1 1 180px", minWidth: 160 }}>
+                      <i className="bi bi-search" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 12, pointerEvents: "none" }} />
+                      <input
+                        value={searchF}
+                        onChange={e => setSearchF(e.target.value)}
+                        placeholder="Search task or brand…"
+                        style={{ ...fs, paddingLeft: 28, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    {/* Brand */}
+                    {allBrands.length > 0 && (
+                      <select value={brandF} onChange={e => setBrandF(e.target.value)} style={fs}>
+                        <option value="">All Brands</option>
+                        {allBrands.map(b => <option key={b._id} value={String(b._id)}>{b.name}</option>)}
+                      </select>
+                    )}
+                    {/* Content Type */}
+                    {allTypes.length > 0 && (
+                      <select value={typeF} onChange={e => setTypeF(e.target.value)} style={fs}>
+                        <option value="">All Types</option>
+                        {allTypes.map(tp => <option key={tp} value={tp} style={{ textTransform: "capitalize" }}>{tp}</option>)}
+                      </select>
+                    )}
+                    {/* Stage */}
+                    <select value={stageF} onChange={e => setStageF(e.target.value)} style={fs}>
+                      <option value="">All Stages</option>
+                      {STAGE_KEYS.map((k, i) => <option key={k} value={k}>{k} – {STAGE_NAMES[i]}</option>)}
+                    </select>
+                    {/* Employee */}
+                    {allEmps.length > 0 && (
+                      <select value={empF} onChange={e => setEmpF(e.target.value)} style={fs}>
+                        <option value="">All Employees</option>
+                        {allEmps.map(e => <option key={e._id} value={String(e._id)}>{e.firstName} {e.lastName}</option>)}
+                      </select>
+                    )}
+                    {/* Clear */}
+                    {hasFilter && (
+                      <button onClick={() => { setSearchF(""); setBrandF(""); setTypeF(""); setStageF(""); setEmpF(""); }}
+                        style={{ ...fs, background: "#FEF2F2", color: "#DC2626", border: "1.5px solid #FCA5A5", cursor: "pointer", whiteSpace: "nowrap" }}>
+                        <i className="bi bi-x-circle me-1" /> Clear
+                      </button>
+                    )}
+                    {/* Result count */}
+                    <span style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+                      {filteredItems.length} {hasFilter ? `of ${displayedItems.length}` : ""} item{filteredItems.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                );
+              })()}
+
               {/* Content */}
               {loading ? (
                 <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
                   <div className="spinner-border spinner-border-sm text-primary" /> Loading…
                 </div>
-              ) : displayedItems.length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid #F1F5F9", padding: "60px 40px", textAlign: "center", color: "#94A3B8" }}>
                   <i className="bi bi-check2-all" style={{ fontSize: 48, display: "block", marginBottom: 12 }} />
                   <div style={{ fontWeight: 700, color: "#1E293B", marginBottom: 4 }}>
-                    {statusTab === "pending" ? "All caught up!" : `No ${statusTab} items`}
+                    {hasFilter ? "No matching items" : statusTab === "pending" ? "All caught up!" : `No ${statusTab} items`}
                   </div>
                   <div style={{ fontSize: 13 }}>
-                    {statusTab === "pending" ? "No tasks are waiting for your approval" : `Nothing to show in this tab`}
+                    {hasFilter ? "Try adjusting your filters" : statusTab === "pending" ? "No tasks are waiting for your approval" : `Nothing to show in this tab`}
                   </div>
                 </div>
               ) : (
-                displayedItems.map(({ task: t, stageIdx, stg, type }) => {
+                filteredItems.map(({ task: t, stageIdx, stg, type }) => {
                   const key = stageIdx >= 0 ? `${t._id}_${stageIdx}` : t._id;
                   if (type === "stage") {
                     return (
@@ -891,7 +997,7 @@ function ApprovalCard({ task: t, stageIdx, stg, isOpen, onToggle, saving, onAppr
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />{STAGE_NAMES[stageIdx]}
             </span>
             {stg.doneAt && (
-              <span style={{ fontSize: 10, color: "#94A3B8" }}>Submitted {new Date(stg.doneAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+              <span style={{ fontSize: 10, color: "#94A3B8" }}>Submitted {new Date(stg.doneAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
             )}
           </div>
         </div>

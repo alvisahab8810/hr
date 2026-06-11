@@ -53,7 +53,7 @@ function renderText(text, mentions, searchTerm = "", isOwn = false) {
     if (/^https?:\/\//.test(part)) {
       return (
         <a key={i} href={part} target="_blank" rel="noreferrer"
-          style={{ color: linkColor, textDecoration: "underline", wordBreak: "break-all", cursor: "pointer" }}>
+          style={{ color: linkColor, textDecoration: "underline", wordBreak: "break-all", cursor: "pointer", pointerEvents: "auto" }}>
           {part}
         </a>
       );
@@ -273,10 +273,10 @@ export default function AdminCommunity() {
 
   // Initial load + polling
   useEffect(() => {
+    const markSeen = () => fetch("/api/team/community", { method: "PUT", credentials: "include" }).catch(() => {});
     loadMessages();
-    // Mark seen on open
-    fetch("/api/team/community", { method: "PUT", credentials: "include" }).catch(() => {});
-    pollRef.current = setInterval(() => loadMessages(), 10000);
+    markSeen();
+    pollRef.current = setInterval(() => { loadMessages(); markSeen(); }, 10000);
     return () => clearInterval(pollRef.current);
   }, [loadMessages]);
 
@@ -928,10 +928,7 @@ export default function AdminCommunity() {
                             const seenForMsg = getSeenForMessage(m);
                             const isLastMsg = String(m._id) === String(displayedMessages[lastMsgIdx]?._id);
                             const showSeen = isLastMsg && seenForMsg.length > 0 && !m.deleted;
-                            const seenNames = seenForMsg.map(s => {
-                              const emp = members.find(mb => String(mb._id) === s.userId) || employees.find(e => String(e._id) === s.userId);
-                              return emp?.name || "Someone";
-                            });
+                            const seenNames = seenForMsg.map(s => s.name || "Someone");
                             const empForMsg = !isOwn && (employees.find(x => x.name === m.senderName));
                             const avatar = empForMsg?.avatar;
                             return (
@@ -975,7 +972,20 @@ export default function AdminCommunity() {
                                             {m.attachments.map((a, i) => (
                                               a.type === "image"
                                                 ? <img key={i} src={a.url} alt={a.name} className="ac-img-thumb" onClick={() => window.open(a.url, "_blank")} />
-                                                : <a key={i} href={a.url} target="_blank" rel="noreferrer" className="ac-link-chip" style={isOwn ? { background:"rgba(255,255,255,.2)", color:"#fff" } : {}}><i className="bi bi-link-45deg" style={{ fontSize: 13 }} />{a.name}</a>
+                                                : <a key={i} href={a.url} target="_blank" rel="noreferrer"
+                                                    style={{
+                                                      display:"inline-flex", alignItems:"center", gap:6,
+                                                      padding:"5px 11px",
+                                                      background: isOwn ? "rgba(255,255,255,.2)" : "#EEF2FF",
+                                                      borderRadius:8, fontSize:12, fontWeight:600,
+                                                      color: isOwn ? "#fff" : "#4F46E5",
+                                                      textDecoration:"none", cursor:"pointer",
+                                                      pointerEvents:"auto",
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.textDecoration="underline"}
+                                                    onMouseLeave={e => e.currentTarget.style.textDecoration="none"}>
+                                                    <i className="bi bi-link-45deg" style={{ fontSize:13, pointerEvents:"none" }} />{a.name}
+                                                  </a>
                                             ))}
                                           </div>
                                         )}
