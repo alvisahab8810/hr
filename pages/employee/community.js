@@ -82,11 +82,39 @@ export default function EmployeeCommunity() {
   const [editingId, setEditingId] = useState(null);
   const [hoverMsgId, setHoverMsgId] = useState(null);
 
-  const bottomRef   = useRef(null);
-  const dmBottomRef = useRef(null);
-  const textareaRef = useRef(null);
-  const pollRef     = useRef(null);
-  const fileRef     = useRef(null);
+  const bottomRef    = useRef(null);
+  const dmBottomRef  = useRef(null);
+  const textareaRef  = useRef(null);
+  const pollRef      = useRef(null);
+  const fileRef      = useRef(null);
+  const audioRef     = useRef(null);
+  const lastMsgIdRef = useRef(null);
+  const initDoneRef  = useRef(false);
+  const lastDmIdRef  = useRef(null);
+  const dmInitRef    = useRef(false);
+
+  function playNotif() {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+  }
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/notification.mp3");
+    audioRef.current.volume = 0.6;
+    const unlock = () => {
+      if (!audioRef.current) return;
+      audioRef.current.play()
+        .then(() => { audioRef.current.pause(); audioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   useEffect(() => {
     const token = getToken();
@@ -108,12 +136,21 @@ export default function EmployeeCommunity() {
     if (!r) return;
     const d = await r.json();
     if (d.success) {
+      const msgs = d.messages || [];
       if (prepend) {
-        setMessages(prev => [...d.messages, ...prev]);
-        setHasMore(d.messages.length === 40);
+        setMessages(prev => [...msgs, ...prev]);
+        setHasMore(msgs.length === 40);
       } else {
-        setMessages(d.messages || []);
-        setHasMore((d.messages || []).length === 40);
+        if (initDoneRef.current && msgs.length > 0) {
+          const latestId = String(msgs[msgs.length - 1]._id);
+          if (lastMsgIdRef.current && latestId !== lastMsgIdRef.current) {
+            playNotif();
+          }
+        }
+        if (msgs.length > 0) lastMsgIdRef.current = String(msgs[msgs.length - 1]._id);
+        initDoneRef.current = true;
+        setMessages(msgs);
+        setHasMore(msgs.length === 40);
       }
     }
   }, []);
@@ -131,10 +168,24 @@ export default function EmployeeCommunity() {
     const r = await fetch("/api/employee/team-dm", { headers: authH() }).catch(() => null);
     if (!r) return;
     const d = await r.json();
-    if (d.success) { setDmMessages(d.messages || []); setHasDm(d.messages.length > 0); }
+    if (d.success) {
+      const msgs = d.messages || [];
+      if (dmInitRef.current && msgs.length > 0) {
+        const latestId = String(msgs[msgs.length - 1]._id);
+        if (lastDmIdRef.current && latestId !== lastDmIdRef.current) playNotif();
+      }
+      if (msgs.length > 0) lastDmIdRef.current = String(msgs[msgs.length - 1]._id);
+      dmInitRef.current = true;
+      setDmMessages(msgs);
+      setHasDm(msgs.length > 0);
+    }
   }, []);
 
-  useEffect(() => { loadDm(); }, [loadDm]);
+  useEffect(() => {
+    loadDm();
+    const dmPoll = setInterval(loadDm, 10000);
+    return () => clearInterval(dmPoll);
+  }, [loadDm]);
   useEffect(() => { dmBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [dmMessages.length]);
 
   function handleTextChange(e) {
@@ -231,6 +282,7 @@ export default function EmployeeCommunity() {
       const d = await r.json();
       if (d.success) {
         setMessages(prev => [...prev, d.message]);
+        lastMsgIdRef.current = String(d.message._id);
         setText(""); setAttachments([]); setPendingMentions([]); setReplyTo(null);
         fetch("/api/team/community", { method: "PUT", headers: authH() }).catch(() => {});
       } else setError(d.message || "Failed to send");

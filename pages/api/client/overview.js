@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       return curUnassigned && prevApproved;
     });
     const thisWeek   = allTasks.filter(t => t.dueDate && new Date(t.dueDate) >= startOfWeek && new Date(t.dueDate) <= endOfWeek && t.status !== "completed");
-    const delivered  = allTasks.filter(t => t.status === "completed" && t.postedAt && new Date(t.postedAt) >= startOfMonth);
+    const delivered  = allTasks.filter(t => (t.stages?.[3]?.done === true && t.stages?.[3]?.approved === true || !!t.postedAt) && new Date(t.updatedAt) >= startOfMonth);
     const inProgress = allTasks.filter(t => ["todo","in_progress"].includes(t.status));
 
     const statusCounts = {};
@@ -74,8 +74,8 @@ export default async function handler(req, res) {
     }
 
     const monthly = brand.monthlyDeliverables || {};
-    // Shipped = status completed OR S4 (posting stage) done OR postedAt set
-    const isShipped = t => t.status === "completed" || !!t.stages?.[3]?.done || !!t.postedAt;
+    // Shipped = S4 stage done AND approved by admin, OR postedAt explicitly set
+    const isShipped = t => (t.stages?.[3]?.done === true && t.stages?.[3]?.approved === true) || !!t.postedAt;
     const posted  = allTasks.filter(isShipped).length;
 
     // Strip token from brand before sending to client

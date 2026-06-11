@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { io } from "socket.io-client";
 
 function useNotif() {
   const [count, setCount] = useState(0);
@@ -34,10 +35,90 @@ function useNotif() {
   return { count, recent, commPath };
 }
 
+function useCommunitySound() {
+  const audioRef = useRef(null);
+
+  // Set up audio + autoplay unlock on first user gesture
+  useEffect(() => {
+    const audio = new Audio("/sounds/notification.mp3");
+    audio.volume = 0.6;
+    audioRef.current = audio;
+
+    const unlock = () => {
+      audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
+    };
+    document.addEventListener("click",   unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click",   unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  // Socket.IO real-time listener for instant notification (like Teams)
+  useEffect(() => {
+    // Request OS notification permission
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    // Detect own user ID to skip self-notification
+    const token = typeof window !== "undefined" ? localStorage.getItem("employeeToken") : null;
+    let ownId = null;
+    if (token) {
+      try {
+        const p = JSON.parse(atob(token.split(".")[1]));
+        ownId = p.id || p._id || p.sub;
+      } catch {}
+    }
+
+    let socket = null;
+    let cancelled = false;
+
+    // Init socket server then connect
+    fetch("/api/socket").finally(() => {
+      if (cancelled) return;
+      socket = io({ path: "/api/socket", transports: ["websocket", "polling"] });
+
+      socket.on("connect", () => console.log("[Dashnav] socket connected", socket.id));
+      socket.on("connect_error", (e) => console.error("[Dashnav] socket error", e.message));
+
+      socket.on("community:message", (msg) => {
+        console.log("[Dashnav] got community:message", msg);
+        // Skip own messages
+        if (ownId && String(msg.senderId) === String(ownId)) return;
+
+        // Play notification sound
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play().catch(() => {});
+        }
+
+        // OS notification (like Teams)
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          const n = new Notification(msg.senderName || "Team", {
+            body:      msg.text || "Sent a message in Community",
+            icon:      "/favicon.ico",
+            tag:       "community",
+            renotify:  true,
+          });
+          n.onclick = () => { window.focus(); };
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (socket) socket.disconnect();
+    };
+  }, []);
+}
+
 export default function Dashnav() {
   const router = useRouter();
   const { count: notifCount, recent, commPath } = useNotif();
   const [showBell, setShowBell] = useState(false);
+  useCommunitySound();
 
   return (
     <div className="main-nav dash-nav">

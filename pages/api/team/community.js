@@ -86,6 +86,20 @@ export default async function handler(req, res) {
       };
     }
     const msg = await TeamCommunityMessage.create(msgData);
+
+    // Broadcast to all connected clients via Socket.IO (real-time, no polling)
+    try {
+      if (global._io) {
+        global._io.emit("community:message", {
+          _id:        String(msg._id),
+          senderName: msg.senderName,
+          senderType: msg.senderType,
+          senderId:   String(msg.senderId),
+          text:       (msg.text || "").slice(0, 100),
+        });
+      }
+    } catch {}
+
     return res.status(201).json({ success: true, message: msg });
   }
 

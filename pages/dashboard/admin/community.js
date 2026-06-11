@@ -85,11 +85,39 @@ export default function AdminCommunity() {
   const [replyTo, setReplyTo]           = useState(null);
   const [editingId, setEditingId]       = useState(null);
 
-  const bottomRef   = useRef(null);
-  const dmBottomRef = useRef(null);
-  const textareaRef = useRef(null);
-  const fileRef     = useRef(null);
-  const pollRef     = useRef(null);
+  const bottomRef    = useRef(null);
+  const dmBottomRef  = useRef(null);
+  const textareaRef  = useRef(null);
+  const fileRef      = useRef(null);
+  const pollRef      = useRef(null);
+  const audioRef     = useRef(null);
+  const lastMsgIdRef = useRef(null);
+  const initDoneRef  = useRef(false);
+  const lastDmCountRef = useRef(0);
+
+  function playNotif() {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+  }
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/notification.mp3");
+    audioRef.current.volume = 0.6;
+    // Unlock audio on first user interaction (Chrome autoplay policy)
+    const unlock = () => {
+      if (!audioRef.current) return;
+      audioRef.current.play()
+        .then(() => { audioRef.current.pause(); audioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   // Community
   const loadMessages = useCallback(async (prepend = false, before = null) => {
@@ -98,8 +126,22 @@ export default function AdminCommunity() {
     if (!r) return;
     const d = await r.json();
     if (d.success) {
-      if (prepend) { setMessages(prev => [...d.messages, ...prev]); setHasMore(d.messages.length === 40); }
-      else { setMessages(d.messages || []); setHasMore((d.messages||[]).length === 40); }
+      const msgs = d.messages || [];
+      if (prepend) {
+        setMessages(prev => [...msgs, ...prev]);
+        setHasMore(msgs.length === 40);
+      } else {
+        if (initDoneRef.current && msgs.length > 0) {
+          const latestId = String(msgs[msgs.length - 1]._id);
+          if (lastMsgIdRef.current && latestId !== lastMsgIdRef.current) {
+            playNotif();
+          }
+        }
+        if (msgs.length > 0) lastMsgIdRef.current = String(msgs[msgs.length - 1]._id);
+        initDoneRef.current = true;
+        setMessages(msgs);
+        setHasMore(msgs.length === 40);
+      }
     }
   }, []);
 
@@ -118,15 +160,25 @@ export default function AdminCommunity() {
       .then(r => r.json()).then(d => { if (d.success) setMembers(d.members || []); });
   }, []);
 
-  // DM employees list
+  // DM employees list — polled to catch new incoming DMs
   const loadEmployees = useCallback(async () => {
     const r = await fetch("/api/admin/team-dm", { credentials: "include" }).catch(() => null);
     if (!r) return;
     const d = await r.json();
-    if (d.success) setEmployees(d.employees || []);
+    if (d.success) {
+      const emps = d.employees || [];
+      const totalUnread = emps.reduce((s, e) => s + (e.unread || 0), 0);
+      if (lastDmCountRef.current !== 0 && totalUnread > lastDmCountRef.current) playNotif();
+      lastDmCountRef.current = totalUnread;
+      setEmployees(emps);
+    }
   }, []);
 
-  useEffect(() => { loadEmployees(); }, [loadEmployees]);
+  useEffect(() => {
+    loadEmployees();
+    const dmPoll = setInterval(loadEmployees, 10000);
+    return () => clearInterval(dmPoll);
+  }, [loadEmployees]);
 
   // Load DM thread
   async function loadDmThread(emp) {
@@ -232,6 +284,7 @@ export default function AdminCommunity() {
       const d = await r.json();
       if (d.success) {
         setMessages(prev => [...prev, d.message]);
+        lastMsgIdRef.current = String(d.message._id);
         setText(""); setAttachments([]); setPendingMentions([]); setReplyTo(null);
         fetch("/api/team/community", { method: "PUT", credentials: "include" }).catch(() => {});
       } else setError(d.message || "Failed to send");

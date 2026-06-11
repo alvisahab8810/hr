@@ -53,7 +53,8 @@
       "Bash(node --input-type=module --eval \"import\\('./pages/dashboard/admin/tasks/projects.js'\\).catch\\(e => console.error\\(e.message\\)\\)\")",
       "Bash(node scripts/delete-tourwatchout-tasks.mjs)",
       "Bash(del \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\")",
-      "PowerShell(Remove-Item \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\" -Confirm:$false)"
+      "PowerShell(Remove-Item \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\" -Confirm:$false)",
+      "Bash(node -e \"require\\('socket.io-client'\\); console.log\\('ok'\\)\")"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

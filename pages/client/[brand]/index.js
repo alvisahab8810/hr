@@ -2209,8 +2209,8 @@ function SocialMediaView({ overview, brand, onRefresh, setView }) {
 
   const { pending = [], allTasks = [], instagram } = overview || {};
 
-  // Shipped = status completed OR S4 done OR postedAt set
-  const isShipped = t => t.status === "completed" || !!t.stages?.[3]?.done || !!t.postedAt;
+  // Shipped = S4 stage done AND approved by admin, OR postedAt explicitly set
+  const isShipped = t => (t.stages?.[3]?.done === true && t.stages?.[3]?.approved === true) || !!t.postedAt;
   // Task-based counts
   const posted    = allTasks.filter(t => isShipped(t) && t.contentType);
   const reels     = allTasks.filter(t => t.contentType === "reel"     && isShipped(t)).length;
@@ -3595,11 +3595,37 @@ function MessagesView({ brandSlug, client }) {
   const [callReqTab, setCallReqTab]       = useState("call");   // "call" | "meeting"
   const [meetingLinkInput, setMeetingLinkInput] = useState("");
   const [openMenu, setOpenMenu]               = useState(null); // _id of msg with open dropdown
-  const bottomRef    = useRef(null);
-  const pollRef      = useRef(null);
-  const crPollRef    = useRef(null);
-  const isNearBottom = useRef(true);
-  const textareaRef  = useRef(null);
+  const bottomRef     = useRef(null);
+  const pollRef       = useRef(null);
+  const crPollRef     = useRef(null);
+  const isNearBottom  = useRef(true);
+  const textareaRef   = useRef(null);
+  const audioRef      = useRef(null);
+  const lastMsgIdRef  = useRef(null);
+  const msgInitRef    = useRef(false);
+
+  function playNotif() {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+  }
+
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/notification.mp3");
+    audioRef.current.volume = 0.6;
+    const unlock = () => {
+      if (!audioRef.current) return;
+      audioRef.current.play()
+        .then(() => { audioRef.current.pause(); audioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   function handleThreadScroll(e) {
     const el = e.currentTarget;
@@ -3626,7 +3652,16 @@ function MessagesView({ brandSlug, client }) {
     try {
       const r = await fetch(`/api/client/messages?brand=${brandSlug}`);
       const d = await r.json();
-      if (d.success) setMessages(d.messages || []);
+      if (d.success) {
+        const msgs = d.messages || [];
+        if (msgInitRef.current && msgs.length > 0) {
+          const latestId = String(msgs[msgs.length - 1]._id);
+          if (lastMsgIdRef.current && latestId !== lastMsgIdRef.current) playNotif();
+        }
+        if (msgs.length > 0) lastMsgIdRef.current = String(msgs[msgs.length - 1]._id);
+        msgInitRef.current = true;
+        setMessages(msgs);
+      }
     } catch {}
   }
 
@@ -3664,6 +3699,7 @@ function MessagesView({ brandSlug, client }) {
         const d = await r.json();
         if (d.success) {
           setMessages(prev => [...prev, d.message]);
+          lastMsgIdRef.current = String(d.message._id);
           setText(""); setAttachments([]); setReplyTo(null);
         } else setError(d.message || "Failed to send");
       }
