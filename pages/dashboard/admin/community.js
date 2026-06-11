@@ -102,7 +102,7 @@ export default function AdminCommunity() {
   }
 
   useEffect(() => {
-    audioRef.current = new Audio("/sounds/notification.mp3");
+    audioRef.current = new Audio("/sounds/nortification.mp3");
     audioRef.current.volume = 0.6;
     // Unlock audio on first user interaction (Chrome autoplay policy)
     const unlock = () => {

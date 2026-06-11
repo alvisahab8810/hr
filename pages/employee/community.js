@@ -100,7 +100,7 @@ export default function EmployeeCommunity() {
   }
 
   useEffect(() => {
-    audioRef.current = new Audio("/sounds/notification.mp3");
+    audioRef.current = new Audio("/sounds/nortification.mp3");
     audioRef.current.volume = 0.6;
     const unlock = () => {
       if (!audioRef.current) return;
