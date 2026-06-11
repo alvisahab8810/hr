@@ -60,7 +60,19 @@ export default async function handler(req, res) {
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ success: true, messages: msgs.reverse() });
+
+    // Optionally include "seen by" data (who has seen up to what time)
+    let seenBy = null;
+    if (req.query.seen === "1") {
+      const allSeen = await TeamChatSeen.find({}).lean();
+      seenBy = allSeen.map(s => ({
+        userId:    String(s.userId),
+        userType:  s.userType,
+        lastSeenAt: s.lastSeenAt,
+      }));
+    }
+
+    return res.json({ success: true, messages: msgs.reverse(), ...(seenBy !== null ? { seenBy } : {}) });
   }
 
   /* ── POST ── */
@@ -132,6 +144,31 @@ export default async function handler(req, res) {
       msg.replyTo     = null;
       await msg.save();
       return res.json({ success: true, message: msg.toObject() });
+    }
+
+    if (action === "react") {
+      const { emoji } = req.body;
+      if (!emoji) return res.status(400).json({ success: false, message: "emoji required" });
+      const userId = actor.type === "admin" ? "admin" : String(actorObjectId);
+      if (!msg.reactions) msg.reactions = [];
+      const existing = msg.reactions.find(r => r.emoji === emoji);
+      if (existing) {
+        const idx = existing.userIds.indexOf(userId);
+        if (idx >= 0) {
+          existing.userIds.splice(idx, 1);
+          if (existing.userIds.length === 0) {
+            msg.reactions = msg.reactions.filter(r => r.emoji !== emoji);
+          }
+        } else {
+          existing.userIds.push(userId);
+        }
+      } else {
+        msg.reactions.push({ emoji, userIds: [userId] });
+      }
+      msg.markModified("reactions");
+      await msg.save();
+      const saved = await TeamCommunityMessage.findById(msg._id).lean();
+      return res.json({ success: true, message: saved });
     }
 
     if (action === "deleteForMe") {

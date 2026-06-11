@@ -18,6 +18,11 @@ const ReplyToSchema = new mongoose.Schema({
   text:       { type: String },
 }, { _id: false });
 
+const ReactionSchema = new mongoose.Schema({
+  emoji:   { type: String, required: true },
+  userIds: { type: [String], default: [] },
+}, { _id: false });
+
 const TeamCommunityMessageSchema = new mongoose.Schema({
   senderId:   { type: mongoose.Schema.Types.ObjectId, required: true },
   senderType: { type: String, enum: ["employee", "admin"], required: true },
@@ -30,6 +35,7 @@ const TeamCommunityMessageSchema = new mongoose.Schema({
   edited:      { type: Boolean, default: false },
   deleted:     { type: Boolean, default: false },
   deletedFor:  { type: [String], default: [] },
+  reactions:   { type: [ReactionSchema], default: [] },
 }, { timestamps: true });
 
 TeamCommunityMessageSchema.index({ createdAt: -1 });
