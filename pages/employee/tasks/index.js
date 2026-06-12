@@ -637,12 +637,34 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
                       </td>
                       <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
                       {(() => {
-                        const dl  = myStage?.deadline ? new Date(myStage.deadline) : getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
-                        const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
+                        const dl = myStage?.deadline ? new Date(myStage.deadline) : getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
+                        const doneOrApproved = myStatusKey === "approved" || !!myStage?.approved || !!myStage?.done;
+                        const submittedOnTime = doneOrApproved && (!submittedAt || !dl || new Date(submittedAt) <= dl);
+                        const showLate = dl ? isOverdue(dl) && !submittedOnTime : false;
+
+                        let lateText = "";
+                        if (!submittedOnTime && doneOrApproved && submittedAt && dl) {
+                          const lateMs = new Date(submittedAt) - dl;
+                          if (lateMs > 0) {
+                            if (lateMs < 3600000) {
+                              lateText = `${Math.ceil(lateMs / 60000)}m late`;
+                            } else if (lateMs < 86400000) {
+                              const h = Math.floor(lateMs / 3600000);
+                              const m = Math.round((lateMs % 3600000) / 60000);
+                              lateText = m > 0 ? `${h}h ${m}m late` : `${h}h late`;
+                            } else {
+                              const days = Math.floor(lateMs / 86400000);
+                              lateText = days === 1 ? "1d late" : `${days}d late`;
+                            }
+                          }
+                        }
+
                         return (
-                          <td style={{ padding: "13px 14px", fontSize: 11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
-                            {od && <i className="bi bi-exclamation-circle-fill me-1" />}
-                            {od && <span style={{ background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", marginRight: 5 }}>LATE</span>}
+                          <td style={{ padding: "13px 14px", fontSize: 11, color: showLate ? "#DC2626" : "#374151", fontWeight: showLate ? 700 : 400, whiteSpace: "nowrap" }}>
+                            {showLate && (
+                              <span style={{ background: doneOrApproved ? "#EF444422" : "#EF4444", color: doneOrApproved ? "#EF4444" : "#fff", fontSize: 9, fontWeight: 800, borderRadius: 20, padding: "1px 6px", marginRight: 5 }}>LATE</span>
+                            )}
+                            {lateText && <span style={{ marginRight: 4 }}>{lateText}</span>}
                             {dl ? fmtDT(dl) : "—"}
                           </td>
                         );
@@ -684,7 +706,10 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
 function ContentEditorTab({ tasks, initialTask, onBack }) {
   const scriptTasks = tasks.filter(t => t.taskType === "production" || t.stage);
   const [task,     setTask]     = useState(initialTask || scriptTasks[0] || null);
-  const [pillar,   setPillar]   = useState("");
+  const [pillar,        setPillar]        = useState("");
+  const [customPillars, setCustomPillars] = useState(() => { try { return JSON.parse(localStorage.getItem("ep_custom_pillars") || "[]"); } catch { return []; } });
+  const [addingPillar,  setAddingPillar]  = useState(false);
+  const [newPillarText, setNewPillarText] = useState("");
   const [refLink,  setRefLink]  = useState("");
   const [script,   setScript]   = useState("");
   const [caption,  setCaption]  = useState("");
@@ -996,10 +1021,60 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
           {/* Content Pillar */}
           <div className="tms-card" style={lockedStyle}>
             <label style={lblStyle}>Content Pillar</label>
-            <select value={pillar} onChange={e => setPillar(e.target.value)} disabled={isLocked} style={{ ...inpStyle, resize: "none", cursor: isLocked ? "default" : "pointer" }}>
+            <select value={addingPillar ? "__add__" : pillar}
+              onChange={e => {
+                if (e.target.value === "__add__") { setAddingPillar(true); setNewPillarText(""); }
+                else { setAddingPillar(false); setPillar(e.target.value); }
+              }}
+              disabled={isLocked}
+              style={{ ...inpStyle, resize: "none", cursor: isLocked ? "default" : "pointer" }}>
               <option value="">Select a pillar…</option>
-              {PILLAR_OPTS.map(p => <option key={p} value={p}>{p}</option>)}
+              {[...PILLAR_OPTS, ...customPillars].map(p => <option key={p} value={p}>{p}</option>)}
+              <option value="__add__">+ Add new pillar…</option>
             </select>
+            {addingPillar && !isLocked && (
+              <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newPillarText}
+                  onChange={e => setNewPillarText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && newPillarText.trim()) {
+                      const val = newPillarText.trim();
+                      if (![...PILLAR_OPTS, ...customPillars].includes(val)) {
+                        const updated = [...customPillars, val];
+                        setCustomPillars(updated);
+                        localStorage.setItem("ep_custom_pillars", JSON.stringify(updated));
+                      }
+                      setPillar(val); setAddingPillar(false); setNewPillarText("");
+                    }
+                    if (e.key === "Escape") { setAddingPillar(false); setNewPillarText(""); }
+                  }}
+                  placeholder="Type new pillar name…"
+                  style={{ ...inpStyle, flex:1, marginBottom:0 }}
+                />
+                <button
+                  onClick={() => {
+                    const val = newPillarText.trim();
+                    if (!val) return;
+                    if (![...PILLAR_OPTS, ...customPillars].includes(val)) {
+                      const updated = [...customPillars, val];
+                      setCustomPillars(updated);
+                      localStorage.setItem("ep_custom_pillars", JSON.stringify(updated));
+                    }
+                    setPillar(val); setAddingPillar(false); setNewPillarText("");
+                  }}
+                  style={{ padding:"8px 14px", borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                  Add
+                </button>
+                <button
+                  onClick={() => { setAddingPillar(false); setNewPillarText(""); }}
+                  style={{ padding:"8px 10px", borderRadius:8, border:"1px solid #e2e8f0", background:"#f8fafc", color:"#64748b", fontSize:12, cursor:"pointer" }}>
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Reference Link */}
@@ -4507,7 +4582,7 @@ function PortalGradesView({ tasks, loading }) {
       <div style={{ background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:16, overflow:"hidden", marginBottom:18, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
         {/* Header */}
         <div style={{ background:"linear-gradient(135deg,#1e1b4b 0%,#4F46E5 100%)", padding:"16px 24px", textAlign:"center" }}>
-          <div style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,.7)", letterSpacing:"0.15em", textTransform:"uppercase" }}>Deep Performance Card</div>
+          <div style={{ fontSize:12, fontWeight:800, color:"rgba(255,255,255,.7)", letterSpacing:"0.15em", textTransform:"uppercase" }}>Performance Card</div>
           <div style={{ fontSize:13, color:"rgba(255,255,255,.5)", marginTop:2 }}>{MONTHS[selMonth]} {selYear} · Task Report</div>
         </div>
 

@@ -396,9 +396,23 @@ function RequestTaskView({ brand, client, setView }) {
     priority: "medium",
     referenceLinks: [""],
   });
-  const [sent, setSent]     = useState(null); // the submitted request
+  const [sent, setSent]       = useState(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors]   = useState({});
+  const submitAudioRef        = useRef(null);
+
+  useEffect(() => {
+    submitAudioRef.current = new Audio("/sounds/client-music-sound.mp3");
+    submitAudioRef.current.volume = 0.7;
+    const unlock = () => {
+      if (!submitAudioRef.current) return;
+      submitAudioRef.current.play()
+        .then(() => { submitAudioRef.current.pause(); submitAudioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    return () => document.removeEventListener("click", unlock);
+  }, []);
 
   function addLink() { setForm(p => ({ ...p, referenceLinks: [...p.referenceLinks, ""] })); }
   function setLink(i, v) {
@@ -433,8 +447,13 @@ function RequestTaskView({ brand, client, setView }) {
         }),
       });
       const d = await r.json();
-      if (d.success) setSent(d.request);
-      else alert(d.message || "Failed to submit request");
+      if (d.success) {
+        if (submitAudioRef.current) {
+          submitAudioRef.current.currentTime = 0;
+          submitAudioRef.current.play().catch(() => {});
+        }
+        setSent(d.request);
+      } else { alert(d.message || "Failed to submit request"); }
     } finally { setLoading(false); }
   }
 
@@ -674,14 +693,62 @@ function MyRequestsView({ brand, setView }) {
   const [requests, setRequests]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [selected, setSelected]   = useState(null);
+  const [statusF,   setStatusF]   = useState("");
+  const [serviceF,  setServiceF]  = useState("");
+  const [priorityF, setPriorityF] = useState("");
+  const [searchF,   setSearchF]   = useState("");
+  const reqAudioRef    = useRef(null);
+  const prevStatusMap  = useRef({});
+  const reqPollRef     = useRef(null);
+  const reqInitRef     = useRef(false);
+
+  function playReqNotif() {
+    if (!reqAudioRef.current) return;
+    reqAudioRef.current.currentTime = 0;
+    reqAudioRef.current.play().catch(() => {});
+  }
 
   useEffect(() => {
+    reqAudioRef.current = new Audio("/sounds/client-music-sound.mp3");
+    reqAudioRef.current.volume = 0.7;
+    const unlock = () => {
+      if (!reqAudioRef.current) return;
+      reqAudioRef.current.play()
+        .then(() => { reqAudioRef.current.pause(); reqAudioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    return () => document.removeEventListener("click", unlock);
+  }, []);
+
+  function loadRequests(init = false) {
     if (!brand?.slug) return;
     fetch(`/api/client/requests?brandSlug=${brand.slug}`)
       .then(r => r.json())
-      .then(d => { if (d.success) setRequests(d.requests); })
+      .then(d => {
+        if (!d.success) return;
+        const reqs = d.requests || [];
+        if (!init) {
+          reqs.forEach(req => {
+            const prev = prevStatusMap.current[req._id];
+            if (prev && prev === "pending" && req.status !== "pending") {
+              playReqNotif();
+            }
+          });
+        }
+        prevStatusMap.current = Object.fromEntries(reqs.map(r => [r._id, r.status]));
+        setRequests(reqs);
+      })
       .finally(() => setLoading(false));
-  }, [brand]);
+  }
+
+  useEffect(() => {
+    if (!brand?.slug) return;
+    loadRequests(true);
+    reqPollRef.current = setInterval(() => loadRequests(false), 15000);
+    return () => clearInterval(reqPollRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand?.slug]);
 
   if (loading) return <div className="cp-loading"><div className="cp-spinner" /></div>;
 
@@ -694,23 +761,41 @@ function MyRequestsView({ brand, setView }) {
   const STATUS_ICON   = { pending: "bi-hourglass-split", in_scope: "bi-check-circle-fill", out_of_scope: "bi-x-circle-fill" };
   const PRIORITY_ICON = { low: "bi-arrow-down", medium: "bi-dash", high: "bi-arrow-up", urgent: "bi-lightning-fill" };
 
+  const allServices = [...new Set(requests.map(r => r.contentType).filter(Boolean))];
+  const hasFilter   = !!(statusF || serviceF || priorityF || searchF.trim());
+  const filteredReqs = requests.filter(r => {
+    if (statusF   && r.status      !== statusF)  return false;
+    if (serviceF  && r.contentType !== serviceF) return false;
+    if (priorityF && r.priority    !== priorityF) return false;
+    if (searchF.trim()) {
+      const q = searchF.trim().toLowerCase();
+      if (!(r.title||"").toLowerCase().includes(q) && !(r.brief||"").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   return (
     <div>
       {/* ── Page header ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 16 }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 900, color: "#0F172A", letterSpacing: "-0.4px" }}>My Requests</div>
-          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+          {/* Clickable stat chips */}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             {[
-              { label: "Total",        val: total,   bg: "#F1F5F9", color: "#475569" },
-              { label: "Under Review", val: pending, bg: "#EEF2FF", color: "#4F46E5" },
-              { label: "In Scope",     val: inScope, bg: "#DCFCE7", color: "#15803D" },
-              { label: "Out of Scope", val: outScope,bg: "#FFF1F2", color: "#BE123C" },
+              { label: "Total",        val: total,   bg: "#F1F5F9", color: "#475569",  abg: "#E2E8F0",  f: "" },
+              { label: "Under Review", val: pending, bg: "#EEF2FF", color: "#4F46E5",  abg: "#C7D2FE",  f: "pending" },
+              { label: "In Scope",     val: inScope, bg: "#DCFCE7", color: "#15803D",  abg: "#BBF7D0",  f: "in_scope" },
+              { label: "Out of Scope", val: outScope,bg: "#FFF1F2", color: "#BE123C",  abg: "#FECDD3",  f: "out_of_scope" },
             ].map(s => (
-              <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 20, background: s.bg }}>
+              <button key={s.label} onClick={() => setStatusF(statusF === s.f ? "" : s.f)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 13px", borderRadius: 20,
+                  background: statusF === s.f ? s.abg : s.bg,
+                  border: `1.5px solid ${statusF === s.f ? s.color+"60" : "transparent"}`,
+                  cursor: "pointer", fontFamily: "inherit" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: s.color }}>{s.val}</span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: s.color, opacity: .75 }}>{s.label}</span>
-              </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: s.color, opacity: .8 }}>{s.label}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -725,6 +810,43 @@ function MyRequestsView({ brand, setView }) {
           <i className="bi bi-plus-lg" /> New Request
         </button>
       </div>
+
+      {/* Filter bar */}
+      {requests.length > 0 && (() => {
+        const fs = { padding: "7px 11px", border: "1.5px solid #E9EEF4", borderRadius: 8, fontSize: 12.5, outline: "none", cursor: "pointer", background: "#fff", color: "#374151", fontFamily: "inherit" };
+        return (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+            {/* Search */}
+            <div style={{ position: "relative", flex: "1 1 160px", minWidth: 140 }}>
+              <i className="bi bi-search" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "#CBD5E1", fontSize: 11, pointerEvents: "none" }} />
+              <input value={searchF} onChange={e => setSearchF(e.target.value)} placeholder="Search requests…"
+                style={{ ...fs, paddingLeft: 27, width: "100%", boxSizing: "border-box" }} />
+            </div>
+            {/* Service */}
+            {allServices.length > 1 && (
+              <select value={serviceF} onChange={e => setServiceF(e.target.value)} style={fs}>
+                <option value="">All Services</option>
+                {allServices.map(s => <option key={s} value={s}>{SERVICE_META[s]?.label || s}</option>)}
+              </select>
+            )}
+            {/* Priority */}
+            <select value={priorityF} onChange={e => setPriorityF(e.target.value)} style={fs}>
+              <option value="">All Priorities</option>
+              {["low","medium","high","urgent"].map(p => <option key={p} value={p} style={{ textTransform:"capitalize" }}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
+            </select>
+            {/* Clear */}
+            {hasFilter && (
+              <button onClick={() => { setSearchF(""); setServiceF(""); setPriorityF(""); setStatusF(""); }}
+                style={{ ...fs, background: "#FFF1F2", color: "#BE123C", border: "1.5px solid #FECDD3", whiteSpace: "nowrap" }}>
+                <i className="bi bi-x-circle me-1" /> Clear
+              </button>
+            )}
+            <span style={{ marginLeft: "auto", fontSize: 11.5, color: "#B0BAC9", whiteSpace: "nowrap" }}>
+              {filteredReqs.length}{hasFilter ? ` of ${total}` : ""} request{filteredReqs.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        );
+      })()}
 
       {requests.length === 0 ? (
         <div style={{
@@ -744,9 +866,15 @@ function MyRequestsView({ brand, setView }) {
             fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
           }}>Submit your first request</button>
         </div>
+      ) : filteredReqs.length === 0 ? (
+        <div style={{ background: "#fff", border: "1.5px solid #E2E8F0", borderRadius: 16, padding: "48px 32px", textAlign: "center" }}>
+          <i className="bi bi-funnel" style={{ fontSize: 32, color: "#CBD5E1", display: "block", marginBottom: 10 }} />
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8" }}>No matching requests</div>
+          <div style={{ fontSize: 12, color: "#B0BAC9", marginTop: 4 }}>Try adjusting your filters</div>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {requests.map(req => {
+          {filteredReqs.map(req => {
             const sm      = REQ_STATUS_META[req.status] || REQ_STATUS_META.pending;
             const pm      = PRIORITY_COLORS[req.priority] || PRIORITY_COLORS.medium;
             const svcMeta = SERVICE_META[req.contentType];
@@ -3611,8 +3739,8 @@ function MessagesView({ brandSlug, client }) {
   }
 
   useEffect(() => {
-    audioRef.current = new Audio("/sounds/nortification.mp3");
-    audioRef.current.volume = 0.6;
+    audioRef.current = new Audio("/sounds/client-music-sound.mp3");
+    audioRef.current.volume = 0.7;
     const unlock = () => {
       if (!audioRef.current) return;
       audioRef.current.play()

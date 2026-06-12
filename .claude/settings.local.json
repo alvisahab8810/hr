@@ -56,11 +56,16 @@
       "PowerShell(Remove-Item \"d:\\\\viralon-payroll\\\\scripts\\\\delete-tourwatchout-tasks.mjs\" -Confirm:$false)",
       "Bash(node -e \"require\\('socket.io-client'\\); console.log\\('ok'\\)\")",
       "Bash(node -e \"require\\('fs'\\).readFileSync\\('pages/employee/tasks/index.js', 'utf8'\\); console.log\\('file readable, size:', require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\).size\\)\")",
-      "Bash(node -e \"const s=require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\); console.log\\('size:', s.size, 'bytes'\\)\")"
+      "Bash(node -e \"const s=require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\); console.log\\('size:', s.size, 'bytes'\\)\")",
+      "Bash(New-Item -ItemType File -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\" -Force)",
+      "Bash(Get-Item \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\")",
+      "PowerShell(New-Item -ItemType File -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\" -Force)"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",
-      "d:\\viralon-payroll\\pages\\api\\admin\\clients"
+      "d:\\viralon-payroll\\pages\\api\\admin\\clients",
+      "d:\\viralon-payroll\\pages\\api\\client\\requests\\[id]",
+      "d:\\viralon-payroll\\pages\\api\\employee\\client-requests"
     ]
   }
 }

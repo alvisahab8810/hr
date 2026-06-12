@@ -333,6 +333,15 @@ export default function EmployeeLeftbar() {
                           )}
                         </Link>
                       </li>
+                      <li style={{ listStyle:"none" }} className={pathname === "/employee/client-requests" ? "active" : ""}>
+                        <Link href="/employee/client-requests" className="waves-effect waves-block"
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px" }}>
+                          <span style={{ width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <i className="bi bi-inbox-fill" style={{ fontSize:15, color: pathname === "/employee/client-requests" ? "#818CF8" : "rgba(0,0,0,0.55)" }} />
+                          </span>
+                          <span style={{ flex:1 }}>Client Requests</span>
+                        </Link>
+                      </li>
                     </>
                   )}
                 </>

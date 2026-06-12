@@ -18,7 +18,8 @@ const NAV = [
   { href: "/employee/salary-slips",       icon: "bi-cash-stack",           label: "Salary Slips",    section: null },
   // ── Social
   { href: "/employee/community",          icon: "bi-people-fill",          label: "Community",       section: "Social" },
-  { href: "/employee/messages",           icon: "bi-chat-dots-fill",       label: "Client Messages", section: null },
+  { href: "/employee/messages",           icon: "bi-chat-dots-fill",       label: "Client Messages", section: null,  dmOnly: true },
+  { href: "/employee/client-requests",    icon: "bi-inbox-fill",           label: "Client Requests", section: null,  dmOnly: true },
   // ── Account
   { href: "/employee/profile",            icon: "bi-person-circle",        label: "My Profile",      section: "Account" },
   { href: "/employee/complete-profile",   icon: "bi-folder2-open",         label: "Documents",       section: null },
@@ -326,7 +327,7 @@ export default function EmployeeLeftbarMobile() {
 
         {/* Navigation links */}
         <nav style={{ flex:1, padding:"10px 8px 8px" }}>
-          {NAV.filter(item => item.href !== "/employee/messages" || isDmDept).map((item, idx) => {
+          {NAV.filter(item => !item.dmOnly || isDmDept).map((item, idx) => {
             const active = pathname === item.href || (item.href === "/employee/tasks" && pathname?.startsWith("/employee/tasks"));
             return (
               <div key={item.href}>

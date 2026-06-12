@@ -75,14 +75,41 @@ export default function EmployeeMessages() {
   const [meId, setMeId]                   = useState(null);
   const [replyTo, setReplyTo]             = useState(null);
   const [editingId, setEditingId]         = useState(null);
-  const bottomRef    = useRef(null);
-  const pollRef      = useRef(null);
-  const isNearBottom = useRef(true);
-  const textareaRef  = useRef(null);
+  const bottomRef     = useRef(null);
+  const pollRef       = useRef(null);
+  const isNearBottom  = useRef(true);
+  const textareaRef   = useRef(null);
+  const audioRef      = useRef(null);
+  const lastMsgIdRef  = useRef(null);
+  const msgInitRef    = useRef(false);
 
   function handleThreadScroll(e) {
     const el = e.currentTarget;
     isNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
+  // Audio setup — unlock on first interaction, use client-music-sound.mp3
+  useEffect(() => {
+    audioRef.current = new Audio("/sounds/client-music-sound.mp3");
+    audioRef.current.volume = 0.7;
+    const unlock = () => {
+      if (!audioRef.current) return;
+      audioRef.current.play()
+        .then(() => { audioRef.current.pause(); audioRef.current.currentTime = 0; })
+        .catch(() => {});
+    };
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  function playNotif() {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
   }
 
   useEffect(() => {
@@ -156,7 +183,20 @@ export default function EmployeeMessages() {
     const r = await fetch(`/api/employee/client-messages/${brandId}`, { headers: authH() }).catch(() => null);
     if (!r) return;
     const d = await r.json();
-    if (d.success) setMessages(d.messages || []);
+    if (!d.success) return;
+    const msgs = d.messages || [];
+    const lastId = msgs.length > 0 ? String(msgs[msgs.length - 1]._id) : null;
+    const lastSenderRole = msgs.length > 0 ? msgs[msgs.length - 1].senderRole : null;
+    if (!msgInitRef.current) {
+      msgInitRef.current = true;
+      lastMsgIdRef.current = lastId;
+    } else if (lastId && lastId !== lastMsgIdRef.current && lastSenderRole === "client") {
+      lastMsgIdRef.current = lastId;
+      playNotif();
+    } else if (lastId) {
+      lastMsgIdRef.current = lastId;
+    }
+    setMessages(msgs);
   }
 
   useEffect(() => {
