@@ -637,7 +637,7 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
                       </td>
                       <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
                       {(() => {
-                        const dl  = getStageDeadline(t);
+                        const dl  = myStage?.deadline ? new Date(myStage.deadline) : getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
                         const od  = dl ? isOverdue(dl) && t.status !== "completed" : false;
                         return (
                           <td style={{ padding: "13px 14px", fontSize: 11, color: od ? "#DC2626" : "#374151", fontWeight: od ? 700 : 400, whiteSpace: "nowrap" }}>
@@ -754,11 +754,10 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
       });
 
       if (isProduction) {
-        // Step 2: Mark S1 stage as done via stage-submit so it appears in the approvals queue
-        const stageKey = task.stage || "S1";
+        // Step 2: Mark S1 stage as done — Content Editor is always S1 (Script/Concept)
         const r = await fetch("/api/employee/stage-submit", {
           method: "POST", headers: authH(),
-          body: JSON.stringify({ taskId: task._id, proofUrl: "", notes: "", stageKey }),
+          body: JSON.stringify({ taskId: task._id, proofUrl: "", notes: "", stageKey: "S1" }),
         });
         const d = await r.json();
         if (d.success) {
@@ -1079,23 +1078,25 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
             const isUnderReview = s1Pending || (!!s0?.done && task.status === "review");
             const isApproved = s1Approved || task.status === "completed";
             const isRejected = task.status === "blocked" || (s0?.rejected && !s0?.done);
-            const lockDraft  = saving || isUnderReview || isApproved;
-            const lockSubmit = submitting || isUnderReview || isApproved;
+            // editWindowOpen overrides approval lock — let Sakshi add missing content on approved tasks
+            const saveContentMode = editWindowOpen && isApproved;
+            const lockDraft  = saving || isUnderReview || (isApproved && !editWindowOpen);
+            const lockSubmit = submitting || isUnderReview || (isApproved && !saveContentMode);
             return (
               <div className="tms-card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <button onClick={() => saveTask(false)} disabled={lockDraft}
                   style={{ width: "100%", padding: "11px 18px", borderRadius: 9, background: "#F3F4F6", color: "#374151", border: "1.5px solid #E5E7EB", fontSize: 14, fontWeight: 700, cursor: lockDraft ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: lockDraft ? 0.5 : 1 }}>
                   <i className="bi bi-floppy" />{saving ? "Saving…" : "Save Draft"}
                 </button>
-                <button onClick={submitForReview} disabled={lockSubmit}
+                <button onClick={saveContentMode ? () => saveTask(false) : submitForReview} disabled={lockSubmit}
                   style={{
                     width: "100%", padding: "11px 18px", borderRadius: 9, border: "none", fontSize: 14, fontWeight: 700,
                     cursor: lockSubmit ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: submitting ? 0.7 : 1,
-                    background: isUnderReview ? "#FFFBEB" : isApproved ? "#F0FDF4" : "#7C3AED",
-                    color:      isUnderReview ? "#B45309" : isApproved ? "#16A34A" : "#fff",
+                    background: saveContentMode ? "#7C3AED" : isUnderReview ? "#FFFBEB" : isApproved ? "#F0FDF4" : "#7C3AED",
+                    color:      saveContentMode ? "#fff"    : isUnderReview ? "#B45309" : isApproved ? "#16A34A" : "#fff",
                   }}>
-                  <i className={`bi ${isUnderReview ? "bi-hourglass-split" : isApproved ? "bi-check-circle-fill" : isRejected ? "bi-send-fill" : "bi-send"}`} />
-                  {submitting ? "Submitting…" : isUnderReview ? "Under Review" : isApproved ? "Approved ✓" : isRejected ? "Resubmit for Review" : "Submit for Review"}
+                  <i className={`bi ${saveContentMode ? "bi-floppy2-fill" : isUnderReview ? "bi-hourglass-split" : isApproved ? "bi-check-circle-fill" : isRejected ? "bi-send-fill" : "bi-send"}`} />
+                  {saving ? "Saving…" : saveContentMode ? "Save Content" : isUnderReview ? "Under Review" : isApproved ? "Approved ✓" : isRejected ? "Resubmit for Review" : "Submit for Review"}
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "#9CA3AF", justifyContent: "center" }}>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: lastSaved ? "#22c55e" : "#D1D5DB" }} />
@@ -3440,8 +3441,51 @@ function TaskViewModal({ task, onClose, onSubmit }) {
 
         <div style={{ padding:20, display:"flex", flexDirection:"column", gap:12 }}>
           {isProduction ? (
-            stageRows.length > 0 ? stageRows
-              : <div style={{ textAlign:"center", padding:"24px 0", color:"#94a3b8" }}>No submissions yet.</div>
+            <>
+              {/* ── S1 Script / Concept card ── */}
+              {(task.caption || task.pillar || task.referenceLink) && (
+                <div style={{ border:"1.5px solid #7C3AED44", borderRadius:10, overflow:"hidden" }}>
+                  <div style={{ padding:"8px 12px", background:"#7C3AED12", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:"#7C3AED" }}>
+                      <i className="bi bi-pencil-square" style={{ marginRight:5 }} />S1 · Script / Concept
+                    </span>
+                    {task.stages?.[0]?.approved
+                      ? <span style={{ fontSize:10, color:"#16a34a", fontWeight:700 }}>✓ Approved</span>
+                      : task.stages?.[0]?.done
+                        ? <span style={{ fontSize:10, color:"#b45309", fontWeight:700 }}>⏳ Pending Review</span>
+                        : null}
+                  </div>
+                  <div style={{ padding:"10px 12px", background:"#FAF5FF", display:"flex", flexDirection:"column", gap:8 }}>
+                    {task.pillar && (
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:.4, marginBottom:3 }}>Pillar</div>
+                        <div style={{ fontSize:12, color:"#374151", fontWeight:500 }}>{task.pillar}</div>
+                      </div>
+                    )}
+                    {task.caption && (
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:.4, marginBottom:3 }}>Script / Caption</div>
+                        <div style={{ fontSize:12, color:"#1e293b", lineHeight:1.7, whiteSpace:"pre-wrap", background:"#fff", borderRadius:7, padding:"10px 12px", border:"1px solid #e9d5ff", maxHeight:220, overflowY:"auto" }}>{task.caption}</div>
+                      </div>
+                    )}
+                    {task.referenceLink && (
+                      <div>
+                        <div style={{ fontSize:10, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:.4, marginBottom:3 }}>Reference Link</div>
+                        <a href={task.referenceLink} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize:11.5, color:"#7C3AED", wordBreak:"break-all", textDecoration:"underline" }}>
+                          {task.referenceLink}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* ── Previous stage submissions ── */}
+              {stageRows.length > 0 ? stageRows
+                : !(task.caption || task.pillar || task.referenceLink) && (
+                  <div style={{ textAlign:"center", padding:"24px 0", color:"#94a3b8" }}>No submissions yet.</div>
+                )}
+            </>
           ) : (
             <>
               {task.description && (
@@ -3655,9 +3699,13 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const myStageIdx = empId && isProduction
     ? (task.stages||[]).findIndex(s => toArr(s.assignedTo).some(a => String(a?._id||a||"") === String(empId)))
     : -1;
-  const myStage       = myStageIdx >= 0 ? task.stages[myStageIdx] : null;
+  const myStage        = myStageIdx >= 0 ? task.stages[myStageIdx] : null;
   const submitStageKey = myStageIdx >= 0 ? stagesArr[myStageIdx] : (task.stage || "S1");
   const submitStageNum = myStageIdx >= 0 ? myStageIdx + 1 : (STAGE_NUM[task.stage] || "");
+  // For production: use the employee's stage doneAt only — never task.submittedAt which may be set by another stage
+  const effectiveStageIdx = myStageIdx >= 0 ? myStageIdx : stagesArr.indexOf(submitStageKey);
+  const effectiveStage    = effectiveStageIdx >= 0 ? (task.stages?.[effectiveStageIdx] || null) : null;
+  const submittedAt       = isProduction ? (effectiveStage?.doneAt || null) : (task.submittedAt || null);
 
   const deadlineSrc = (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline : task.dueDate;
   const dl = getDeadlineInfo({ ...task, dueDate: deadlineSrc });
@@ -3724,10 +3772,55 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
       <td style={{ ...td, whiteSpace:"nowrap" }}>
         {dl ? (
           <div>
-            <div style={{ fontSize:11.5, color: (isDone||isApproved) ? "#94a3b8" : dl.color, fontWeight:dl.urgent && !isDone && !isApproved ? 700 : 400 }}>{dl.text}</div>
-            {dl.sub && <div style={{ fontSize:10, color:"#94a3b8" }}>{dl.sub}</div>}
+            <div style={{ display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
+              {(() => {
+                const done = isDone || isApproved;
+                // On time = done AND (no submittedAt OR submitted before/at deadline)
+                const submittedOnTime = done &&
+                  (!submittedAt || !deadlineSrc || new Date(submittedAt) <= new Date(deadlineSrc));
+                const showLate = dl.urgent && !submittedOnTime;
+
+                // For done late tasks: show exact late duration (hours/minutes or days)
+                let displayText = dl.text;
+                if (showLate && done && submittedAt && deadlineSrc) {
+                  const lateMs = new Date(submittedAt) - new Date(deadlineSrc);
+                  if (lateMs < 3600000) {
+                    const mins = Math.ceil(lateMs / 60000);
+                    displayText = `${mins}m late`;
+                  } else if (lateMs < 86400000) {
+                    const totalMins = Math.round(lateMs / 60000);
+                    const h = Math.floor(totalMins / 60);
+                    const m = totalMins % 60;
+                    displayText = m > 0 ? `${h}h ${m}m late` : `${h}h late`;
+                  } else {
+                    const days = Math.floor(lateMs / 86400000);
+                    displayText = days === 1 ? "1d late" : `${days}d late`;
+                  }
+                } else if (submittedOnTime && dl.urgent) {
+                  // On-time approved task: skip the "Xd overdue" label, just show the date below
+                  displayText = null;
+                }
+
+                const textColor = submittedOnTime ? "#94a3b8" : showLate ? dl.color : "#94a3b8";
+                return (
+                  <>
+                    {showLate && !done && (
+                      <span style={{ background:"#EF4444", color:"#fff", fontSize:9, fontWeight:800, borderRadius:20, padding:"1px 6px" }}>LATE</span>
+                    )}
+                    {showLate && done && (
+                      <span style={{ background:"#EF444422", color:"#EF4444", fontSize:9, fontWeight:800, borderRadius:20, padding:"1px 6px" }}>LATE</span>
+                    )}
+                    {displayText && <span style={{ fontSize:11.5, color: textColor, fontWeight: showLate ? 700 : 400 }}>{displayText}</span>}
+                  </>
+                );
+              })()}
+            </div>
+            {dl.sub && <div style={{ fontSize:10, color:"#94a3b8", marginTop:1 }}>{dl.sub}</div>}
           </div>
         ) : <span style={{ color:"#cbd5e1" }}>—</span>}
+      </td>
+      <td style={{ ...td, whiteSpace:"nowrap", fontSize:11, color:"#374151" }}>
+        {submittedAt ? fmtDT(new Date(submittedAt)) : <span style={{ color:"#cbd5e1" }}>—</span>}
       </td>
       <td style={{ ...td }}>
         {isProduction ? (
@@ -3766,12 +3859,22 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
                 </button>
               )}
               {!isDone && !isApproved && !blockedByS1 && (
-                <button onClick={() => onSubmit(task, submitStageKey)}
-                  style={{ padding:"5px 12px", borderRadius:7, border:"1.5px solid #5A57FB", background:"#EEF2FF", color:"#5A57FB", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                  Submit S{submitStageNum} ✓
-                </button>
+                <>
+                  {/* Show previous stage content button for S2/S3/S4 */}
+                  {effectiveStageIdx > 0 && (task.caption || task.pillar || task.referenceLink || (task.stages || []).some((s, i) => i < effectiveStageIdx && s.proofUrls?.length > 0)) && (
+                    <button onClick={() => onView && onView(task)}
+                      title="View script & previous stage work"
+                      style={{ padding:"5px 10px", borderRadius:7, border:"1px solid #7C3AED44", background:"#FAF5FF", color:"#7C3AED", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                      <i className="bi bi-eye" />
+                    </button>
+                  )}
+                  <button onClick={() => onSubmit(task, submitStageKey)}
+                    style={{ padding:"5px 12px", borderRadius:7, border:"1.5px solid #5A57FB", background:"#EEF2FF", color:"#5A57FB", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                    Submit S{submitStageNum} ✓
+                  </button>
+                </>
               )}
-              {blockedByS1 && <span style={{ fontSize:13, color:"#a78bfa" }} title="Locked until S1 is approved">🔒</span>}
+              {blockedByS1 && !isDone && !isApproved && <span style={{ fontSize:13, color:"#a78bfa" }} title="Locked until S1 is approved">🔒</span>}
             </>
           ) : (
             <>
@@ -3979,12 +4082,12 @@ function PortalMyTasksView({ tasks, loading, empId }) {
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr>
-                      {["#","Task","Brand","Category / Stage","Deadline","Status","Action"].map(h => <th key={h} style={TH}>{h}</th>)}
+                      {["#","Task","Brand","Category / Stage","Deadline","Submitted","Status","Action"].map(h => <th key={h} style={TH}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.length === 0
-                      ? <tr><td colSpan={7} style={{ padding:40, textAlign:"center", color:"#94a3b8" }}>
+                      ? <tr><td colSpan={8} style={{ padding:40, textAlign:"center", color:"#94a3b8" }}>
                           <i className="bi bi-inbox" style={{ fontSize:28, display:"block", marginBottom:8 }} />No tasks found
                         </td></tr>
                       : paginated.map((t, i) => <TaskTableRow key={t._id} task={t} idx={safePage*PAGE_SIZE+i} empId={empId}

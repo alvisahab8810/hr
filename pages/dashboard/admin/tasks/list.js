@@ -32,6 +32,7 @@ const TABS = [
   { key: "seo",      label: "SEO",          icon: "bi-search",      color: "#10B981", bg: "#ECFDF5", border: "#6EE7B7" },
   { key: "ads",      label: "Ads",          icon: "bi-megaphone",   color: "#F59E0B", bg: "#FFFBEB", border: "#FDE68A" },
   { key: "branding", label: "Branding",     icon: "bi-palette",     color: "#8B5CF6", bg: "#F5F3FF", border: "#C4B5FD" },
+  { key: "general",  label: "General",      icon: "bi-grid",        color: "#0EA5E9", bg: "#F0F9FF", border: "#BAE6FD" },
 ];
 
 const STAGE_META = {
@@ -431,6 +432,7 @@ export default function TasksListPage() {
       else if (activeTab === "seo")      q.set("tags", "seo");
       else if (activeTab === "ads")      q.set("tags", "ads");
       else if (activeTab === "branding") q.set("tags", "branding");
+      else if (activeTab === "general")  q.set("taskType", "general");
 
       const res  = await fetch(`/api/admin/tasks?${q}`, { credentials: "include" });
       const data = await res.json();
@@ -944,6 +946,69 @@ export default function TasksListPage() {
                                 <td style={{ fontSize: 12, color: over ? "#DC2626" : "#64748B", fontWeight: over ? 700 : 400 }}>
                                   {over && <i className="bi bi-exclamation-circle me-1" style={{ fontSize: 10 }} />}
                                   {fmtDate(t.dueDate)}
+                                </td>
+                                <td>
+                                  <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {/* ══ GENERAL TABLE ══ */}
+                    {activeTab === "general" && (
+                      <table className="tl-table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: 60 }}>ID</th>
+                            <th>Title</th>
+                            <th style={{ width: 130 }}>Brand</th>
+                            <th style={{ width: 140 }}>Assignee</th>
+                            <th style={{ width: 110 }}>Due Date</th>
+                            <th style={{ width: 90 }}>Priority</th>
+                            <th style={{ width: 110 }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tasks.map(t => {
+                            const over    = isOverdue(t);
+                            const empName = getEmpName(t);
+                            const sm      = (t.status === "todo" && t.reviewNote)
+                              ? { label: "Client Revision", color: "#B45309", bg: "#FEF3C7" }
+                              : STATUS_META[t.status] || STATUS_META.todo;
+                            const PCOLOR  = { low: "#16A34A", medium: "#2563EB", high: "#D97706", urgent: "#E11D48" };
+                            return (
+                              <tr key={t._id} className={over ? "overdue-row" : ""}
+                                style={{ cursor: "pointer" }}
+                                onClick={() => router.push(`/dashboard/admin/tasks/${t._id}`)}>
+                                <td style={{ fontFamily: "monospace", fontWeight: 700, color: currentTab.color, fontSize: 12, whiteSpace: "nowrap" }}>
+                                  {t.taskId || `#${String(t._id).slice(-4).toUpperCase()}`}
+                                </td>
+                                <td>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: "#1E293B" }}>
+                                    {over && <i className="bi bi-exclamation-circle-fill text-danger me-1" style={{ fontSize: 10 }} />}
+                                    {t.title}
+                                  </div>
+                                  {t.description && <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{t.description.slice(0, 70)}</div>}
+                                </td>
+                                <td>
+                                  {t.brandId
+                                    ? <span className="tl-badge" style={{ background: (t.brandId.color || currentTab.color) + "20", color: t.brandId.color || currentTab.color }}>{t.brandId.name}</span>
+                                    : <span style={{ color: "#CBD5E1" }}>—</span>}
+                                </td>
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <div style={{ width: 24, height: 24, borderRadius: 7, ...(() => { const [bg,fg]=avatarColor(empName); return {background:bg,color:fg}; })(), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 800 }}>{getInitials(empName)}</div>
+                                    <span style={{ fontSize: 12, color: "#374151" }}>{empName}</span>
+                                  </div>
+                                </td>
+                                <td style={{ fontSize: 12, color: over ? "#DC2626" : "#64748B", fontWeight: over ? 700 : 400 }}>
+                                  {fmtDate(t.dueDate)}
+                                </td>
+                                <td>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: PCOLOR[t.priority] || "#64748B" }}>{(t.priority || "—").charAt(0).toUpperCase() + (t.priority || "").slice(1)}</span>
                                 </td>
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>

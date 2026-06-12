@@ -8,17 +8,34 @@ import Employee from "@/models/hr/Employee";
 import TeamCommunityMessage from "@/models/TeamCommunityMessage";
 import TeamChatSeen from "@/models/TeamChatSeen";
 
+const JWT_SECRET = process.env.JWT_SECRET || "viralon_invite_secret_2024";
+
 function resolveActor(req) {
-  const auth = req.headers.authorization || "";
+  const cookie = req.headers.cookie || "";
+  const auth   = req.headers.authorization || "";
+
+  // Employee bearer token
   if (auth.startsWith("Bearer ")) {
     try {
-      const p = jwt.verify(auth.slice(7), process.env.JWT_SECRET);
+      const p = jwt.verify(auth.slice(7), JWT_SECRET);
       if (p?.id) return { id: p.id, type: "employee" };
     } catch {}
   }
-  if ((req.headers.cookie || "").includes("admin_auth=true")) {
-    return { id: "admin", type: "admin" };
+
+  // Full admin session
+  if (cookie.includes("admin_auth=true")) {
+    return { id: "admin", type: "admin", name: "Admin" };
   }
+
+  // Manager / sub-admin JWT cookie
+  const match = cookie.match(/admin_user_token=([^;]+)/);
+  if (match) {
+    try {
+      const p = jwt.verify(match[1], JWT_SECRET);
+      if (p?.id) return { id: p.id, type: "manager", name: p.name || "Manager" };
+    } catch {}
+  }
+
   return null;
 }
 
@@ -31,22 +48,27 @@ export default async function handler(req, res) {
   let senderDept = "";
   let actorObjectId = null;
 
+  const mongoose = (await import("mongoose")).default;
+
   if (actor.type === "employee") {
     const emp = await Employee.findById(actor.id).lean();
     if (!emp) return res.status(404).json({ success: false });
     senderName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.personal?.email || "Employee";
     senderDept = emp.professional?.department || "";
     actorObjectId = emp._id;
+  } else if (actor.type === "manager") {
+    senderName = actor.name || "Manager";
+    senderDept = "Management";
+    try { actorObjectId = new mongoose.Types.ObjectId(actor.id); } catch { actorObjectId = new mongoose.Types.ObjectId("000000000000000000000001"); }
+    actor.senderType = "admin"; // schema enum only allows "admin" | "employee"
   } else {
-    const { default: AdminUser } = await import("@/models/AdminUser");
     senderName = "Admin";
     senderDept = "Management";
-    const mongoose = (await import("mongoose")).default;
     actorObjectId = new mongoose.Types.ObjectId("000000000000000000000000");
   }
 
   // Actor key used for deletedFor filtering
-  const actorKey = actor.type === "admin" ? "admin" : `emp_${actorObjectId}`;
+  const actorKey = actor.type === "admin" ? "admin" : actor.type === "manager" ? `mgr_${actorObjectId}` : `emp_${actorObjectId}`;
 
   /* ── GET ── */
   if (req.method === "GET") {
@@ -92,7 +114,7 @@ export default async function handler(req, res) {
 
     const msgData = {
       senderId:   actorObjectId,
-      senderType: actor.type,
+      senderType: actor.senderType || actor.type,
       senderName,
       senderDept,
       text:        (text || "").trim(),

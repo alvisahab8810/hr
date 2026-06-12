@@ -986,9 +986,11 @@ export default function TaskDetail() {
 
                   {/* Content Review Card — shown for all production tasks that have content */}
                   {task.taskType === "production" && (task.description || task.caption || task.referenceLink || task.pillar) && (() => {
-                    const s1Approved   = task.stages?.[0]?.approved === true;
+                    const s0           = task.stages?.[0];
+                    const s1Approved   = s0?.approved === true;
                     const isApprovedState = s1Approved || task.status === "completed";
-                    const isPendingReview = task.status === "review" && !s1Approved;
+                    // Show approve/reject whenever S1 is submitted but not yet reviewed — regardless of task.status
+                    const isPendingReview = !!s0?.done && !s1Approved && !s0?.rejected;
                     const borderColor  = isApprovedState ? "#BBF7D0" : isPendingReview ? "#FDE68A" : "#E0E7FF";
                     const bgColor      = isApprovedState ? "#F0FDF4"  : isPendingReview ? "#FFFBEB"  : "#EEF2FF";
                     const titleColor   = isApprovedState ? "#15803D"  : isPendingReview ? "#B45309"  : "#4338CA";
