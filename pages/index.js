@@ -6,6 +6,7 @@ import Head from "next/head";
 import { getSocket } from "@/utils/socket";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import DateTimeGreeting from "@/components/DateTimeGreeting";
+import BirthdayCelebration from "@/components/BirthdayCelebration";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -101,6 +102,15 @@ export default function AdminHome() {
   const [announcements, setAnnouncements]   = useState([]);
   const [holidays, setHolidays]             = useState([]);
   const [selectedBrand, setSelectedBrand]   = useState(null);
+  const [todayBirthdays, setTodayBirthdays] = useState([]);
+
+  /* Birthdays */
+  useEffect(() => {
+    fetch("/api/employee/birthdays/today", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.success) setTodayBirthdays(d.birthdays || []); })
+      .catch(() => {});
+  }, []);
 
   /* Socket */
   useEffect(() => {
@@ -165,6 +175,11 @@ export default function AdminHome() {
           </div>
 
           <div className="block-header" >
+
+            {/* ── Birthday Celebration ── */}
+            {todayBirthdays.length > 0 && (
+              <BirthdayCelebration mode="team" birthdays={todayBirthdays} />
+            )}
 
             {/* ── GREETING ROW ───────────────────────────────────── */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>

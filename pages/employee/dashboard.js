@@ -8,6 +8,7 @@ import { getSocket } from "@/utils/socket";
 import Leftbar from "@/components/employee/Leftbar";
 import LeftbarMobile from "@/components/employee/LeftbarMobile";
 import TimeTracker from "@/components/employee/TimeTracker";
+import BirthdayCelebration from "@/components/BirthdayCelebration";
 
 const fmtShort = (d) =>
   new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -105,6 +106,8 @@ export default function EmployeeDashboard() {
   const [showSalary,         setShowSalary]         = useState(false);
   const [tasks,              setTasks]              = useState([]);
   const [loadingTasks,       setLoadingTasks]       = useState(true);
+  const [todayBirthdays,     setTodayBirthdays]     = useState([]);
+  const [isBirthdayPerson,   setIsBirthdayPerson]   = useState(false);
 
   // ── Tea Time ──────────────────────────────────────────────────────────────
   const TEA_H = 16, TEA_M_START = 30, TEA_M_END = 45;
@@ -307,6 +310,26 @@ export default function EmployeeDashboard() {
       .catch(console.error)
       .finally(() => setLoadingTasks(false));
   }, []);
+
+  // ── Birthdays ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/employee/birthdays/today")
+      .then(r => r.json())
+      .then(d => { if (d.success) setTodayBirthdays(d.birthdays || []); })
+      .catch(console.error);
+  }, []);
+
+  // Check if the logged-in employee is a birthday person
+  useEffect(() => {
+    if (!employee) return;
+    const dob = employee?.personal?.dob;
+    if (!dob) return;
+    const d = new Date(dob);
+    const now = new Date();
+    if (d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+      setIsBirthdayPerson(true);
+    }
+  }, [employee]);
 
   // ── Lunch reminder (backup — primary auto-start is in TimeTracker) ──────────
   useEffect(() => {
@@ -619,6 +642,14 @@ export default function EmployeeDashboard() {
           </div>
 
           <div className="block-header">
+            {/* ── Birthday Celebration ── */}
+            {isBirthdayPerson && (
+              <BirthdayCelebration mode="self" employee={employee} />
+            )}
+            {!isBirthdayPerson && todayBirthdays.length > 0 && (
+              <BirthdayCelebration mode="team" birthdays={todayBirthdays} />
+            )}
+
             {/* ── Time Tracker — full-width card ── */}
             <div style={{ marginBottom:20 }}>
               <TimeTracker />

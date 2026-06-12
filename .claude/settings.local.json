@@ -59,7 +59,9 @@
       "Bash(node -e \"const s=require\\('fs'\\).statSync\\('pages/employee/tasks/index.js'\\); console.log\\('size:', s.size, 'bytes'\\)\")",
       "Bash(New-Item -ItemType File -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\" -Force)",
       "Bash(Get-Item \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\")",
-      "PowerShell(New-Item -ItemType File -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\" -Force)"
+      "PowerShell(New-Item -ItemType File -Path \"d:\\\\viralon-payroll\\\\pages\\\\api\\\\client\\\\requests\\\\index.js\" -Force)",
+      "Bash(Start-Process \"http://localhost:3000/employee/dashboard\")",
+      "Bash(Start-Process \"http://localhost:3000/dashboard/admin\")"
     ],
     "additionalDirectories": [
       "d:\\viralon-payroll\\pages\\api\\client\\requests",

@@ -4,9 +4,11 @@ import Dashnav from "../../components/Dashnav";
 import Leftbar from "../../components/Leftbar";
 import Head from "next/head";
 import { getSocket } from "@/utils/socket";
+import BirthdayCelebration from "@/components/BirthdayCelebration";
 
 export default function Admin() {
   const [employeeStatus, setEmployeeStatus] = useState({});
+  const [todayBirthdays, setTodayBirthdays] = useState([]);
 
   useEffect(() => {
     fetch("/api/socket");
@@ -43,6 +45,13 @@ export default function Admin() {
     };
   }, []);
 
+  useEffect(() => {
+    fetch("/api/employee/birthdays/today")
+      .then(r => r.json())
+      .then(d => { if (d.success) setTodayBirthdays(d.birthdays || []); })
+      .catch(console.error);
+  }, []);
+
   return (
     <>
       <Head>
@@ -56,6 +65,11 @@ export default function Admin() {
 
         <section className="content home">
           <div className="block-header">
+            {/* ── Birthday Celebration ── */}
+            {todayBirthdays.length > 0 && (
+              <BirthdayCelebration mode="team" birthdays={todayBirthdays} />
+            )}
+
             <div className="row ptb-50">
               <div className="col-lg-7 col-md-6 col-sm-12">
                 <h2>
