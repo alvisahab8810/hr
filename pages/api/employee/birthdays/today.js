@@ -32,20 +32,6 @@ export default async function handler(req, res) {
       dob:         emp.personal?.dob,
     }));
 
-    // ─── TEST ONLY — remove after testing ───────────────────────────────────
-    birthdays.push({
-      _id:         "test-anurag-001",
-      firstName:   "Anurag",
-      lastName:    "Shrivastava",
-      employeeId:  "TEST-001",
-      avatar:      null,
-      designation: "Software Engineer",
-      department:  "Technology",
-      dob:         new Date(),
-      isTest:      true,
-    });
-    // ─────────────────────────────────────────────────────────────────────────
-
     res.json({ success: true, birthdays });
   } catch (err) {
     console.error(err);
