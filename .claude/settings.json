@@ -6,7 +6,8 @@
       "Read(//c/Users/ivans/Downloads/**)",
       "Bash(node -e \"const p=require\\('path'\\);['models/projects/Project.js','models/projects/Sprint.js','models/clients/Client.js'].forEach\\(f=>{try{require\\('fs'\\).accessSync\\(p.join\\('d:/viralon-payroll',f\\)\\);console.log\\('OK:',f\\)}catch{console.log\\('MISSING:',f\\)}}\\)\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\ivans\\\\Desktop\", \"C:\\\\Users\\\\ivans\\\\Downloads\", \"C:\\\\Users\\\\ivans\\\\Documents\" -Filter \"*.html\" -Recurse -ErrorAction SilentlyContinue)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(npx @next/eslint-plugin-next)"
     ]
   }
 }

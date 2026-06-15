@@ -97,8 +97,8 @@ export default function WebProjectsPage() {
   const [brandFilter,     setBrandFilter]     = useState("");
 
   const [projectForm, setProjectForm] = useState({ name: "", description: "", status: "active", currentPhase: "development", startDate: "", endDate: "", clientId: "", brandId: "" });
-  const [sprintForm,  setSprintForm]  = useState({ name: "", durationDays: 14, startDate: "", phase: "development" });
-  const [featureForm, setFeatureForm] = useState({ title: "", sprintId: "", assignedTo: "" });
+  const [sprintForm,  setSprintForm]  = useState({ name: "", durationDays: 14, startDate: "", endDate: "", phase: "development" });
+  const [featureForm, setFeatureForm] = useState({ title: "", sprintId: "", assignedTo: "", dueDate: "" });
   const [teamMembers, setTeamMembers] = useState([]);
 
   const selectedProject = projects.find(p => p._id === selectedId) || null;
@@ -117,9 +117,7 @@ export default function WebProjectsPage() {
     try {
       const r = await fetch("/api/admin/brands", { credentials: "include" });
       const d = await r.json();
-      if (d.success) {
-        setWebBrands((d.brands || []).filter(b => b.services?.includes("website")));
-      }
+      if (d.success) setWebBrands(d.brands || []);
     } catch {}
   };
 
@@ -222,6 +220,7 @@ export default function WebProjectsPage() {
 
   const handleAddSprint = async () => {
     if (!sprintForm.name.trim()) return toast.error("Sprint name required");
+    if (!sprintForm.endDate)     return toast.error("End date (deadline) is required");
     if (!selectedId) return;
     setSubmitting(true);
     try {
@@ -233,6 +232,7 @@ export default function WebProjectsPage() {
           phase:       sprintForm.phase,
           durationDays:sprintForm.durationDays ? Number(sprintForm.durationDays) : null,
           startDate:   sprintForm.startDate || null,
+          endDate:     sprintForm.endDate   || null,
           projectId:   selectedId,
         }),
       });
@@ -241,7 +241,7 @@ export default function WebProjectsPage() {
         toast.success("Sprint created!");
         setSprints(s => [d.sprint, ...s]);
         setShowAddSprint(false);
-        setSprintForm({ name: "", durationDays: 14, startDate: "", phase: "development" });
+        setSprintForm({ name: "", durationDays: 14, startDate: "", endDate: "", phase: "development" });
       } else toast.error(d.message || "Failed");
     } catch { toast.error("Network error"); }
     finally { setSubmitting(false); }
@@ -250,6 +250,7 @@ export default function WebProjectsPage() {
   const handleAddFeature = async () => {
     if (!featureForm.title.trim()) return toast.error("Feature title required");
     if (!featureForm.sprintId)     return toast.error("Select a sprint");
+    if (!featureForm.dueDate)      return toast.error("Deadline is required");
     setSubmitting(true);
     try {
       const r = await fetch("/api/admin/features", {
@@ -260,6 +261,7 @@ export default function WebProjectsPage() {
           sprintId:   featureForm.sprintId,
           projectId:  selectedId,
           assignedTo: featureForm.assignedTo || null,
+          dueDate:    featureForm.dueDate    || null,
         }),
       });
       const d = await r.json();
@@ -269,7 +271,7 @@ export default function WebProjectsPage() {
         setFeatures(f => ({ ...f, [sId]: [...(f[sId] || []), d.feature] }));
         setExpandedSp(sId);
         setShowAddFeature(false);
-        setFeatureForm({ title: "", sprintId: "", assignedTo: "" });
+        setFeatureForm({ title: "", sprintId: "", assignedTo: "", dueDate: "" });
       } else toast.error(d.message || "Failed");
     } catch { toast.error("Network error"); }
     finally { setSubmitting(false); }
@@ -286,7 +288,11 @@ export default function WebProjectsPage() {
       if (d.success) {
         setFeatures(f => ({
           ...f,
-          [sprintKey]: (f[sprintKey] || []).map(ft => ft._id === featureId ? { ...ft, status: newStatus } : ft),
+          [sprintKey]: (f[sprintKey] || []).map(ft =>
+            ft._id === featureId
+              ? { ...ft, status: newStatus, statusUpdatedAt: d.feature?.statusUpdatedAt, statusUpdatedBy: d.feature?.statusUpdatedBy }
+              : ft
+          ),
         }));
       }
     } catch {}
@@ -339,6 +345,11 @@ export default function WebProjectsPage() {
             {sprint.durationDays && (
               <span style={{ marginLeft: 8, fontSize: 11, color: "#94A3B8" }}>{sprint.durationDays} days</span>
             )}
+            {sprint.endDate && (
+              <span style={{ marginLeft: 8, fontSize: 10.5, color: new Date(sprint.endDate) < new Date() && sprint.status !== "completed" ? "#EF4444" : "#94A3B8", fontWeight: 600 }}>
+                · Deadline {new Date(sprint.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" })} {new Date(sprint.endDate).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}
+              </span>
+            )}
           </div>
           <span className="wp-badge" style={{ background: ss.bg, color: ss.color, borderColor: "transparent" }}>{ss.label}</span>
           <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10 }}>
@@ -354,13 +365,13 @@ export default function WebProjectsPage() {
               <div style={{ padding: "16px 20px", fontSize: 12, color: "#94A3B8" }}>
                 No features yet.{" "}
                 <button style={{ background: "none", border: "none", color: "#6366F1", fontWeight: 600, cursor: "pointer", fontSize: 12 }}
-                  onClick={() => { setFeatureForm({ title: "", sprintId: sprintKey, assignedTo: "" }); setShowAddFeature(true); }}>
+                  onClick={() => { setFeatureForm({ title: "", sprintId: sprintKey, assignedTo: "", dueDate: "" }); setShowAddFeature(true); }}>
                   + Add Feature
                 </button>
               </div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 130px 120px 36px", gap: 8, padding: "8px 16px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 150px 160px auto", gap: 8, padding: "8px 16px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC" }}>
                   {["ID","Feature","Assignee","Status",""].map((h, i) => (
                     <span key={i} style={{ fontSize: 10.5, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".04em" }}>{h}</span>
                   ))}
@@ -368,35 +379,86 @@ export default function WebProjectsPage() {
                 {fts.map((f, idx) => {
                   const fs = FEAT_STATUS_MAP[f.status] || FEAT_STATUS_MAP.todo;
                   const spKey = (typeof f.sprintId === "object" ? f.sprintId?._id : f.sprintId) || sprintKey;
+                  const dept = f.assignedTo?.professional?.department || "";
+                  const isTechDev = dept && /tech|dev|engineer|software|web/i.test(dept);
+                  const updater = f.statusUpdatedBy;
+                  const updatedAt = f.statusUpdatedAt ? new Date(f.statusUpdatedAt).toLocaleDateString("en-IN", { day:"2-digit", month:"short" }) : null;
                   return (
                     <div key={f._id} className="wp-feature-row"
-                      style={{ gridTemplateColumns: "80px 1fr 130px 120px 36px", borderTop: idx > 0 ? "1px solid #F8FAFC" : "none" }}>
-                      <span className="f-id">F-{101 + idx}</span>
-                      <span style={{ fontWeight: 600, fontSize: 13, color: "#1E293B" }}>{f.title}</span>
+                      style={{ gridTemplateColumns: "80px 1fr 150px 160px auto", borderTop: idx > 0 ? "1px solid #F8FAFC" : "none" }}>
+                      <span className="f-id">{f.taskId || `F-${101 + idx}`}</span>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: "#1E293B" }}>{f.title}</span>
+                        {(() => {
+                          const dl = f.dueDate || sprint.endDate || selectedProject?.endDate;
+                          const src = f.dueDate ? "Due" : sprint.endDate ? "Sprint ends" : "Project deadline";
+                          return dl ? (
+                            <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>
+                              {src} {new Date(dl).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" })}{" "}{new Date(dl).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         {f.assignedTo ? <AvatarCircle emp={f.assignedTo} size={22} /> : null}
-                        <span style={{ fontSize: 11.5, color: f.assignedTo ? "#374151" : "#94A3B8" }}>
-                          {f.assignedTo ? empName(f.assignedTo) : "Unassigned"}
-                        </span>
+                        <div>
+                          <div style={{ fontSize: 11.5, color: f.assignedTo ? "#374151" : "#94A3B8" }}>
+                            {f.assignedTo ? empName(f.assignedTo) : "Unassigned"}
+                          </div>
+                          {dept && (
+                            <div style={{ fontSize: 10, color: isTechDev ? "#6366F1" : "#94A3B8", fontWeight: isTechDev ? 700 : 400 }}>
+                              {dept}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <select
-                        className="status-select"
-                        value={f.status}
-                        style={{ color: fs.color, background: fs.bg }}
-                        onChange={e => handleUpdateStatus(f._id, spKey, e.target.value)}
-                      >
-                        {FEAT_STATUS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                      </select>
-                      <button
-                        style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}
-                        onClick={() => handleDeleteFeature(f._id, spKey)}
-                        title="Delete"
-                      >
-                        <i className="bi bi-trash" style={{ fontSize: 12 }} />
-                      </button>
+                      <div>
+                        {f.status === "review" ? (
+                          <Link href={`/dashboard/admin/tasks/${f._id}`} style={{
+                            display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 11px", borderRadius: 7,
+                            fontSize: 11.5, fontWeight: 700, color: fs.color, background: fs.bg,
+                            border: `1.5px solid ${fs.color}30`, textDecoration: "none",
+                          }}>
+                            <i className="bi bi-hourglass-split" style={{ fontSize: 11 }} />{fs.label} →
+                          </Link>
+                        ) : (
+                          <span style={{
+                            display: "inline-block", padding: "4px 11px", borderRadius: 7, fontSize: 11.5, fontWeight: 700,
+                            color: fs.color, background: fs.bg, border: `1.5px solid ${fs.color}30`,
+                          }}>
+                            {fs.label}
+                          </span>
+                        )}
+                        {(updater || updatedAt) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
+                            {updater && <AvatarCircle emp={updater} size={14} />}
+                            <span style={{ fontSize: 9.5, color: "#94A3B8" }}>
+                              {updater ? empName(updater) : ""}
+                              {updatedAt ? ` · ${updatedAt}` : ""}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <button
+                          style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}
+                          onClick={() => handleDeleteFeature(f._id, spKey)}
+                          title="Delete"
+                        >
+                          <i className="bi bi-trash" style={{ fontSize: 12 }} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
+                <div style={{ padding: "8px 16px", borderTop: "1px solid #F1F5F9" }}>
+                  <button
+                    style={{ background: "none", border: "none", color: "#6366F1", fontWeight: 700, cursor: "pointer", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                    onClick={() => { setFeatureForm({ title: "", sprintId: sprintKey, assignedTo: "", dueDate: "" }); setShowAddFeature(true); }}
+                  >
+                    <i className="bi bi-plus-circle" /> Add Feature
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -479,9 +541,11 @@ export default function WebProjectsPage() {
                 const ss = SPRINT_STATUS[sp.status] || {};
                 const ph = PHASE_MAP[sp.phase || "development"] || {};
                 const spFts = features[sp._id] || [];
+                const doneFts = spFts.filter(f => f.status === "completed").length;
                 return (
                   <div key={sp._id} style={{ background: "#FAFAFA", border: "1.5px solid #F1F5F9", borderRadius: 12, padding: "12px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: spFts.length > 0 ? 8 : 0 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: ss.color || "#94A3B8", flexShrink: 0 }} />
                       <span style={{ fontWeight: 700, fontSize: 13.5, color: "#1E293B", flex: 1 }}>{sp.name}</span>
                       <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10 }}>
                         <i className={`bi ${ph.icon}`} style={{ fontSize: 9 }} /> {ph.short}
@@ -490,15 +554,35 @@ export default function WebProjectsPage() {
                       {sp.durationDays && (
                         <span style={{ fontSize: 11, color: "#94A3B8" }}>{sp.durationDays}d</span>
                       )}
+                      {sp.endDate && (
+                        <span style={{ fontSize: 10.5, color: new Date(sp.endDate) < new Date() && sp.status !== "completed" ? "#EF4444" : "#6B7280", fontWeight: 600 }}>
+                          <i className="bi bi-calendar-event" style={{ marginRight: 3, fontSize: 10 }} />
+                          {new Date(sp.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" })} {new Date(sp.endDate).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}
+                        </span>
+                      )}
+                      <button
+                        style={{ border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#6366F1", borderRadius: 8, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}
+                        onClick={() => { setFeatureForm({ title: "", sprintId: sp._id, assignedTo: "", dueDate: "" }); setShowAddFeature(true); }}
+                      >
+                        <i className="bi bi-plus" /> Feature
+                      </button>
                     </div>
                     {spFts.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {spFts.slice(0, 6).map((f, i) => (
-                          <span key={f._id} className="f-pill">F-{101 + i}</span>
-                        ))}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                        {spFts.slice(0, 6).map((f, i) => {
+                          const fs = FEAT_STATUS_MAP[f.status] || FEAT_STATUS_MAP.todo;
+                          return (
+                            <span key={f._id} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:10, fontSize:10, fontWeight:700, background: fs.bg, color: fs.color }}>
+                              {f.taskId || `F-${101+i}`}
+                            </span>
+                          );
+                        })}
                         {spFts.length > 6 && (
                           <span className="f-pill">+{spFts.length - 6} more</span>
                         )}
+                        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#6B7280", fontWeight: 600 }}>
+                          {doneFts}/{spFts.length} done
+                        </span>
                       </div>
                     )}
                   </div>
@@ -562,13 +646,23 @@ export default function WebProjectsPage() {
                       <div key={f._id} className="wp-kanban-card">
                         <div style={{ fontWeight: 600, fontSize: 12.5, color: "#1E293B", marginBottom: 6 }}>{f.title}</div>
                         {sp && (
-                          <div style={{ fontSize: 10.5, color: "#94A3B8", marginBottom: 6 }}>{sp.name}</div>
+                          <div style={{ fontSize: 10.5, color: "#94A3B8", marginBottom: 4 }}>{sp.name}</div>
+                        )}
+                        {(f.dueDate || sp?.endDate || selectedProject?.endDate) && (
+                          <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 6 }}>
+                            {(() => { const d = new Date(f.dueDate || sp?.endDate || selectedProject?.endDate); return `${f.dueDate ? "Due" : sp?.endDate ? "Sprint ends" : "Project deadline"} ${d.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" })} ${d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}`; })()}
+                          </div>
                         )}
                         {f.assignedTo && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: f.status === "review" ? 6 : 0 }}>
                             <AvatarCircle emp={f.assignedTo} size={18} />
                             <span style={{ fontSize: 11, color: "#6B7280" }}>{empName(f.assignedTo)}</span>
                           </div>
+                        )}
+                        {f.status === "review" && (
+                          <Link href={`/dashboard/admin/tasks/${f._id}`} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 6, background: "#FFFBEB", color: "#D97706", border: "1.5px solid #FDE68A", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                            <i className="bi bi-hourglass-split" style={{ fontSize: 10 }} /> Review
+                          </Link>
                         )}
                       </div>
                     );
@@ -605,7 +699,7 @@ export default function WebProjectsPage() {
         <link rel="stylesheet" href="/asets/css/admin.css" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
         <style>{`
-          .wp-project-card{cursor:pointer;background:#fff;border-radius:14px;border:2px solid #F1F5F9;padding:16px;min-width:210px;max-width:255px;flex-shrink:0;transition:all .15s;}
+          .wp-project-card{cursor:pointer;background:#fff;border-radius:14px;border:2px solid #F1F5F9;padding:16px;min-width:220px;max-width:270px;flex-shrink:0;transition:all .15s;}
           .wp-project-card:hover{border-color:#C7D2FE;box-shadow:0 4px 16px rgba(99,102,241,.09);}
           .wp-project-card.selected{border-color:#6366F1;background:#FAFAFF;box-shadow:0 4px 20px rgba(99,102,241,.14);}
           .wp-detail{background:#fff;border-radius:16px;border:1.5px solid #F1F5F9;overflow:hidden;}
@@ -671,16 +765,6 @@ export default function WebProjectsPage() {
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  {selectedProject && (
-                    <>
-                      <button className="wp-btn wp-btn-ghost" onClick={() => setShowAddSprint(true)}>
-                        <i className="bi bi-lightning" /> New Sprint
-                      </button>
-                      <button className="wp-btn wp-btn-ghost" onClick={() => { setFeatureForm({ title: "", sprintId: sprints[0]?._id || "", assignedTo: "" }); setShowAddFeature(true); }}>
-                        <i className="bi bi-plus-square" /> New Feature
-                      </button>
-                    </>
-                  )}
                   <button className="wp-btn wp-btn-primary" onClick={() => setShowNewProject(true)}>
                     <i className="bi bi-plus-circle" /> New Project
                   </button>
@@ -738,27 +822,44 @@ export default function WebProjectsPage() {
                       const sm  = PROJ_STATUS[p.status] || {};
                       const ph  = PHASE_MAP[p.currentPhase || "development"] || {};
                       const isSel = p._id === selectedId;
+                      const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" }) : null;
+                      const startFmt = fmtDate(p.startDate);
+                      const endFmt   = fmtDate(p.endDate);
+                      const desc     = p.description?.trim();
                       return (
                         <div key={p._id} className={`wp-project-card${isSel ? " selected" : ""}`}
                           onClick={() => selectProject(p._id)}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                            <span style={{ fontSize: 10.5, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".04em", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".04em", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {p.clientId?.name || p.clientId?.company || p.brandId?.name || "—"}
                             </span>
                             <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10, padding: "2px 7px" }}>
                               {ph.short}
                             </span>
                           </div>
-                          <div style={{ fontWeight: 800, fontSize: 14, color: "#1E293B", marginBottom: 6, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: "#1E293B", marginBottom: 4, lineHeight: 1.3 }}>
                             {p.name}
                           </div>
+                          {desc && (
+                            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {desc}
+                            </div>
+                          )}
                           <span className="wp-badge" style={{ background: sm.bg, color: sm.color, borderColor: "transparent", fontSize: 10, padding: "2px 7px" }}>{sm.label}</span>
+                          {(startFmt || endFmt) && (
+                            <div style={{ display: "flex", gap: 6, marginTop: 7, fontSize: 10.5, color: "#64748B", alignItems: "center" }}>
+                              <i className="bi bi-calendar3" style={{ fontSize: 10, color: "#94A3B8" }} />
+                              {startFmt && <span>{startFmt}</span>}
+                              {startFmt && endFmt && <span style={{ color: "#CBD5E1" }}>→</span>}
+                              {endFmt && <span style={{ color: p.endDate && new Date(p.endDate) < new Date() && p.status !== "completed" ? "#EF4444" : "#64748B", fontWeight: p.endDate && new Date(p.endDate) < new Date() ? 700 : 400 }}>{endFmt}</span>}
+                            </div>
+                          )}
                           {isSel && totalFeats > 0 && (
                             <>
-                              <div className="wp-progress-bar">
+                              <div className="wp-progress-bar" style={{ marginTop: 8 }}>
                                 <div className="wp-progress-fill" style={{ width: `${Math.round(doneFeats / totalFeats * 100)}%` }} />
                               </div>
-                              <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 5 }}>
+                              <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 4, fontWeight: 600 }}>
                                 {doneFeats}/{totalFeats} features done
                               </div>
                             </>
@@ -772,20 +873,79 @@ export default function WebProjectsPage() {
                   {selectedProject && (
                     <div className="wp-detail">
                       {/* Detail header */}
-                      <div style={{ padding: "16px 20px", borderBottom: "1.5px solid #F1F5F9", display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 10, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <i className="bi bi-kanban-fill" style={{ color: "#6366F1", fontSize: 18 }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, fontSize: 16, color: "#1E293B" }}>{selectedProject.name}</div>
-                          <div style={{ fontSize: 12, color: "#94A3B8" }}>
-                            {selectedProject.clientId?.name || selectedProject.clientId?.company || selectedProject.brandId?.name || ""}
-                            {loadingDetail ? " · Loading…" : sprints.length > 0 ? ` · ${sprints.length} sprint${sprints.length !== 1 ? "s" : ""}` : ""}
+                      <div style={{ padding: "16px 20px", borderBottom: "1.5px solid #F1F5F9" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                            <i className="bi bi-kanban-fill" style={{ color: "#6366F1", fontSize: 18 }} />
                           </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, fontSize: 16, color: "#1E293B" }}>{selectedProject.name}</div>
+                            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>
+                              {selectedProject.clientId?.name || selectedProject.clientId?.company || selectedProject.brandId?.name || ""}
+                              {loadingDetail ? " · Loading…" : sprints.length > 0 ? ` · ${sprints.length} sprint${sprints.length !== 1 ? "s" : ""}` : ""}
+                            </div>
+                            {selectedProject.description && (
+                              <div style={{ fontSize: 12, color: "#64748B", marginTop: 5, lineHeight: 1.5 }}>{selectedProject.description}</div>
+                            )}
+                          </div>
+                          {(() => {
+                            const sm = PROJ_STATUS[selectedProject.status] || {};
+                            const ph = PHASE_MAP[selectedProject.currentPhase || "development"] || {};
+                            return (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", flexShrink: 0 }}>
+                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                  <span className="wp-badge" style={{ background: sm.bg, color: sm.color, borderColor: "transparent" }}>{sm.label}</span>
+                                  <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10 }}>
+                                    <i className={`bi ${ph.icon}`} style={{ fontSize: 9 }} /> {ph.label}
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button className="wp-btn wp-btn-ghost" style={{ padding: "5px 12px", fontSize: 11.5 }} onClick={() => setShowAddSprint(true)}>
+                                    <i className="bi bi-lightning" /> New Sprint
+                                  </button>
+                                  <button className="wp-btn wp-btn-primary" style={{ padding: "5px 12px", fontSize: 11.5 }}
+                                    onClick={() => { setFeatureForm({ title: "", sprintId: sprints[0]?._id || "", assignedTo: "", dueDate: "" }); setShowAddFeature(true); }}>
+                                    <i className="bi bi-plus-square" /> New Feature
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
-                        {(() => { const sm = PROJ_STATUS[selectedProject.status] || {}; return (
-                          <span className="wp-badge" style={{ background: sm.bg, color: sm.color, borderColor: "transparent" }}>{sm.label}</span>
-                        ); })()}
+                        {(selectedProject.startDate || selectedProject.endDate) && (
+                          <div style={{ display: "flex", gap: 20, marginTop: 10, paddingTop: 10, borderTop: "1px dashed #F1F5F9" }}>
+                            {selectedProject.startDate && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Start Date</div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#374151" }}>
+                                  {new Date(selectedProject.startDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
+                                </div>
+                              </div>
+                            )}
+                            {selectedProject.endDate && (
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Deadline</div>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" ? "#EF4444" : "#374151" }}>
+                                  {new Date(selectedProject.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
+                                  {new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" && (
+                                    <span style={{ marginLeft: 6, fontSize: 10, background: "#FEF2F2", color: "#EF4444", borderRadius: 6, padding: "1px 6px" }}>Overdue</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {totalFeats > 0 && (
+                              <div style={{ marginLeft: "auto" }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Progress</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <div style={{ width: 80, height: 6, borderRadius: 10, background: "#E5E7EB", overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${Math.round(doneFeats/totalFeats*100)}%`, background: "linear-gradient(90deg,#6366F1,#8B5CF6)", borderRadius: 10 }} />
+                                  </div>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{doneFeats}/{totalFeats}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Tabs */}
@@ -936,15 +1096,20 @@ export default function WebProjectsPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <label className="wp-label">Duration (days)</label>
-                  <input type="number" className="wp-input" min={1} max={90} value={sprintForm.durationDays}
-                    onChange={e => setSprintForm(f => ({ ...f, durationDays: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="wp-label">Start Date</label>
-                  <input type="date" className="wp-input" value={sprintForm.startDate}
+                  <label className="wp-label">Start Date &amp; Time</label>
+                  <input type="datetime-local" className="wp-input" value={sprintForm.startDate}
                     onChange={e => setSprintForm(f => ({ ...f, startDate: e.target.value }))} />
                 </div>
+                <div>
+                  <label className="wp-label">End Date &amp; Time (Deadline) *</label>
+                  <input type="datetime-local" className="wp-input" value={sprintForm.endDate}
+                    onChange={e => setSprintForm(f => ({ ...f, endDate: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="wp-label">Duration (days)</label>
+                <input type="number" className="wp-input" min={1} max={90} value={sprintForm.durationDays}
+                  onChange={e => setSprintForm(f => ({ ...f, durationDays: e.target.value }))} />
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button className="wp-btn wp-btn-ghost" style={{ flex: 1 }} onClick={() => setShowAddSprint(false)}>Cancel</button>
@@ -994,6 +1159,11 @@ export default function WebProjectsPage() {
                     <option key={emp._id} value={emp._id}>{empName(emp)}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="wp-label">Deadline (Date &amp; Time) *</label>
+                <input type="datetime-local" className="wp-input" value={featureForm.dueDate}
+                  onChange={e => setFeatureForm(f => ({ ...f, dueDate: e.target.value }))} />
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button className="wp-btn wp-btn-ghost" style={{ flex: 1 }} onClick={() => setShowAddFeature(false)}>Cancel</button>

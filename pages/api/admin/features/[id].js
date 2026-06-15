@@ -16,12 +16,20 @@ export default async function handler(req, res) {
   /* ── PATCH ── */
   if (req.method === "PATCH") {
     try {
+      const update = { ...req.body };
+      if ("status" in update) {
+        update.statusUpdatedAt = new Date();
+        if (update.statusUpdatedBy) {
+          // keep what was passed
+        }
+      }
       const feature = await Task.findByIdAndUpdate(
         id,
-        { $set: req.body },
+        { $set: update },
         { new: true }
       )
-        .populate("assignedTo", "firstName lastName personal")
+        .populate("assignedTo", "firstName lastName personal professional")
+        .populate("statusUpdatedBy", "firstName lastName personal professional")
         .lean();
 
       if (!feature) return res.status(404).json({ success: false, message: "Feature not found" });

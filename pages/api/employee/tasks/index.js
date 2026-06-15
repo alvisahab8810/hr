@@ -6,6 +6,8 @@ import Task from "@/models/tasks/Task";
 import "@/models/tasks/Brand";
 import "@/models/hr/Employee";
 import "@/models/AdminUser";
+import "@/models/projects/Project";
+import "@/models/projects/Sprint";
 
 function verifyToken(req) {
   const auth = req.headers.authorization || "";
@@ -46,6 +48,8 @@ export default async function handler(req, res) {
     const tasks = await Task.find(q)
       .populate("brandId",    "name color slug")
       .populate("assignedBy", "firstName lastName")
+      .populate({ path: "projectId", select: "name endDate brandId", populate: { path: "brandId", select: "name color" } })
+      .populate("sprintId",   "name endDate")
       .sort({ dueDate: 1, createdAt: -1 })
       .lean();
 

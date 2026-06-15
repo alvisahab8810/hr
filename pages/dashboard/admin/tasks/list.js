@@ -389,14 +389,15 @@ export default function TasksListPage() {
           seoCategory: seoForm.seoCategory, tags: ["seo", seoForm.seoCategory], dueDate: seoForm.dueDate || null,
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else if (["ads","branding"].includes(createMode)) {
-        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
+        if (!genForm.title.trim()) { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)      { toast.error("Deadline is required"); setSubmitting(false); return; }
         body = { ...genForm, taskType: "manual", brandId: topBrandId || genForm.brandId || null, tags: [createMode],
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       } else {
-        if (!genForm.title.trim())              { toast.error("Title is required");    setSubmitting(false); return; }
-        if (!genForm.dueDate && !adminUser)     { toast.error("Deadline is required"); setSubmitting(false); return; }
-        body = { ...genForm, taskType: genForm.taskType || "manual", brandId: topBrandId || genForm.brandId || null,
+        if (!genForm.title.trim())  { toast.error("Title is required");    setSubmitting(false); return; }
+        if (!genForm.dueDate)       { toast.error("Deadline is required"); setSubmitting(false); return; }
+        body = { ...genForm, taskType: "general", brandId: topBrandId || genForm.brandId || null,
+          tags: ["general"],
           assignedById: adminUser?._id, assignedByModel: "AdminUser", assignedByName: adminUser?.name || "Admin" };
       }
 
@@ -969,6 +970,7 @@ export default function TasksListPage() {
                             <th style={{ width: 110 }}>Due Date</th>
                             <th style={{ width: 90 }}>Priority</th>
                             <th style={{ width: 110 }}>Status</th>
+                            <th style={{ width: 140 }}>Submitted</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1005,13 +1007,21 @@ export default function TasksListPage() {
                                   </div>
                                 </td>
                                 <td style={{ fontSize: 12, color: over ? "#DC2626" : "#64748B", fontWeight: over ? 700 : 400 }}>
-                                  {fmtDate(t.dueDate)}
+                                  {fmtDateWithTime(t.dueDate)}
                                 </td>
                                 <td>
                                   <span style={{ fontSize: 11, fontWeight: 700, color: PCOLOR[t.priority] || "#64748B" }}>{(t.priority || "—").charAt(0).toUpperCase() + (t.priority || "").slice(1)}</span>
                                 </td>
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
+                                </td>
+                                <td style={{ fontSize: 11, color: t.submittedAt ? "#B45309" : "#CBD5E1", whiteSpace: "nowrap" }}>
+                                  {t.submittedAt ? (
+                                    <span>
+                                      <i className="bi bi-send-fill me-1" style={{ fontSize: 10 }} />
+                                      {fmtDateWithTime(t.submittedAt)}
+                                    </span>
+                                  ) : "—"}
                                 </td>
                               </tr>
                             );
@@ -1068,7 +1078,7 @@ export default function TasksListPage() {
                                   </div>
                                 </td>
                                 <td style={{ fontSize: 12, color: over ? "#DC2626" : "#64748B", fontWeight: over ? 700 : 400 }}>
-                                  {fmtDate(t.dueDate)}
+                                  {fmtDateWithTime(t.dueDate)}
                                 </td>
                                 <td>
                                   <span style={{ fontSize: 11, fontWeight: 700, color: PCOLOR[t.priority] || "#64748B" }}>{(t.priority || "—").charAt(0).toUpperCase() + (t.priority || "").slice(1)}</span>
@@ -1387,12 +1397,9 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
                       <div>
-                        <label style={LBL}>Due Date &amp; Time</label>
+                        <label style={LBL}>Due Date &amp; Time <span style={{ color: "#EF4444" }}>*</span></label>
                         <input type="datetime-local" className="tmd-input" value={genForm.dueDate}
-                          disabled={!!adminUser}
-                          style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
                           onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
-                        {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 70, resize: "vertical" }} placeholder="Task details…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
                     </div>
@@ -1407,12 +1414,9 @@ export default function TasksListPage() {
                         <div><label style={LBL}>Assigned To</label><select className="tmd-select" value={genForm.assignedTo} onChange={e => setGenForm(f => ({ ...f, assignedTo: e.target.value }))}><option value="">Unassigned</option>{employees.map(emp => { const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim(); return <option key={emp._id} value={emp._id}>{n || "Employee"}</option>; })}</select></div>
                       </div>
                       <div>
-                        <label style={LBL}>Due Date &amp; Time</label>
+                        <label style={LBL}>Due Date &amp; Time <span style={{ color: "#EF4444" }}>*</span></label>
                         <input type="datetime-local" className="tmd-input" value={genForm.dueDate}
-                          disabled={!!adminUser}
-                          style={{ opacity: adminUser ? 0.6 : 1, cursor: adminUser ? "not-allowed" : "auto" }}
                           onChange={e => setGenForm(f => ({ ...f, dueDate: e.target.value }))} />
-                        {adminUser && <div style={{ fontSize:11, color:"#94A3B8", marginTop:3, display:"flex", alignItems:"center", gap:4 }}><i className="bi bi-lock-fill" style={{fontSize:9}} /> Admin only</div>}
                       </div>
                       <div><label style={LBL}>Description</label><textarea className="tmd-input" style={{ height: 80, resize: "vertical" }} placeholder="Task description…" value={genForm.description} onChange={e => setGenForm(f => ({ ...f, description: e.target.value }))} /></div>
                     </div>

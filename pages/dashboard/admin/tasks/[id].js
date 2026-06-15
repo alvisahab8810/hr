@@ -30,6 +30,7 @@ const TYPE_META = {
   sprint:     { label: "Sprint",     bg: "#EEF2FF", color: "#4F46E5" },
   production: { label: "Production", bg: "#FFF7ED", color: "#C2410C" },
   manual:     { label: "Manual",     bg: "#F1F5F9", color: "#475569" },
+  general:    { label: "General",    bg: "#F0F9FF", color: "#0EA5E9" },
 };
 
 const ACTION_LABELS = {
@@ -647,10 +648,39 @@ export default function TaskDetail() {
                 </div>
                 <div>
                   <span className="td-meta-label">Final Deadline</span>
-                  <span className="td-meta-val" style={{ fontFamily: "monospace", color: isOverdue ? "#DC2626" : "#1E293B" }}>
-                    {isOverdue && <i className="bi bi-exclamation-triangle-fill me-1" style={{ color: "#DC2626" }} />}
-                    {fmtDateTime(effectiveDueDate || task.dueDate)}
-                  </span>
+                  {/* Only full admin (adminUser===null) can edit deadline for general tasks */}
+                  {task.taskType !== "production" && !adminUser ? (
+                    <input
+                      type="datetime-local"
+                      className="td-input"
+                      defaultValue={fmtDateTimeInput(task.dueDate)}
+                      style={{ fontSize: 12, padding: "3px 8px", fontFamily: "monospace", minWidth: 170 }}
+                      onBlur={async (e) => {
+                        const val = e.target.value;
+                        if (!val || val === fmtDateTimeInput(task.dueDate)) return;
+                        try {
+                          const res = await fetch(`/api/admin/tasks/${id}`, {
+                            method: "PATCH", credentials: "include",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ dueDate: new Date(val).toISOString(), performedByName: "Admin" }),
+                          });
+                          const data = await res.json();
+                          if (data.success) { toast.success("Deadline updated"); fetchTask(); }
+                          else toast.error(data.message || "Failed");
+                        } catch { toast.error("Network error"); }
+                      }}
+                    />
+                  ) : (
+                    <span className="td-meta-val" style={{ fontFamily: "monospace", color: isOverdue ? "#DC2626" : "#1E293B" }}>
+                      {isOverdue && <i className="bi bi-exclamation-triangle-fill me-1" style={{ color: "#DC2626" }} />}
+                      {fmtDateTime(effectiveDueDate || task.dueDate)}
+                      {task.taskType !== "production" && adminUser && (
+                        <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 6, fontFamily: "sans-serif" }}>
+                          <i className="bi bi-lock-fill" /> Admin only
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
                 <div>
                   <span className="td-meta-label">Status</span>
@@ -1069,6 +1099,127 @@ export default function TaskDetail() {
                     );
                   })()}
 
+                  {/* General / Manual task review card */}
+                  {task.taskType !== "production" && task.status === "review" && (
+                    <div className="tdbg" style={{ border: "2px solid #FDE68A", background: "#FFFBEB", marginBottom: 14 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: "#B45309", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className="bi bi-hourglass-split" /> Awaiting Approval
+                      </div>
+                      <div style={{ fontSize: 11, color: "#92400E", marginBottom: 12 }}>
+                        Submitted by employee{task.submittedAt ? ` · ${fmtDateTime(task.submittedAt)}` : ""}
+                      </div>
+
+                      {task.description && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Work Report / Notes</div>
+                          <div style={{ fontSize: 12.5, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "10px 12px", whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 200, overflowY: "auto" }}>
+                            {task.description}
+                          </div>
+                        </div>
+                      )}
+
+                      {task.caption && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Caption</div>
+                          <div style={{ fontSize: 12.5, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "10px 12px", whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 120, overflowY: "auto" }}>
+                            {task.caption}
+                          </div>
+                        </div>
+                      )}
+
+                      {task.referenceLink && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Reference / Proof Link</div>
+                          <a href={task.referenceLink} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 12, color: "#4F46E5", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }}>
+                            <i className="bi bi-link-45deg" />{task.referenceLink}
+                          </a>
+                        </div>
+                      )}
+
+                      {task.proofLink && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Proof Link</div>
+                          <a href={task.proofLink} target="_blank" rel="noreferrer"
+                            style={{ fontSize: 12, color: "#4F46E5", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }}>
+                            <i className="bi bi-link-45deg" />{task.proofLink}
+                          </a>
+                        </div>
+                      )}
+
+                      {task.pillar && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Pillar / Keywords</div>
+                          <div style={{ fontSize: 12, color: "#374151" }}>{task.pillar}</div>
+                        </div>
+                      )}
+
+                      {task.tags?.filter(t => t !== "general").length > 0 && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Tags</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {task.tags.filter(t => t !== "general").map(tag => (
+                              <span key={tag} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "#FDE68A", color: "#92400E", fontWeight: 600 }}>#{tag}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                        <button onClick={handleApprove}
+                          style={{ flex: 1, background: "#10B981", color: "#fff", border: "none", borderRadius: 8, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                          <i className="bi bi-check2-circle me-1" /> Approve
+                        </button>
+                        <button onClick={() => setShowReject(true)}
+                          style={{ flex: 1, background: "#FEE2E2", color: "#DC2626", border: "1.5px solid #FCA5A5", borderRadius: 8, padding: "10px 0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                          <i className="bi bi-x-circle me-1" /> Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completed general task confirmation */}
+                  {task.taskType !== "production" && task.status === "completed" && (
+                    <div className="tdbg" style={{ border: "2px solid #BBF7D0", background: "#F0FDF4", marginBottom: 14 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: "#15803D", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className="bi bi-check-circle-fill" /> Task Approved &amp; Completed
+                      </div>
+                      {task.description && (
+                        <div style={{ fontSize: 12, color: "#374151", background: "#DCFCE7", borderRadius: 7, padding: "8px 10px", whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 150, overflowY: "auto", marginBottom: 6 }}>
+                          {task.description}
+                        </div>
+                      )}
+                      {task.referenceLink && (
+                        <a href={task.referenceLink} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 11, color: "#4F46E5", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }}>
+                          <i className="bi bi-link-45deg" />{task.referenceLink}
+                        </a>
+                      )}
+                      {task.proofLink && (
+                        <a href={task.proofLink} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 11, color: "#4F46E5", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                          <i className="bi bi-link-45deg" />{task.proofLink}
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Rejected general task */}
+                  {task.taskType !== "production" && task.status === "blocked" && (
+                    <div className="tdbg" style={{ border: "2px solid #FCA5A5", background: "#FEF2F2", marginBottom: 14 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: "#DC2626", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className="bi bi-x-octagon-fill" /> Task Rejected
+                      </div>
+                      {task.reviewNote && (
+                        <div style={{ fontSize: 12, color: "#7F1D1D" }}>Reason: {task.reviewNote}</div>
+                      )}
+                      <button onClick={() => setShowReject(true)}
+                        style={{ marginTop: 10, background: "transparent", color: "#DC2626", border: "1.5px solid #FCA5A5", borderRadius: 7, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        <i className="bi bi-pencil me-1" /> Edit Rejection Note
+                      </button>
+                    </div>
+                  )}
+
                   {/* Task meta */}
                   <div className="tdbg">
                     <div style={{ fontWeight: 800, fontSize: 13, color: "#1E293B", marginBottom: 14 }}>
@@ -1079,6 +1230,8 @@ export default function TaskDetail() {
                       { label: "Task ID", value: task.taskId || task._id?.slice(-8).toUpperCase() },
                       { label: "Type", value: <span className="tdbadge" style={{ background: tm.bg, color: tm.color }}>{tm.label || task.taskType}</span> },
                       { label: "Status", value: <span className="tdbadge" style={{ background: sm.bg, color: sm.color }}>{sm.label || task.status}</span> },
+                      task.projectId?.name && { label: "Project", value: <span style={{ color: "#4F46E5", fontWeight: 700 }}><i className="bi bi-folder2 me-1" />{task.projectId.name}</span> },
+                      task.sprintId?.name && { label: "Sprint", value: <span style={{ color: "#7C3AED", fontWeight: 700 }}><i className="bi bi-lightning-charge me-1" />{task.sprintId.name}</span> },
                       task.estimatedHours && { label: "Est. Hours", value: `${task.estimatedHours}h` },
                       { label: "Created", value: fmtDate(task.createdAt) },
                       { label: "Updated", value: fmtDate(task.updatedAt) },

@@ -40,7 +40,7 @@ const TaskSchema = new mongoose.Schema(
 
     taskType: {
       type: String,
-      enum: ["project", "sprint", "production", "manual"],
+      enum: ["project", "sprint", "production", "manual", "general"],
       required: true,
     },
 
@@ -115,9 +115,11 @@ const TaskSchema = new mongoose.Schema(
     scheduledFor:     { type: Date, default: null },
 
     /* ── Dev / project task fields ── */
-    workReport:       { type: String, default: "" },   // employee update when submitting for review
-    proofLink:        { type: String, default: "" },   // staging URL or demo link
-    clientReviewNote: { type: String, default: "" },   // client feedback when rejecting
+    workReport:       { type: String, default: "" },
+    proofLink:        { type: String, default: "" },
+    clientReviewNote: { type: String, default: "" },
+    statusUpdatedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null },
+    statusUpdatedAt:  { type: Date, default: null },
 
     /* ── Per-stage assignments & deadlines (production tasks) ── */
     stages: { type: [StageEntrySchema], default: [] },

@@ -47,7 +47,6 @@ export default async function handler(req, res) {
       const q = {};
 
       if (priority)    q.priority    = priority;
-      if (taskType)    q.taskType    = taskType;
       if (projectId)   q.projectId   = projectId;
       if (sprintId)    q.sprintId    = sprintId;
       if (clientId)    q.clientId    = clientId;
@@ -56,9 +55,24 @@ export default async function handler(req, res) {
       if (contentType) q.contentType = contentType;
       if (req.query.seoCategory) q.seoCategory = req.query.seoCategory;
       if (req.query.tags) q.tags = { $in: Array.isArray(req.query.tags) ? req.query.tags : [req.query.tags] };
+      if (taskType && taskType !== "general") q.taskType = taskType;
 
       // Collect multi-field OR conditions into $and so they don't overwrite each other
       const andClauses = [];
+
+      // General tab: match taskType:"general" OR manual tasks not tagged for other tabs (old general tasks had no tags)
+      if (taskType === "general") {
+        andClauses.push({ $or: [
+          { taskType: "general" },
+          { taskType: "manual", tags: { $in: ["general"] } },
+          // Old general tasks: taskType:"manual", no seoCategory, no tab-specific tags
+          {
+            taskType: "manual",
+            seoCategory: { $in: ["", null] },
+            tags: { $not: { $elemMatch: { $in: ["seo","ads","branding","sprint","feature","page","website","web"] } } },
+          },
+        ]});
+      }
 
       // Status filter — "review" and "blocked" also check stage-level state,
       // because task.status may still be "in_progress" even when a stage is pending

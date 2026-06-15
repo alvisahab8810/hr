@@ -632,8 +632,15 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
                         ) : <span style={{ color: "#D1D5DB" }}>—</span>}
                       </td>
                       <td style={{ padding: "13px 14px" }}>
-                        {t.contentType ? <span style={{ padding: "2px 8px", borderRadius: 4, background: (CTYPE_COLOR[t.contentType] || "#6366F1") + "22", color: CTYPE_COLOR[t.contentType] || "#6366F1", fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>
-                          : <span style={{ color: "#D1D5DB" }}>—</span>}
+                        {t.taskType === "project"
+                          ? <span style={{ padding: "2px 8px", borderRadius: 4, background: "#EEF2FF", color: "#4F46E5", fontSize: 11, fontWeight: 700 }}>Feature</span>
+                          : t.taskType === "sprint"
+                            ? <span style={{ padding: "2px 8px", borderRadius: 4, background: "#F3E8FF", color: "#7C3AED", fontSize: 11, fontWeight: 700 }}>Sprint</span>
+                            : t.taskType === "general"
+                              ? <span style={{ padding: "2px 8px", borderRadius: 4, background: "#F0F9FF", color: "#0EA5E9", fontSize: 11, fontWeight: 700 }}>General</span>
+                              : t.contentType
+                                ? <span style={{ padding: "2px 8px", borderRadius: 4, background: (CTYPE_COLOR[t.contentType] || "#6366F1") + "22", color: CTYPE_COLOR[t.contentType] || "#6366F1", fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{t.contentType}</span>
+                                : <span style={{ color: "#D1D5DB" }}>—</span>}
                       </td>
                       <td style={{ padding: "13px 14px" }}><EmployeeStagePips task={t} empId={empId} size={22} /></td>
                       {(() => {
@@ -704,7 +711,7 @@ function MyTasksTab({ tasks, openInEditor, empId }) {
 
 // ─── CONTENT EDITOR TAB ───────────────────────────────────────────────────────
 function ContentEditorTab({ tasks, initialTask, onBack }) {
-  const scriptTasks = tasks.filter(t => t.taskType === "production" || t.stage);
+  const scriptTasks = tasks.filter(t => t.taskType === "production" || t.taskType === "project" || t.taskType === "sprint" || t.stage || t.taskType === "general" || t.taskType === "manual" || t.tags?.includes("general"));
   const [task,     setTask]     = useState(initialTask || scriptTasks[0] || null);
   const [pillar,        setPillar]        = useState("");
   const [customPillars, setCustomPillars] = useState(() => { try { return JSON.parse(localStorage.getItem("ep_custom_pillars") || "[]"); } catch { return []; } });
@@ -762,9 +769,9 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
 
   async function submitForReview() {
     if (!task) return;
-    // Script/Content is mandatory before submitting
-    if (!script.trim()) { toast.error("Script / Content is required before submitting."); return; }
     const isProduction = task.taskType === "production" && (task.stages?.length > 0);
+    // Script/Content only mandatory for production tasks
+    if (isProduction && !script.trim()) { toast.error("Script / Content is required before submitting."); return; }
     const s0 = task.stages?.[0];
     // Already submitted check
     if (isProduction && s0?.done && !s0?.rejected) { toast.info("Already submitted — awaiting admin review."); return; }
@@ -1009,7 +1016,107 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
           </div>
         )}
 
-        {task && (<>
+        {/* ── GENERAL / NON-PRODUCTION TASK ─── */}
+        {task && task.taskType !== "production" && (
+          <div className="tms-card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Header — different colour/label for project/sprint vs general */}
+            {task.taskType === "project" || task.taskType === "sprint" ? (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#4F46E5", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <i className="bi bi-code-slash" />
+                  {task.taskType === "project" ? "Dev Feature" : "Sprint Task"}
+                </div>
+                {(task.projectId?.name || task.sprintId?.name) && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {task.projectId?.name && (
+                      <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 20, background: "#EEF2FF", color: "#4F46E5", fontWeight: 600 }}>
+                        <i className="bi bi-folder me-1" />{task.projectId.name}
+                      </span>
+                    )}
+                    {task.sprintId?.name && (
+                      <span style={{ fontSize: 11, padding: "2px 9px", borderRadius: 20, background: "#F3E8FF", color: "#7C3AED", fontWeight: 600 }}>
+                        <i className="bi bi-lightning me-1" />{task.sprintId.name}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#0EA5E9", marginBottom: 4 }}>
+                <i className="bi bi-grid me-2" />General Task
+              </div>
+            )}
+            {task.description && (
+              <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "12px 14px", borderLeft: `3px solid ${task.taskType === "project" || task.taskType === "sprint" ? "#4F46E5" : "#0EA5E9"}` }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", marginBottom: 5 }}>Task Description</div>
+                <div style={{ fontSize: 13.5, color: "#1E293B", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{task.description}</div>
+              </div>
+            )}
+            {task.status !== "review" && task.status !== "completed" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#6B7280", display: "block", marginBottom: 6 }}>
+                    Work Report / Notes
+                  </label>
+                  <textarea
+                    value={script}
+                    onChange={e => setScript(e.target.value)}
+                    rows={5}
+                    placeholder="Describe what you have done for this task…"
+                    style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13.5, fontFamily: "inherit", outline: "none", resize: "vertical", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: "#6B7280", display: "block", marginBottom: 6 }}>
+                    Proof / Reference Link <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(optional)</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={refLink}
+                    onChange={e => setRefLink(e.target.value)}
+                    placeholder="https://drive.google.com/… or any proof link"
+                    style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+            )}
+            {task.status === "review" && (
+              <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <i className="bi bi-hourglass-split" style={{ color: "#B45309", fontSize: 16 }} />
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#92400E" }}>Submitted — Awaiting Admin Approval</div>
+                </div>
+                {script && <div style={{ fontSize: 12, color: "#78350F" }}>{script.slice(0, 160)}{script.length > 160 ? "…" : ""}</div>}
+                {refLink && (
+                  <a href={refLink} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 12, color: "#4F46E5", wordBreak: "break-all", display: "flex", alignItems: "center", gap: 4 }}>
+                    <i className="bi bi-link-45deg" />{refLink}
+                  </a>
+                )}
+              </div>
+            )}
+            {task.status === "completed" && (
+              <div style={{ background: "#F0FDF4", border: "1.5px solid #86EFAC", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                <i className="bi bi-check-circle-fill" style={{ color: "#16A34A", fontSize: 16 }} />
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#14532D" }}>Approved — Task Completed!</div>
+              </div>
+            )}
+            {task.status === "blocked" && (
+              <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 8, padding: "12px 14px" }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#991B1B" }}><i className="bi bi-x-octagon-fill me-2" />Rejected</div>
+                {task.reviewNote && <div style={{ fontSize: 12, color: "#7F1D1D", marginTop: 6 }}>Reason: {task.reviewNote}</div>}
+              </div>
+            )}
+            {task.status !== "review" && task.status !== "completed" && (
+              <button onClick={submitForReview} disabled={submitting}
+                style={{ padding: "11px 18px", borderRadius: 9, border: "none", fontSize: 14, fontWeight: 700, cursor: submitting ? "default" : "pointer", background: "#0EA5E9", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, opacity: submitting ? 0.7 : 1 }}>
+                <i className="bi bi-send" />{submitting ? "Submitting…" : task.status === "blocked" ? "Resubmit for Review" : "Submit for Review"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {task && task.taskType === "production" && (<>
           {(() => {
             const s0 = task.stages?.[0];
             // Lock ONLY when S1 has actually been submitted (s0.done === true) and not rejected.
@@ -2862,6 +2969,20 @@ function NonSMMSubmitModal({ task, onClose, onSubmit, submitting }) {
         <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:14, marginBottom:14 }}>
           <div style={{ fontSize:13.5, fontWeight:600, marginBottom:4, color:"#1e293b" }}>{task.title || task.nomenclature}</div>
           {task.brandId && <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>{task.brandId.name}</div>}
+          {(task.projectId?.name || task.sprintId?.name) && (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:4 }}>
+              {task.projectId?.name && (
+                <span style={{ fontSize:10.5, color:"#4F46E5", fontWeight:700, display:"inline-flex", alignItems:"center", gap:3 }}>
+                  <i className="bi bi-folder2" />{task.projectId.name}
+                </span>
+              )}
+              {task.sprintId?.name && (
+                <span style={{ fontSize:10.5, color:"#7C3AED", fontWeight:700, display:"inline-flex", alignItems:"center", gap:3 }}>
+                  <i className="bi bi-lightning-charge" />{task.sprintId.name}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="ep-form-g">
           <label className="ep-label">Delivery / Proof URL <span style={{ color:"#ef4444" }}>*</span></label>
@@ -3767,7 +3888,8 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
 // ─── PORTAL MY TASKS TABLE ROW ────────────────────────────────────────────────
 function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const stagesArr  = ["S1","S2","S3","S4"];
-  const brandColor = task.brandId?.color || "#94a3b8";
+  const effectiveBrand = task.brandId || task.projectId?.brandId || null;
+  const brandColor = effectiveBrand?.color || "#94a3b8";
   const isProduction = task.taskType === "production";
 
   const toArr = v => Array.isArray(v) ? v : (v ? [v] : []);
@@ -3782,7 +3904,10 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const effectiveStage    = effectiveStageIdx >= 0 ? (task.stages?.[effectiveStageIdx] || null) : null;
   const submittedAt       = isProduction ? (effectiveStage?.doneAt || null) : (task.submittedAt || null);
 
-  const deadlineSrc = (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline : task.dueDate;
+  const sprintDeadline = task.sprintId?.endDate || null;
+  const projectDeadline = task.projectId?.endDate || null;
+  const deadlineSrc = (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline
+    : task.dueDate || sprintDeadline || projectDeadline;
   const dl = getDeadlineInfo({ ...task, dueDate: deadlineSrc });
 
   const s1Approved  = task.stages?.[0]?.approved === true;
@@ -3798,7 +3923,10 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const seoCat = task.seoCategory;
   const SEO_CAT_LABELS = { blog:"Blog Post", technical:"Technical SEO", onpage:"On-Page", offpage:"Off-Page", backlinks:"Backlinks" };
   let catLabel = "General";
-  if (seoCat && SEO_CAT_LABELS[seoCat]) catLabel = SEO_CAT_LABELS[seoCat];
+  let catColor = "#475569"; let catBg = "#f1f5f9";
+  if (task.taskType === "project") { catLabel = "Feature"; catColor = "#4F46E5"; catBg = "#EEF2FF"; }
+  else if (task.taskType === "sprint") { catLabel = "Sprint"; catColor = "#7C3AED"; catBg = "#F5F3FF"; }
+  else if (seoCat && SEO_CAT_LABELS[seoCat]) catLabel = SEO_CAT_LABELS[seoCat];
   else if (tags.includes("seo")) catLabel = "SEO";
   else if (tags.includes("ads")) catLabel = "Ads";
   else if (tags.includes("branding")) catLabel = "Branding";
@@ -3821,9 +3949,9 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
         )}
       </td>
       <td style={{ ...td, whiteSpace:"nowrap" }}>
-        {task.brandId ? (
+        {effectiveBrand ? (
           <span style={{ padding:"2px 8px", borderRadius:20, background:brandColor+"22", color:brandColor, fontSize:10.5, fontWeight:700, display:"inline-flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
-            <span style={{ width:5, height:5, borderRadius:"50%", background:brandColor, display:"inline-block" }} />{task.brandId.name}
+            <span style={{ width:5, height:5, borderRadius:"50%", background:brandColor, display:"inline-block" }} />{effectiveBrand.name}
           </span>
         ) : <span style={{ color:"#cbd5e1", fontSize:11 }}>—</span>}
       </td>
@@ -3841,21 +3969,71 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
             </div>
           </div>
         ) : (
-          <span style={{ padding:"2px 8px", borderRadius:20, background:"#f1f5f9", color:"#475569", fontSize:10.5, fontWeight:600 }}>{catLabel}</span>
+          <div>
+            <span style={{ padding:"2px 8px", borderRadius:20, background:catBg, color:catColor, fontSize:10.5, fontWeight:600 }}>{catLabel}</span>
+            {(task.projectId?.name || task.sprintId?.name) && (
+              <div style={{ marginTop:4, display:"flex", flexDirection:"column", gap:2 }}>
+                {task.projectId?.name && (
+                  <span style={{ fontSize:10, color:"#4F46E5", fontWeight:600, display:"inline-flex", alignItems:"center", gap:3 }}>
+                    <i className="bi bi-folder2" />{task.projectId.name}
+                  </span>
+                )}
+                {task.sprintId?.name && (
+                  <span style={{ fontSize:10, color:"#7C3AED", fontWeight:600, display:"inline-flex", alignItems:"center", gap:3 }}>
+                    <i className="bi bi-lightning-charge" />{task.sprintId.name}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </td>
-      <td style={{ ...td, whiteSpace:"nowrap" }}>
-        {dl ? (
+      <td style={{ ...td }}>
+        {(task.taskType === "project" || task.taskType === "sprint") ? (
+          /* ── Project/Feature: show all 3 deadline levels ── */
+          <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+            {task.dueDate && (
+              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                {new Date(task.dueDate) < new Date() && task.status !== "completed" && (
+                  <span style={{ background:"#EF4444", color:"#fff", fontSize:8, fontWeight:800, borderRadius:10, padding:"1px 5px", flexShrink:0 }}>LATE</span>
+                )}
+                <div>
+                  <div style={{ fontSize:9, fontWeight:700, color:"#4F46E5", textTransform:"uppercase", letterSpacing:".03em" }}>Feature</div>
+                  <div style={{ fontSize:11, fontWeight:700, color: new Date(task.dueDate) < new Date() && task.status !== "completed" ? "#EF4444" : "#1e293b", whiteSpace:"nowrap" }}>
+                    {fmtDT(new Date(task.dueDate))}
+                  </div>
+                </div>
+              </div>
+            )}
+            {task.sprintId?.endDate && (
+              <div>
+                <div style={{ fontSize:9, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:".03em" }}>Sprint</div>
+                <div style={{ fontSize:11, color: new Date(task.sprintId.endDate) < new Date() ? "#f59e0b" : "#64748b", whiteSpace:"nowrap" }}>
+                  {fmtDT(new Date(task.sprintId.endDate))}
+                </div>
+              </div>
+            )}
+            {task.projectId?.endDate && (
+              <div>
+                <div style={{ fontSize:9, fontWeight:700, color:"#059669", textTransform:"uppercase", letterSpacing:".03em" }}>Project</div>
+                <div style={{ fontSize:11, color: new Date(task.projectId.endDate) < new Date() ? "#f59e0b" : "#64748b", whiteSpace:"nowrap" }}>
+                  {fmtDT(new Date(task.projectId.endDate))}
+                </div>
+              </div>
+            )}
+            {!task.dueDate && !task.sprintId?.endDate && !task.projectId?.endDate && (
+              <span style={{ color:"#cbd5e1", fontSize:11 }}>—</span>
+            )}
+          </div>
+        ) : dl ? (
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:4, flexWrap:"wrap" }}>
               {(() => {
                 const done = isDone || isApproved;
-                // On time = done AND (no submittedAt OR submitted before/at deadline)
                 const submittedOnTime = done &&
                   (!submittedAt || !deadlineSrc || new Date(submittedAt) <= new Date(deadlineSrc));
                 const showLate = dl.urgent && !submittedOnTime;
 
-                // For done late tasks: show exact late duration (hours/minutes or days)
                 let displayText = dl.text;
                 if (showLate && done && submittedAt && deadlineSrc) {
                   const lateMs = new Date(submittedAt) - new Date(deadlineSrc);
@@ -3872,7 +4050,6 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
                     displayText = days === 1 ? "1d late" : `${days}d late`;
                   }
                 } else if (submittedOnTime && dl.urgent) {
-                  // On-time approved task: skip the "Xd overdue" label, just show the date below
                   displayText = null;
                 }
 
@@ -4024,11 +4201,11 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   const isCurrentMonth = filterYear === now.getFullYear() && filterMonth === now.getMonth();
   const monthLabel = new Date(filterYear, filterMonth, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
-  // Month-scoped tasks: dueDate falls in selected month, OR scheduledFor, OR createdAt as fallback
+  // Month-scoped tasks: dueDate falls in selected month, OR sprint/project endDate, OR scheduledFor, OR createdAt as fallback
   const monthStart = new Date(filterYear, filterMonth, 1);
   const monthEnd   = new Date(filterYear, filterMonth + 1, 0, 23, 59, 59);
   function inSelectedMonth(t) {
-    const d = t.dueDate || t.scheduledFor || t.createdAt;
+    const d = t.dueDate || t.sprintId?.endDate || t.projectId?.endDate || t.scheduledFor || t.createdAt;
     if (!d) return true;
     const dt = new Date(d);
     return dt >= monthStart && dt <= monthEnd;
@@ -4038,19 +4215,20 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   const weekEnd    = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7);
 
   // Unique brands and content types for filters
-  const allBrands = [...new Map(localTasks.filter(t => t.brandId).map(t => [String(t.brandId._id), t.brandId])).values()];
+  // For project tasks: use task.brandId OR task.projectId.brandId
+  const getTaskBrand = t => t.brandId || t.projectId?.brandId || null;
+  const allBrands = [...new Map(localTasks.map(t => getTaskBrand(t)).filter(Boolean).map(b => [String(b._id), b])).values()];
   const allTypes  = [...new Set(localTasks.map(t => t.contentType).filter(Boolean))];
 
   // Base: month-filtered, then brand-filtered tasks
-  // Tasks with no brandId are always included regardless of brand filter (can't be branded)
   const monthTasks = localTasks.filter(inSelectedMonth);
   const brandTasks = brandFilter && allBrands.length > 0
-    ? monthTasks.filter(t => !t.brandId || String(t.brandId._id) === brandFilter)
+    ? monthTasks.filter(t => { const b = getTaskBrand(t); return !b || String(b._id) === brandFilter; })
     : monthTasks;
 
   // All tasks for the active brand (no month scope) — used for overdue detection across months
   const allBrandTasks = brandFilter && allBrands.length > 0
-    ? localTasks.filter(t => !t.brandId || String(t.brandId._id) === brandFilter)
+    ? localTasks.filter(t => { const b = getTaskBrand(t); return !b || String(b._id) === brandFilter; })
     : localTasks;
 
   const isApprovedTask = t => t.status === "completed" || (t.stages||[]).some(s => s.approved === true);
@@ -4113,7 +4291,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
             style={{ padding:"7px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, fontWeight:600, color:"#1e293b", outline:"none", cursor:"pointer", background:"#fff" }}>
             <option value="">All Brands ({monthTasks.length})</option>
             {allBrands.map(b => {
-              const cnt = monthTasks.filter(t => t.brandId && String(t.brandId._id) === String(b._id)).length;
+              const cnt = monthTasks.filter(t => { const tb = getTaskBrand(t); return tb && String(tb._id) === String(b._id); }).length;
               return <option key={b._id} value={String(b._id)}>{b.name} ({cnt})</option>;
             })}
           </select>
@@ -4157,7 +4335,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr>
-                      {["#","Task","Brand","Category / Stage","Deadline","Submitted","Status","Action"].map(h => <th key={h} style={TH}>{h}</th>)}
+                      {["#","Task","Brand","Type / Project","Deadline","Submitted","Status","Action"].map(h => <th key={h} style={TH}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
