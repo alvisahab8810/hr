@@ -5,9 +5,7 @@ import Brand    from "@/models/tasks/Brand";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 
 const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-
-// Map contentType → monthlyDeliverables field name
-const DELIV_KEY = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+const DELIV_KEY   = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -21,32 +19,35 @@ export default async function handler(req, res) {
 
   try {
     const now = new Date();
+    const curMonthStr  = `${MONTH_SHORT[now.getMonth()]}'${String(now.getFullYear()).slice(2)}`;
 
-    // Count tasks created this calendar month
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
+    // Count by nomenclature pattern so rolled-over tasks (createdAt in current month
+    // but nomenclature in next month) are correctly excluded from current month count
     const currentMonthCount = await Task.countDocuments({
       brandId,
       contentType,
-      createdAt: { $gte: monthStart, $lte: monthEnd },
+      nomenclature: { $regex: `^${contentType}\\d+ ${curMonthStr}$` },
     });
 
-    // Fetch the brand's monthly deliverable limit for this content type
-    const brand       = await Brand.findById(brandId).lean();
-    const delivKey    = DELIV_KEY[contentType];
+    const brand        = await Brand.findById(brandId).lean();
+    const delivKey     = DELIV_KEY[contentType];
     const monthlyLimit = brand?.monthlyDeliverables?.[delivKey] || 0;
 
-    let serial, year, month;
+    let serial, month, year;
 
     if (monthlyLimit > 0 && currentMonthCount >= monthlyLimit) {
-      // Monthly quota is full — roll over to next month, reset serial to 1
-      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      month  = nextMonth.getMonth();
-      year   = nextMonth.getFullYear();
-      serial = 1;
+      // Monthly quota full — count how many already rolled over to next month
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const nextMonthStr  = `${MONTH_SHORT[nextMonthDate.getMonth()]}'${String(nextMonthDate.getFullYear()).slice(2)}`;
+      const nextMonthCount = await Task.countDocuments({
+        brandId,
+        contentType,
+        nomenclature: { $regex: `^${contentType}\\d+ ${nextMonthStr}$` },
+      });
+      month  = nextMonthDate.getMonth();
+      year   = nextMonthDate.getFullYear();
+      serial = nextMonthCount + 1;
     } else {
-      // Still within this month's quota
       month  = now.getMonth();
       year   = now.getFullYear();
       serial = currentMonthCount + 1;

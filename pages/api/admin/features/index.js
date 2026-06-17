@@ -14,15 +14,18 @@ export default async function handler(req, res) {
   /* ── GET ── */
   if (req.method === "GET") {
     try {
-      const { sprintId, projectId } = req.query;
+      const { sprintId, projectId, status } = req.query;
       const q = { taskType: "project" };
       if (sprintId)   q.sprintId   = sprintId;
       if (projectId)  q.projectId  = projectId;
+      if (status)     q.status     = status;
 
       const features = await Task.find(q)
         .populate("assignedTo", "firstName lastName personal professional")
         .populate("statusUpdatedBy", "firstName lastName personal professional")
-        .sort({ createdAt: 1 })
+        .populate("projectId", "name")
+        .populate("sprintId", "name")
+        .sort(status ? { statusUpdatedAt: -1, createdAt: -1 } : { createdAt: 1 })
         .lean();
 
       return res.json({ success: true, features });

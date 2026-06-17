@@ -3,6 +3,7 @@
 
 import dbConnect from "@/utils/dbConnect";
 import Project from "@/models/projects/Project";
+import Task    from "@/models/tasks/Task";
 import "@/models/clients/Client";
 import "@/models/hr/Employee";
 import "@/models/tasks/Brand";
@@ -36,7 +37,25 @@ export default async function handler(req, res) {
         .sort({ createdAt: -1 })
         .lean();
 
-      return res.json({ success: true, projects });
+      // Dynamic completion progress per project (count of "project"-type tasks/features)
+      const counts = await Task.aggregate([
+        { $match: { taskType: "project", projectId: { $in: projects.map(p => p._id) } } },
+        { $group: { _id: { projectId: "$projectId", done: { $eq: ["$status", "completed"] } }, count: { $sum: 1 } } },
+      ]);
+      const progressMap = {};
+      counts.forEach(c => {
+        const pid = c._id.projectId?.toString();
+        if (!pid) return;
+        if (!progressMap[pid]) progressMap[pid] = { total: 0, done: 0 };
+        progressMap[pid].total += c.count;
+        if (c._id.done) progressMap[pid].done += c.count;
+      });
+      const projectsWithProgress = projects.map(p => ({
+        ...p,
+        progress: progressMap[p._id.toString()] || { total: 0, done: 0 },
+      }));
+
+      return res.json({ success: true, projects: projectsWithProgress });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });
     }

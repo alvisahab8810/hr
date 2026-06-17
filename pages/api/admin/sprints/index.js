@@ -3,6 +3,7 @@
 
 import dbConnect from "@/utils/dbConnect";
 import Sprint from "@/models/projects/Sprint";
+import Task   from "@/models/tasks/Task";
 
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 
@@ -25,7 +26,25 @@ export default async function handler(req, res) {
         .sort({ createdAt: -1 })
         .lean();
 
-      return res.json({ success: true, sprints });
+      // Dynamic completion progress per sprint (count of "project"-type tasks/features)
+      const counts = await Task.aggregate([
+        { $match: { taskType: "project", sprintId: { $in: sprints.map(s => s._id) } } },
+        { $group: { _id: { sprintId: "$sprintId", done: { $eq: ["$status", "completed"] } }, count: { $sum: 1 } } },
+      ]);
+      const progressMap = {};
+      counts.forEach(c => {
+        const sid = c._id.sprintId?.toString();
+        if (!sid) return;
+        if (!progressMap[sid]) progressMap[sid] = { total: 0, done: 0 };
+        progressMap[sid].total += c.count;
+        if (c._id.done) progressMap[sid].done += c.count;
+      });
+      const sprintsWithProgress = sprints.map(s => ({
+        ...s,
+        progress: progressMap[s._id.toString()] || { total: 0, done: 0 },
+      }));
+
+      return res.json({ success: true, sprints: sprintsWithProgress });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });
     }

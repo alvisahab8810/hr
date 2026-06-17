@@ -58,6 +58,21 @@ function empInitials(emp) {
   return `${fn[0]}${ln[0] || ""}`.toUpperCase();
 }
 
+function toDateInput(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return "";
+  return dt.toISOString().slice(0, 10);
+}
+
+function toDateTimeInput(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt)) return "";
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+
 function AvatarCircle({ emp, size = 28, colors = ["#6366F1","#8B5CF6","#EC4899","#F59E0B","#10B981","#3B82F6"] }) {
   const idx = empName(emp).charCodeAt(0) % colors.length;
   return (
@@ -96,9 +111,21 @@ export default function WebProjectsPage() {
   const [webBrands,       setWebBrands]       = useState([]);
   const [brandFilter,     setBrandFilter]     = useState("");
 
+  const [showEditProject, setShowEditProject] = useState(false);
+  const [showEditSprint,  setShowEditSprint]  = useState(false);
+  const [editingSprintId, setEditingSprintId] = useState(null);
+  const [showEditFeature, setShowEditFeature] = useState(false);
+  const [editingFeature,  setEditingFeature]  = useState(null); // { id, sprintKey }
+
+  const [pendingReviews,  setPendingReviews]  = useState([]);
+  const [showReviewPanel, setShowReviewPanel] = useState(false);
+
   const [projectForm, setProjectForm] = useState({ name: "", description: "", status: "active", currentPhase: "development", startDate: "", endDate: "", clientId: "", brandId: "" });
   const [sprintForm,  setSprintForm]  = useState({ name: "", durationDays: 14, startDate: "", endDate: "", phase: "development" });
   const [featureForm, setFeatureForm] = useState({ title: "", sprintId: "", assignedTo: "", dueDate: "" });
+  const [editProjectForm, setEditProjectForm] = useState({ name: "", description: "", status: "active", currentPhase: "development", startDate: "", endDate: "" });
+  const [editSprintForm,  setEditSprintForm]  = useState({ name: "", status: "planned", phase: "development", durationDays: "", startDate: "", endDate: "" });
+  const [editFeatureForm, setEditFeatureForm] = useState({ title: "", sprintId: "", assignedTo: "", dueDate: "", status: "todo" });
   const [teamMembers, setTeamMembers] = useState([]);
 
   const selectedProject = projects.find(p => p._id === selectedId) || null;
@@ -111,7 +138,24 @@ export default function WebProjectsPage() {
     fetchProjects();
     fetchEmployees();
     fetchWebBrands();
+    fetchPendingReviews();
   }, []);
+
+  /* ── Dynamic approval notifications: poll for features employees submitted for review ── */
+  useEffect(() => {
+    const t = setInterval(fetchPendingReviews, 30000);
+    const onFocus = () => fetchPendingReviews();
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };
+  }, []);
+
+  const fetchPendingReviews = async () => {
+    try {
+      const r = await fetch("/api/admin/features?status=review", { credentials: "include" });
+      const d = await r.json();
+      if (d.success) setPendingReviews(d.features || []);
+    } catch {}
+  };
 
   const fetchWebBrands = async () => {
     try {
@@ -140,6 +184,20 @@ export default function WebProjectsPage() {
       const d = await r.json();
       if (d.success) setEmployees(d.employees || []);
     } catch {}
+  };
+
+  /* ── Local progress bumps (kept in sync with server-computed progress) ── */
+  const bumpProjectProgress = (deltaTotal, deltaDone) => {
+    setProjects(ps => ps.map(p => p._id === selectedId ? {
+      ...p,
+      progress: { total: Math.max(0, (p.progress?.total || 0) + deltaTotal), done: Math.max(0, (p.progress?.done || 0) + deltaDone) },
+    } : p));
+  };
+  const bumpSprintProgress = (sprintId, deltaTotal, deltaDone) => {
+    setSprints(ss => ss.map(s => s._id === sprintId ? {
+      ...s,
+      progress: { total: Math.max(0, (s.progress?.total || 0) + deltaTotal), done: Math.max(0, (s.progress?.done || 0) + deltaDone) },
+    } : s));
   };
 
   const selectProject = async (id, force = false) => {
@@ -269,6 +327,8 @@ export default function WebProjectsPage() {
         toast.success("Feature added!");
         const sId = featureForm.sprintId;
         setFeatures(f => ({ ...f, [sId]: [...(f[sId] || []), d.feature] }));
+        bumpProjectProgress(1, 0);
+        bumpSprintProgress(sId, 1, 0);
         setExpandedSp(sId);
         setShowAddFeature(false);
         setFeatureForm({ title: "", sprintId: "", assignedTo: "", dueDate: "" });
@@ -278,6 +338,8 @@ export default function WebProjectsPage() {
   };
 
   const handleUpdateStatus = async (featureId, sprintKey, newStatus) => {
+    const prev = (features[sprintKey] || []).find(ft => ft._id === featureId);
+    const wasDone = prev?.status === "completed";
     try {
       const r = await fetch(`/api/admin/features/${featureId}`, {
         method: "PATCH", credentials: "include",
@@ -294,17 +356,88 @@ export default function WebProjectsPage() {
               : ft
           ),
         }));
+        const isDone = newStatus === "completed";
+        if (wasDone !== isDone) {
+          const delta = isDone ? 1 : -1;
+          bumpProjectProgress(0, delta);
+          bumpSprintProgress(sprintKey, 0, delta);
+        }
+        if (newStatus === "review" || prev?.status === "review") fetchPendingReviews();
       }
     } catch {}
   };
 
   const handleDeleteFeature = async (featureId, sprintKey) => {
     if (!confirm("Delete this feature?")) return;
+    const ft = (features[sprintKey] || []).find(f => f._id === featureId);
     try {
       await fetch(`/api/admin/features/${featureId}`, { method: "DELETE", credentials: "include" });
       setFeatures(f => ({ ...f, [sprintKey]: (f[sprintKey] || []).filter(ft => ft._id !== featureId) }));
+      bumpProjectProgress(-1, ft?.status === "completed" ? -1 : 0);
+      bumpSprintProgress(sprintKey, -1, ft?.status === "completed" ? -1 : 0);
+      if (ft?.status === "review") fetchPendingReviews();
       toast.success("Feature deleted");
     } catch {}
+  };
+
+  const openEditFeature = (f, sprintKey) => {
+    setEditingFeature({ id: f._id, sprintKey });
+    setEditFeatureForm({
+      title:      f.title || "",
+      sprintId:   sprintKey,
+      assignedTo: (typeof f.assignedTo === "object" ? f.assignedTo?._id : f.assignedTo) || "",
+      dueDate:    toDateTimeInput(f.dueDate),
+      status:     f.status || "todo",
+    });
+    setShowEditFeature(true);
+  };
+
+  const handleUpdateFeature = async () => {
+    if (!editFeatureForm.title.trim()) return toast.error("Feature title required");
+    if (!editingFeature) return;
+    const { id, sprintKey: oldSprintKey } = editingFeature;
+    const prev = (features[oldSprintKey] || []).find(ft => ft._id === id);
+    const wasDone = prev?.status === "completed";
+    const newSprintId = editFeatureForm.sprintId || oldSprintKey;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`/api/admin/features/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title:      editFeatureForm.title,
+          sprintId:   newSprintId,
+          assignedTo: editFeatureForm.assignedTo || null,
+          dueDate:    editFeatureForm.dueDate || null,
+          status:     editFeatureForm.status,
+        }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        const isDone = editFeatureForm.status === "completed";
+        if (newSprintId !== oldSprintKey) {
+          setFeatures(f => ({
+            ...f,
+            [oldSprintKey]: (f[oldSprintKey] || []).filter(ft => ft._id !== id),
+            [newSprintId]: [...(f[newSprintId] || []), d.feature],
+          }));
+          bumpSprintProgress(oldSprintKey, -1, wasDone ? -1 : 0);
+          bumpSprintProgress(newSprintId, 1, isDone ? 1 : 0);
+        } else {
+          setFeatures(f => ({
+            ...f,
+            [oldSprintKey]: (f[oldSprintKey] || []).map(ft => ft._id === id ? d.feature : ft),
+          }));
+          if (wasDone !== isDone) bumpSprintProgress(oldSprintKey, 0, isDone ? 1 : -1);
+        }
+        if (wasDone !== isDone) bumpProjectProgress(0, isDone ? 1 : -1);
+        if (prev?.status === "review" || editFeatureForm.status === "review") fetchPendingReviews();
+        toast.success("Feature updated!");
+        setShowEditFeature(false);
+        setEditingFeature(null);
+      } else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setSubmitting(false); }
   };
 
   const handleSaveTeam = async () => {
@@ -326,6 +459,117 @@ export default function WebProjectsPage() {
     } catch { toast.error("Failed to save team"); }
   };
 
+  /* ── Edit / Delete Project ── */
+  const openEditProject = () => {
+    if (!selectedProject) return;
+    setEditProjectForm({
+      name:         selectedProject.name || "",
+      description:  selectedProject.description || "",
+      status:       selectedProject.status || "active",
+      currentPhase: selectedProject.currentPhase || "development",
+      startDate:    toDateInput(selectedProject.startDate),
+      endDate:      toDateInput(selectedProject.endDate),
+    });
+    setShowEditProject(true);
+  };
+
+  const handleUpdateProject = async () => {
+    if (!editProjectForm.name.trim()) return toast.error("Project name required");
+    if (!selectedId) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`/api/admin/projects/${selectedId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editProjectForm),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setProjects(ps => ps.map(p => p._id === selectedId ? { ...p, ...d.project, progress: p.progress } : p));
+        setShowEditProject(false);
+        toast.success("Project updated!");
+      } else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!selectedProject) return;
+    if (!confirm(`Delete project "${selectedProject.name}"? This will also delete its sprints.`)) return;
+    try {
+      const r = await fetch(`/api/admin/projects/${selectedId}`, { method: "DELETE", credentials: "include" });
+      const d = await r.json();
+      if (d.success) {
+        const remaining = projects.filter(p => p._id !== selectedId);
+        setProjects(remaining);
+        setSprints([]);
+        setFeatures({});
+        toast.success("Project deleted");
+        if (remaining.length > 0) selectProject(remaining[0]._id, true);
+        else setSelectedId(null);
+      } else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+  };
+
+  /* ── Edit / Delete Sprint ── */
+  const openEditSprint = (sp) => {
+    setEditingSprintId(sp._id);
+    setEditSprintForm({
+      name:         sp.name || "",
+      status:       sp.status || "planned",
+      phase:        sp.phase || "development",
+      durationDays: sp.durationDays || "",
+      startDate:    toDateTimeInput(sp.startDate),
+      endDate:      toDateTimeInput(sp.endDate),
+    });
+    setShowEditSprint(true);
+  };
+
+  const handleUpdateSprint = async () => {
+    if (!editSprintForm.name.trim()) return toast.error("Sprint name required");
+    if (!editSprintForm.endDate)     return toast.error("End date (deadline) is required");
+    if (!editingSprintId) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch(`/api/admin/sprints/${editingSprintId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:         editSprintForm.name,
+          status:       editSprintForm.status,
+          phase:        editSprintForm.phase,
+          durationDays: editSprintForm.durationDays ? Number(editSprintForm.durationDays) : null,
+          startDate:    editSprintForm.startDate || null,
+          endDate:      editSprintForm.endDate   || null,
+        }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setSprints(ss => ss.map(s => s._id === editingSprintId ? { ...s, ...d.sprint, progress: s.progress } : s));
+        setShowEditSprint(false);
+        setEditingSprintId(null);
+        toast.success("Sprint updated!");
+      } else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleDeleteSprint = async (sprintId) => {
+    const sp = sprints.find(s => s._id === sprintId);
+    if (!confirm(`Delete sprint "${sp?.name || ""}"? Its features will remain but become unassigned from this sprint.`)) return;
+    try {
+      const r = await fetch(`/api/admin/sprints/${sprintId}`, { method: "DELETE", credentials: "include" });
+      const d = await r.json();
+      if (d.success) {
+        bumpProjectProgress(-(sp?.progress?.total || 0), -(sp?.progress?.done || 0));
+        setSprints(ss => ss.filter(s => s._id !== sprintId));
+        setFeatures(f => { const nf = { ...f }; delete nf[sprintId]; return nf; });
+        if (expandedSp === sprintId) setExpandedSp(null);
+        toast.success("Sprint deleted");
+      } else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+  };
+
   /* ── Sub-renders ── */
   const sprintsByPhase = (phaseKey) => sprints.filter(s => (s.phase || "development") === phaseKey);
 
@@ -335,6 +579,9 @@ export default function WebProjectsPage() {
     const isExp = expandedSp === sprintKey;
     const ss = SPRINT_STATUS[sprint.status] || {};
     const ph = PHASE_MAP[sprint.phase || "development"] || {};
+    const loaded = !!features[sprintKey];
+    const spTotal = loaded ? fts.length : (sprint.progress?.total || 0);
+    const spDone  = loaded ? fts.filter(f => f.status === "completed").length : (sprint.progress?.done || 0);
 
     return (
       <div className="wp-sprint-item">
@@ -350,12 +597,34 @@ export default function WebProjectsPage() {
                 · Deadline {new Date(sprint.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"2-digit" })} {new Date(sprint.endDate).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" })}
               </span>
             )}
+            {spTotal > 0 && (
+              <span style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 50, height: 4, borderRadius: 10, background: "#E5E7EB", overflow: "hidden", display: "inline-block" }}>
+                  <span style={{ height: "100%", display: "block", width: `${Math.round(spDone / spTotal * 100)}%`, background: "linear-gradient(90deg,#6366F1,#8B5CF6)", borderRadius: 10 }} />
+                </span>
+                <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700 }}>{spDone}/{spTotal}</span>
+              </span>
+            )}
           </div>
           <span className="wp-badge" style={{ background: ss.bg, color: ss.color, borderColor: "transparent" }}>{ss.label}</span>
           <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10 }}>
             <i className={`bi ${ph.icon}`} style={{ fontSize: 9 }} /> {ph.short}
           </span>
           <span style={{ fontSize: 11, color: "#94A3B8" }}>{fts.length} features</span>
+          <button
+            style={{ border: "none", background: "none", cursor: "pointer", color: "#6366F1", padding: 4 }}
+            onClick={e => { e.stopPropagation(); openEditSprint(sprint); }}
+            title="Edit sprint"
+          >
+            <i className="bi bi-pencil" style={{ fontSize: 12 }} />
+          </button>
+          <button
+            style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}
+            onClick={e => { e.stopPropagation(); handleDeleteSprint(sprintKey); }}
+            title="Delete sprint"
+          >
+            <i className="bi bi-trash" style={{ fontSize: 12 }} />
+          </button>
           <i className={`bi bi-chevron-${isExp ? "up" : "down"}`} style={{ color: "#94A3B8", fontSize: 12 }} />
         </div>
 
@@ -440,6 +709,13 @@ export default function WebProjectsPage() {
                         )}
                       </div>
                       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <button
+                          style={{ border: "none", background: "none", cursor: "pointer", color: "#6366F1", padding: 4 }}
+                          onClick={() => openEditFeature(f, spKey)}
+                          title="Edit"
+                        >
+                          <i className="bi bi-pencil" style={{ fontSize: 12 }} />
+                        </button>
                         <button
                           style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}
                           onClick={() => handleDeleteFeature(f._id, spKey)}
@@ -540,11 +816,14 @@ export default function WebProjectsPage() {
               {sprints.map(sp => {
                 const ss = SPRINT_STATUS[sp.status] || {};
                 const ph = PHASE_MAP[sp.phase || "development"] || {};
+                const loaded = !!features[sp._id];
                 const spFts = features[sp._id] || [];
                 const doneFts = spFts.filter(f => f.status === "completed").length;
+                const spTotal = loaded ? spFts.length : (sp.progress?.total || 0);
+                const spDone  = loaded ? doneFts : (sp.progress?.done || 0);
                 return (
                   <div key={sp._id} style={{ background: "#FAFAFA", border: "1.5px solid #F1F5F9", borderRadius: 12, padding: "12px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: spFts.length > 0 ? 8 : 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (spFts.length > 0 || spTotal > 0) ? 8 : 0 }}>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", background: ss.color || "#94A3B8", flexShrink: 0 }} />
                       <span style={{ fontWeight: 700, fontSize: 13.5, color: "#1E293B", flex: 1 }}>{sp.name}</span>
                       <span className="wp-badge" style={{ background: ph.bg, color: ph.color, borderColor: "transparent", fontSize: 10 }}>
@@ -561,12 +840,32 @@ export default function WebProjectsPage() {
                         </span>
                       )}
                       <button
+                        style={{ border: "none", background: "none", cursor: "pointer", color: "#6366F1", padding: 4 }}
+                        onClick={() => openEditSprint(sp)} title="Edit sprint"
+                      >
+                        <i className="bi bi-pencil" style={{ fontSize: 12 }} />
+                      </button>
+                      <button
+                        style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}
+                        onClick={() => handleDeleteSprint(sp._id)} title="Delete sprint"
+                      >
+                        <i className="bi bi-trash" style={{ fontSize: 12 }} />
+                      </button>
+                      <button
                         style={{ border: "1.5px solid #C7D2FE", background: "#EEF2FF", color: "#6366F1", borderRadius: 8, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}
                         onClick={() => { setFeatureForm({ title: "", sprintId: sp._id, assignedTo: "", dueDate: "" }); setShowAddFeature(true); }}
                       >
                         <i className="bi bi-plus" /> Feature
                       </button>
                     </div>
+                    {spTotal > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: spFts.length > 0 ? 8 : 0 }}>
+                        <div className="wp-progress-bar" style={{ flex: 1, margin: 0 }}>
+                          <div className="wp-progress-fill" style={{ width: `${Math.round(spDone / spTotal * 100)}%` }} />
+                        </div>
+                        <span style={{ fontSize: 10.5, color: "#6B7280", fontWeight: 600, flexShrink: 0 }}>{spDone}/{spTotal} done</span>
+                      </div>
+                    )}
                     {spFts.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
                         {spFts.slice(0, 6).map((f, i) => {
@@ -580,9 +879,6 @@ export default function WebProjectsPage() {
                         {spFts.length > 6 && (
                           <span className="f-pill">+{spFts.length - 6} more</span>
                         )}
-                        <span style={{ marginLeft: "auto", fontSize: 10.5, color: "#6B7280", fontWeight: 600 }}>
-                          {doneFts}/{spFts.length} done
-                        </span>
                       </div>
                     )}
                   </div>
@@ -764,7 +1060,60 @@ export default function WebProjectsPage() {
                     {selectedProject && sprints.length > 0 && ` · ${sprints.length} sprints`}
                   </p>
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      className="wp-btn wp-btn-ghost"
+                      style={{ position: "relative" }}
+                      onClick={() => setShowReviewPanel(s => !s)}
+                      title="Pending approvals"
+                    >
+                      <i className="bi bi-bell-fill" style={{ color: pendingReviews.length > 0 ? "#D97706" : "#94A3B8" }} />
+                      {pendingReviews.length > 0 && (
+                        <span style={{
+                          position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+                          background: "#EF4444", color: "#fff", fontSize: 10.5, fontWeight: 700,
+                          display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
+                        }}>
+                          {pendingReviews.length}
+                        </span>
+                      )}
+                    </button>
+                    {showReviewPanel && (
+                      <div style={{
+                        position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, maxHeight: 380, overflowY: "auto",
+                        background: "#fff", borderRadius: 14, border: "1.5px solid #F1F5F9", boxShadow: "0 16px 40px rgba(0,0,0,.14)",
+                        zIndex: 1100, padding: 10,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 6px 8px" }}>
+                          <span style={{ fontWeight: 800, fontSize: 13, color: "#1E293B" }}>
+                            <i className="bi bi-hourglass-split" style={{ color: "#D97706", marginRight: 6 }} />
+                            Pending Approvals
+                          </span>
+                          <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700 }}>{pendingReviews.length}</span>
+                        </div>
+                        {pendingReviews.length === 0 ? (
+                          <div style={{ padding: "20px 8px", textAlign: "center", color: "#94A3B8", fontSize: 12.5 }}>
+                            No features waiting for approval.
+                          </div>
+                        ) : pendingReviews.map(rv => (
+                          <Link key={rv._id} href={`/dashboard/admin/tasks/${rv._id}`} style={{
+                            display: "block", padding: "9px 10px", borderRadius: 10, textDecoration: "none",
+                            border: "1px solid #FDE68A", background: "#FFFBEB", marginBottom: 6,
+                          }}>
+                            <div style={{ fontWeight: 700, fontSize: 12.5, color: "#1E293B" }}>{rv.title}</div>
+                            <div style={{ fontSize: 11, color: "#92400E", marginTop: 3, display: "flex", justifyContent: "space-between" }}>
+                              <span>{rv.projectId?.name || "—"}{rv.sprintId?.name ? ` · ${rv.sprintId.name}` : ""}</span>
+                              <span style={{ fontWeight: 700 }}>Review →</span>
+                            </div>
+                            {rv.assignedTo && (
+                              <div style={{ fontSize: 10.5, color: "#92400E", marginTop: 2 }}>Submitted by {empName(rv.assignedTo)}</div>
+                            )}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <button className="wp-btn wp-btn-primary" onClick={() => setShowNewProject(true)}>
                     <i className="bi bi-plus-circle" /> New Project
                   </button>
@@ -854,16 +1203,30 @@ export default function WebProjectsPage() {
                               {endFmt && <span style={{ color: p.endDate && new Date(p.endDate) < new Date() && p.status !== "completed" ? "#EF4444" : "#64748B", fontWeight: p.endDate && new Date(p.endDate) < new Date() ? 700 : 400 }}>{endFmt}</span>}
                             </div>
                           )}
-                          {isSel && totalFeats > 0 && (
-                            <>
-                              <div className="wp-progress-bar" style={{ marginTop: 8 }}>
-                                <div className="wp-progress-fill" style={{ width: `${Math.round(doneFeats / totalFeats * 100)}%` }} />
+                          {(() => {
+                            const liveTotal = isSel ? totalFeats : 0;
+                            const total = liveTotal > 0 ? liveTotal : (p.progress?.total || 0);
+                            const done  = liveTotal > 0 ? doneFeats : (p.progress?.done || 0);
+                            if (total === 0) return null;
+                            return (
+                              <>
+                                <div className="wp-progress-bar" style={{ marginTop: 8 }}>
+                                  <div className="wp-progress-fill" style={{ width: `${Math.round(done / total * 100)}%` }} />
+                                </div>
+                                <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 4, fontWeight: 600 }}>
+                                  {done}/{total} features done
+                                </div>
+                              </>
+                            );
+                          })()}
+                          {(() => {
+                            const cnt = pendingReviews.filter(r => (typeof r.projectId === "object" ? r.projectId?._id : r.projectId) === p._id).length;
+                            return cnt > 0 ? (
+                              <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700, color: "#D97706", background: "#FFFBEB", borderRadius: 8, padding: "2px 8px" }}>
+                                <i className="bi bi-bell-fill" style={{ fontSize: 9 }} /> {cnt} awaiting approval
                               </div>
-                              <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 4, fontWeight: 600 }}>
-                                {doneFeats}/{totalFeats} features done
-                              </div>
-                            </>
-                          )}
+                            ) : null;
+                          })()}
                         </div>
                       );
                     })}
@@ -900,6 +1263,12 @@ export default function WebProjectsPage() {
                                   </span>
                                 </div>
                                 <div style={{ display: "flex", gap: 6 }}>
+                                  <button className="wp-btn wp-btn-ghost" style={{ padding: "5px 10px", fontSize: 11.5 }} title="Edit project" onClick={openEditProject}>
+                                    <i className="bi bi-pencil" />
+                                  </button>
+                                  <button className="wp-btn wp-btn-ghost" style={{ padding: "5px 10px", fontSize: 11.5, color: "#DC2626" }} title="Delete project" onClick={handleDeleteProject}>
+                                    <i className="bi bi-trash" />
+                                  </button>
                                   <button className="wp-btn wp-btn-ghost" style={{ padding: "5px 12px", fontSize: 11.5 }} onClick={() => setShowAddSprint(true)}>
                                     <i className="bi bi-lightning" /> New Sprint
                                   </button>
@@ -912,40 +1281,46 @@ export default function WebProjectsPage() {
                             );
                           })()}
                         </div>
-                        {(selectedProject.startDate || selectedProject.endDate) && (
-                          <div style={{ display: "flex", gap: 20, marginTop: 10, paddingTop: 10, borderTop: "1px dashed #F1F5F9" }}>
-                            {selectedProject.startDate && (
-                              <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Start Date</div>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#374151" }}>
-                                  {new Date(selectedProject.startDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
-                                </div>
-                              </div>
-                            )}
-                            {selectedProject.endDate && (
-                              <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Deadline</div>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, color: new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" ? "#EF4444" : "#374151" }}>
-                                  {new Date(selectedProject.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
-                                  {new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" && (
-                                    <span style={{ marginLeft: 6, fontSize: 10, background: "#FEF2F2", color: "#EF4444", borderRadius: 6, padding: "1px 6px" }}>Overdue</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            {totalFeats > 0 && (
-                              <div style={{ marginLeft: "auto" }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Progress</div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <div style={{ width: 80, height: 6, borderRadius: 10, background: "#E5E7EB", overflow: "hidden" }}>
-                                    <div style={{ height: "100%", width: `${Math.round(doneFeats/totalFeats*100)}%`, background: "linear-gradient(90deg,#6366F1,#8B5CF6)", borderRadius: 10 }} />
+                        {(() => {
+                          const liveTotal = totalFeats > 0 ? totalFeats : 0;
+                          const pTotal = liveTotal > 0 ? totalFeats : (selectedProject.progress?.total || 0);
+                          const pDone  = liveTotal > 0 ? doneFeats  : (selectedProject.progress?.done  || 0);
+                          if (!selectedProject.startDate && !selectedProject.endDate && pTotal === 0) return null;
+                          return (
+                            <div style={{ display: "flex", gap: 20, marginTop: 10, paddingTop: 10, borderTop: "1px dashed #F1F5F9" }}>
+                              {selectedProject.startDate && (
+                                <div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Start Date</div>
+                                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#374151" }}>
+                                    {new Date(selectedProject.startDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
                                   </div>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{doneFeats}/{totalFeats}</span>
                                 </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                              )}
+                              {selectedProject.endDate && (
+                                <div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Deadline</div>
+                                  <div style={{ fontSize: 12.5, fontWeight: 700, color: new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" ? "#EF4444" : "#374151" }}>
+                                    {new Date(selectedProject.endDate).toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" })}
+                                    {new Date(selectedProject.endDate) < new Date() && selectedProject.status !== "completed" && (
+                                      <span style={{ marginLeft: 6, fontSize: 10, background: "#FEF2F2", color: "#EF4444", borderRadius: 6, padding: "1px 6px" }}>Overdue</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              {pTotal > 0 && (
+                                <div style={{ marginLeft: "auto" }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 2 }}>Progress</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <div style={{ width: 80, height: 6, borderRadius: 10, background: "#E5E7EB", overflow: "hidden" }}>
+                                      <div style={{ height: "100%", width: `${Math.round(pDone/pTotal*100)}%`, background: "linear-gradient(90deg,#6366F1,#8B5CF6)", borderRadius: 10 }} />
+                                    </div>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{pDone}/{pTotal}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Tabs */}
@@ -1224,6 +1599,187 @@ export default function WebProjectsPage() {
                 </>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Project Modal ── */}
+      {showEditProject && selectedProject && (
+        <div className="wp-overlay" onClick={() => setShowEditProject(false)}>
+          <div className="wp-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+              <h5 style={{ fontWeight: 800, color: "#1E293B", margin: 0 }}>
+                <i className="bi bi-pencil-square" style={{ color: "#6366F1", marginRight: 6 }} />
+                Edit Project
+              </h5>
+              <button onClick={() => setShowEditProject(false)} style={{ border: "none", background: "#F1F5F9", borderRadius: 8, width: 30, height: 30, cursor: "pointer" }}>
+                <i className="bi bi-x" />
+              </button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="wp-label">Project Name *</label>
+                <input className="wp-input" value={editProjectForm.name}
+                  onChange={e => setEditProjectForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="wp-label">Status</label>
+                  <select className="wp-input" value={editProjectForm.status} onChange={e => setEditProjectForm(f => ({ ...f, status: e.target.value }))}>
+                    {Object.entries(PROJ_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="wp-label">Current Phase</label>
+                  <select className="wp-input" value={editProjectForm.currentPhase} onChange={e => setEditProjectForm(f => ({ ...f, currentPhase: e.target.value }))}>
+                    {PHASES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="wp-label">Start Date</label>
+                  <input type="date" className="wp-input" value={editProjectForm.startDate} onChange={e => setEditProjectForm(f => ({ ...f, startDate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="wp-label">Deadline (End Date)</label>
+                  <input type="date" className="wp-input" value={editProjectForm.endDate} onChange={e => setEditProjectForm(f => ({ ...f, endDate: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="wp-label">Description</label>
+                <textarea className="wp-input" style={{ height: 68, resize: "vertical" }}
+                  value={editProjectForm.description} onChange={e => setEditProjectForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button className="wp-btn wp-btn-ghost" style={{ flex: 1 }} onClick={() => setShowEditProject(false)}>Cancel</button>
+                <button className="wp-btn wp-btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleUpdateProject}>
+                  {submitting ? "Saving…" : <><i className="bi bi-check2" /> Save Changes</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Sprint Modal ── */}
+      {showEditSprint && (
+        <div className="wp-overlay" onClick={() => setShowEditSprint(false)}>
+          <div className="wp-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+              <h5 style={{ fontWeight: 800, color: "#1E293B", margin: 0 }}>
+                <i className="bi bi-pencil-square" style={{ color: "#F59E0B", marginRight: 6 }} />
+                Edit Sprint
+              </h5>
+              <button onClick={() => setShowEditSprint(false)} style={{ border: "none", background: "#F1F5F9", borderRadius: 8, width: 30, height: 30, cursor: "pointer" }}>
+                <i className="bi bi-x" />
+              </button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="wp-label">Sprint Name *</label>
+                <input className="wp-input" value={editSprintForm.name}
+                  onChange={e => setEditSprintForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="wp-label">Phase</label>
+                  <select className="wp-input" value={editSprintForm.phase} onChange={e => setEditSprintForm(f => ({ ...f, phase: e.target.value }))}>
+                    {PHASES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="wp-label">Status</label>
+                  <select className="wp-input" value={editSprintForm.status} onChange={e => setEditSprintForm(f => ({ ...f, status: e.target.value }))}>
+                    {Object.entries(SPRINT_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="wp-label">Start Date &amp; Time</label>
+                  <input type="datetime-local" className="wp-input" value={editSprintForm.startDate}
+                    onChange={e => setEditSprintForm(f => ({ ...f, startDate: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="wp-label">End Date &amp; Time (Deadline) *</label>
+                  <input type="datetime-local" className="wp-input" value={editSprintForm.endDate}
+                    onChange={e => setEditSprintForm(f => ({ ...f, endDate: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="wp-label">Duration (days)</label>
+                <input type="number" className="wp-input" min={1} max={90} value={editSprintForm.durationDays}
+                  onChange={e => setEditSprintForm(f => ({ ...f, durationDays: e.target.value }))} />
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button className="wp-btn wp-btn-ghost" style={{ flex: 1 }} onClick={() => setShowEditSprint(false)}>Cancel</button>
+                <button className="wp-btn wp-btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleUpdateSprint}>
+                  {submitting ? "Saving…" : <><i className="bi bi-check2" /> Save Changes</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Feature Modal ── */}
+      {showEditFeature && (
+        <div className="wp-overlay" onClick={() => setShowEditFeature(false)}>
+          <div className="wp-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+              <h5 style={{ fontWeight: 800, color: "#1E293B", margin: 0 }}>
+                <i className="bi bi-pencil-square" style={{ color: "#6366F1", marginRight: 6 }} />
+                Edit Feature
+              </h5>
+              <button onClick={() => setShowEditFeature(false)} style={{ border: "none", background: "#F1F5F9", borderRadius: 8, width: 30, height: 30, cursor: "pointer" }}>
+                <i className="bi bi-x" />
+              </button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="wp-label">Feature Title *</label>
+                <input className="wp-input" value={editFeatureForm.title}
+                  onChange={e => setEditFeatureForm(f => ({ ...f, title: e.target.value }))} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="wp-label">Sprint</label>
+                  <select className="wp-input" value={editFeatureForm.sprintId} onChange={e => setEditFeatureForm(f => ({ ...f, sprintId: e.target.value }))}>
+                    {sprints.map(s => {
+                      const ph = PHASE_MAP[s.phase || "development"] || {};
+                      return <option key={s._id} value={s._id}>{s.name} ({ph.short})</option>;
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="wp-label">Status</label>
+                  <select className="wp-input" value={editFeatureForm.status} onChange={e => setEditFeatureForm(f => ({ ...f, status: e.target.value }))}>
+                    {FEAT_STATUS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="wp-label">Assignee</label>
+                <select className="wp-input" value={editFeatureForm.assignedTo} onChange={e => setEditFeatureForm(f => ({ ...f, assignedTo: e.target.value }))}>
+                  <option value="">— Unassigned —</option>
+                  {employees.map(emp => (
+                    <option key={emp._id} value={emp._id}>{empName(emp)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="wp-label">Deadline (Date &amp; Time)</label>
+                <input type="datetime-local" className="wp-input" value={editFeatureForm.dueDate}
+                  onChange={e => setEditFeatureForm(f => ({ ...f, dueDate: e.target.value }))} />
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button className="wp-btn wp-btn-ghost" style={{ flex: 1 }} onClick={() => setShowEditFeature(false)}>Cancel</button>
+                <button className="wp-btn wp-btn-primary" style={{ flex: 1 }} disabled={submitting} onClick={handleUpdateFeature}>
+                  {submitting ? "Saving…" : <><i className="bi bi-check2" /> Save Changes</>}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

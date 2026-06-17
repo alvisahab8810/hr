@@ -209,9 +209,10 @@ export default async function handler(req, res) {
 
       /* ── Generate brand-wise serial task ID (e.g. CO001, TO002) ── */
       let taskId = "";
+      let brandDoc = null;
       if (brandId) {
-        const brand = await Brand.findById(brandId).select("name").lean();
-        const prefix = (brand?.name || "XX").replace(/\s+/g, "").slice(0, 2).toUpperCase();
+        brandDoc = await Brand.findById(brandId).select("name monthlyDeliverables").lean();
+        const prefix = (brandDoc?.name || "XX").replace(/\s+/g, "").slice(0, 2).toUpperCase();
         const brandCount = await Task.countDocuments({ brandId });
         taskId = `${prefix}${String(brandCount + 1).padStart(3, "0")}`;
       } else {
@@ -222,18 +223,43 @@ export default async function handler(req, res) {
       /* ── Auto-generate nomenclature for production tasks ── */
       let nomenclature = "";
       if (taskType === "production" && brandId && contentType) {
+        const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+        const DELIV_KEY   = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+
         const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const curMonthStr = `${MONTH_SHORT[now.getMonth()]}'${String(now.getFullYear()).slice(2)}`;
+
+        // Count by nomenclature pattern so rolled-over tasks (createdAt in current month
+        // but nomenclature in next month) don't inflate the current month count
         const count = await Task.countDocuments({
           brandId,
           contentType,
-          createdAt: { $gte: monthStart, $lte: monthEnd },
+          nomenclature: { $regex: `^${contentType}\\d+ ${curMonthStr}$` },
         });
-        const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-        const monthStr = MONTH_SHORT[now.getMonth()];
-        const yearStr  = String(now.getFullYear()).slice(2);
-        nomenclature = `${contentType}${count + 1} ${monthStr}'${yearStr}`;
+
+        const delivKey     = DELIV_KEY[contentType];
+        const monthlyLimit = brandDoc?.monthlyDeliverables?.[delivKey] || 0;
+
+        let serial, taskMonth, taskYear;
+        if (monthlyLimit > 0 && count >= monthlyLimit) {
+          // Monthly quota full — count already-rolled-over tasks for next month
+          const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          const nextMonthStr  = `${MONTH_SHORT[nextMonthDate.getMonth()]}'${String(nextMonthDate.getFullYear()).slice(2)}`;
+          const nextCount = await Task.countDocuments({
+            brandId,
+            contentType,
+            nomenclature: { $regex: `^${contentType}\\d+ ${nextMonthStr}$` },
+          });
+          taskMonth = nextMonthDate.getMonth();
+          taskYear  = nextMonthDate.getFullYear();
+          serial    = nextCount + 1;
+        } else {
+          taskMonth = now.getMonth();
+          taskYear  = now.getFullYear();
+          serial    = count + 1;
+        }
+
+        nomenclature = `${contentType}${serial} ${MONTH_SHORT[taskMonth]}'${String(taskYear).slice(2)}`;
       }
 
       /* ── Derive title for production tasks ── */
