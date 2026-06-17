@@ -1,7 +1,7 @@
 // POST /api/admin/overtime/create — admin creates OT on behalf of any employee (bypasses past-date block)
 import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
-import Employee from "@/models/employees/Employee";
+import Employee from "@/models/hr/Employee";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 
 export default async function handler(req, res) {
