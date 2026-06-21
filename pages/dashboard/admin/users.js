@@ -25,25 +25,30 @@ const PERMISSIONS = [
 ];
 
 const ACTION_META = {
-  task_created:         { icon: "bi-plus-circle-fill",    color: "#15803D", bg: "#DCFCE7", label: "Task Created"      },
-  task_assigned:        { icon: "bi-person-check-fill",   color: "#4F46E5", bg: "#EEF2FF", label: "Task Assigned"     },
-  reassigned:           { icon: "bi-arrow-repeat",        color: "#7C3AED", bg: "#F5F3FF", label: "Reassigned"        },
-  status_changed:       { icon: "bi-arrow-left-right",    color: "#0EA5E9", bg: "#F0F9FF", label: "Status Changed"    },
-  priority_changed:     { icon: "bi-flag-fill",           color: "#B45309", bg: "#FEF3C7", label: "Priority Changed"  },
-  due_date_changed:     { icon: "bi-calendar-check-fill", color: "#0891B2", bg: "#ECFEFF", label: "Due Date Changed"  },
-  title_changed:        { icon: "bi-pencil-fill",         color: "#F97316", bg: "#FFF7ED", label: "Title Changed"     },
-  task_deleted:         { icon: "bi-trash3-fill",         color: "#DC2626", bg: "#FEE2E2", label: "Task Deleted"      },
-  leave_approved:       { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "Leave Approved"    },
-  leave_rejected:       { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "Leave Rejected"    },
-  overtime_approved:    { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "OT Approved"       },
-  overtime_rejected:    { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "OT Rejected"       },
+  task_created:            { icon: "bi-plus-circle-fill",    color: "#15803D", bg: "#DCFCE7", label: "Task Created"           },
+  task_assigned:           { icon: "bi-person-check-fill",   color: "#4F46E5", bg: "#EEF2FF", label: "Task Assigned"          },
+  reassigned:              { icon: "bi-arrow-repeat",        color: "#7C3AED", bg: "#F5F3FF", label: "Reassigned"             },
+  status_changed:          { icon: "bi-arrow-left-right",    color: "#0EA5E9", bg: "#F0F9FF", label: "Status Changed"         },
+  priority_changed:        { icon: "bi-flag-fill",           color: "#B45309", bg: "#FEF3C7", label: "Priority Changed"       },
+  due_date_changed:        { icon: "bi-calendar-check-fill", color: "#0891B2", bg: "#ECFEFF", label: "Due Date Changed"       },
+  title_changed:           { icon: "bi-pencil-fill",         color: "#F97316", bg: "#FFF7ED", label: "Title Changed"          },
+  task_deleted:            { icon: "bi-trash3-fill",         color: "#DC2626", bg: "#FEE2E2", label: "Task Deleted"           },
+  comment_added:           { icon: "bi-chat-left-text-fill", color: "#6366F1", bg: "#EEF2FF", label: "Comment Added"          },
+  leave_approved:          { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "Leave Approved"         },
+  leave_rejected:          { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "Leave Rejected"         },
+  overtime_approved:       { icon: "bi-check-circle-fill",   color: "#15803D", bg: "#DCFCE7", label: "OT Approved"            },
+  overtime_rejected:       { icon: "bi-x-circle-fill",       color: "#DC2626", bg: "#FEE2E2", label: "OT Rejected"            },
+  reimbursement_approved:  { icon: "bi-check-circle-fill",   color: "#059669", bg: "#D1FAE5", label: "Reimbursement Approved" },
+  reimbursement_rejected:  { icon: "bi-x-circle-fill",       color: "#B91C1C", bg: "#FEE2E2", label: "Reimbursement Rejected" },
 };
 
 const CATEGORY_TABS = [
-  { key: "all",  label: "All Activity" },
-  { key: "task", label: "Tasks"        },
-  { key: "leave",label: "Leaves"       },
-  { key: "overtime", label: "Overtime" },
+  { key: "all",           label: "All Activity"  },
+  { key: "task",          label: "Tasks"         },
+  { key: "comment",       label: "Comments"      },
+  { key: "leave",         label: "Leaves"        },
+  { key: "overtime",      label: "Overtime"      },
+  { key: "reimbursement", label: "Reimbursement" },
 ];
 
 function fmtDateTime(d) {
@@ -84,6 +89,12 @@ export default function AdminUsers() {
   const [trackLoading,  setTrackLoading]  = useState(false);
   const [trackCategory, setTrackCategory] = useState("all");
   const [trackDate,     setTrackDate]     = useState({ start: "", end: "" });
+  const [trackPreset,      setTrackPreset]      = useState("all");
+  const [trackStats,       setTrackStats]       = useState({ total: 0, taskCount: 0, today: 0, thisWeek: 0 });
+  const [trackPage,        setTrackPage]        = useState(1);
+  const [trackHasMore,     setTrackHasMore]     = useState(false);
+  const [trackLoadingMore, setTrackLoadingMore] = useState(false);
+  const TRACK_LIMIT = 50;
 
   // Create form state
   const [form, setForm] = useState({ name: "", email: "", role: "Manager", permissions: emptyPerms() });
@@ -178,32 +189,103 @@ export default function AdminUsers() {
     finally { setResending(null); }
   };
 
+  const toYMD = (d) => d.toISOString().slice(0, 10);
+
+  const DAY_PRESETS = [
+    { key: "all",    label: "All Time" },
+    { key: "today",  label: "Today"    },
+    { key: "yesterday", label: "Yesterday" },
+    { key: "7d",     label: "Last 7 Days" },
+    { key: "30d",    label: "Last 30 Days" },
+    { key: "month",  label: "This Month" },
+  ];
+
+  const presetToDates = (preset) => {
+    const now = new Date();
+    if (preset === "today") {
+      const d = toYMD(now);
+      return { start: d, end: d };
+    }
+    if (preset === "yesterday") {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      const d = toYMD(y);
+      return { start: d, end: d };
+    }
+    if (preset === "7d") {
+      const from = new Date(now); from.setDate(from.getDate() - 6);
+      return { start: toYMD(from), end: toYMD(now) };
+    }
+    if (preset === "30d") {
+      const from = new Date(now); from.setDate(from.getDate() - 29);
+      return { start: toYMD(from), end: toYMD(now) };
+    }
+    if (preset === "month") {
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { start: toYMD(from), end: toYMD(now) };
+    }
+    return { start: "", end: "" };
+  };
+
   const openTrack = async (user) => {
     setTrackUser(user);
     setTrackCategory("all");
     setTrackDate({ start: "", end: "" });
+    setTrackPreset("all");
     setTrackLogs([]);
+    setTrackStats({ total: 0, taskCount: 0, today: 0, thisWeek: 0 });
+    setTrackPage(1);
+    setTrackHasMore(false);
     setTrackLoading(true);
     try {
-      const res  = await fetch(`/api/admin/admin-users/activity?userId=${user._id}`, { credentials: "include" });
+      const res  = await fetch(`/api/admin/admin-users/activity?userId=${user._id}&page=1&limit=${TRACK_LIMIT}`, { credentials: "include" });
       const data = await res.json();
-      if (data.success) setTrackLogs(data.logs || []);
+      if (data.success) {
+        setTrackLogs(data.logs || []);
+        if (data.stats) setTrackStats(data.stats);
+        setTrackHasMore((data.logs || []).length === TRACK_LIMIT && data.total > TRACK_LIMIT);
+      }
     } catch { /* silent */ }
     finally { setTrackLoading(false); }
   };
 
   const fetchTrackLogs = async (userId, category, dateStart, dateEnd) => {
     setTrackLoading(true);
+    setTrackPage(1);
+    setTrackHasMore(false);
     try {
-      const params = new URLSearchParams({ userId });
+      const params = new URLSearchParams({ userId, page: 1, limit: TRACK_LIMIT });
       if (category && category !== "all") params.set("category", category);
       if (dateStart) params.set("dateStart", dateStart);
       if (dateEnd)   params.set("dateEnd",   dateEnd);
       const res  = await fetch(`/api/admin/admin-users/activity?${params}`, { credentials: "include" });
       const data = await res.json();
-      if (data.success) setTrackLogs(data.logs || []);
+      if (data.success) {
+        setTrackLogs(data.logs || []);
+        if (data.stats) setTrackStats(data.stats);
+        setTrackHasMore((data.logs || []).length === TRACK_LIMIT && data.total > TRACK_LIMIT);
+      }
     } catch { /* silent */ }
     finally { setTrackLoading(false); }
+  };
+
+  const loadMoreLogs = async () => {
+    if (!trackUser || trackLoadingMore) return;
+    setTrackLoadingMore(true);
+    const nextPage = trackPage + 1;
+    try {
+      const params = new URLSearchParams({ userId: trackUser._id, page: nextPage, limit: TRACK_LIMIT });
+      if (trackCategory && trackCategory !== "all") params.set("category", trackCategory);
+      if (trackDate.start) params.set("dateStart", trackDate.start);
+      if (trackDate.end)   params.set("dateEnd",   trackDate.end);
+      const res  = await fetch(`/api/admin/admin-users/activity?${params}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) {
+        setTrackLogs(prev => [...prev, ...(data.logs || [])]);
+        setTrackPage(nextPage);
+        setTrackHasMore((data.logs || []).length === TRACK_LIMIT && (trackLogs.length + (data.logs || []).length) < data.total);
+      }
+    } catch { /* silent */ }
+    finally { setTrackLoadingMore(false); }
   };
 
   const togglePerm = (key, target = "form") => {
@@ -242,6 +324,8 @@ export default function AdminUsers() {
           .um-btn:disabled { opacity:.5; cursor:default; }
           .um-overlay { position:fixed; inset:0; background:rgba(15,15,35,.55); backdrop-filter:blur(4px);
                         z-index:1050; display:flex; align-items:center; justify-content:center; padding:16px; }
+          @keyframes slideInRight { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+          .um-drawer { animation: slideInRight .28s cubic-bezier(.22,.61,.36,1) both; }
           .um-modal { background:#fff; border-radius:20px; width:100%; max-width:520px;
                       box-shadow:0 24px 64px rgba(0,0,0,.18); overflow:hidden; max-height:90vh; overflow-y:auto; }
           .um-perm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
@@ -593,15 +677,17 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {/* ══ TRACK ACTIVITY MODAL ══ */}
+      {/* ══ TRACK ACTIVITY DRAWER ══ */}
       {trackUser && (
-        <div className="um-overlay"
-          style={{ alignItems:"center", justifyContent:"center", padding:"24px 16px" }}
+        <div
+          style={{ position:"fixed", inset:0, background:"rgba(15,15,35,.5)", backdropFilter:"blur(3px)",
+            zIndex:1050, display:"flex", justifyContent:"flex-end" }}
           onClick={() => setTrackUser(null)}>
-          <div
-            style={{ background:"#fff", width:"100%", maxWidth:920, borderRadius:24,
-              boxShadow:"0 32px 80px rgba(0,0,0,.22)", overflow:"hidden",
-              display:"flex", flexDirection:"column", maxHeight:"88vh" }}
+          <div className="um-drawer"
+            style={{ background:"#fff", width:"min(820px,100vw)", height:"100vh",
+              boxShadow:"-8px 0 48px rgba(0,0,0,.25)", overflow:"hidden",
+              display:"flex", flexDirection:"column",
+              borderRadius:"20px 0 0 20px" }}
             onClick={e => e.stopPropagation()}>
 
             {/* ── HEADER ── */}
@@ -659,13 +745,13 @@ export default function AdminUsers() {
                 </button>
               </div>
 
-              {/* Stats strip */}
+              {/* Stats strip — values come from server-side counts, not the paginated log list */}
               <div style={{ display:"flex", gap:0, borderTop:"1px solid rgba(255,255,255,.08)", paddingTop:0, marginBottom:0 }}>
                 {[
-                  { icon:"bi-activity",       label:"Total Actions", value: trackLogs.length,                                                                                  accent:"#818CF8" },
-                  { icon:"bi-check2-square",   label:"Task Actions",  value: trackLogs.filter(l=>l.category==="task").length,                                                  accent:"#34D399" },
-                  { icon:"bi-sun",             label:"Today",         value: trackLogs.filter(l=>new Date(l.createdAt).toDateString()===new Date().toDateString()).length,      accent:"#FBBF24" },
-                  { icon:"bi-calendar-week",   label:"This Week",     value: trackLogs.filter(l=>{ const d=new Date(l.createdAt); const now=new Date(); return (now-d)<7*86400000; }).length, accent:"#F472B6" },
+                  { icon:"bi-activity",      label:"Total Actions", value: trackStats.total,     accent:"#818CF8" },
+                  { icon:"bi-check2-square", label:"Task Actions",  value: trackStats.taskCount,  accent:"#34D399" },
+                  { icon:"bi-sun",           label:"Today",         value: trackStats.today,      accent:"#FBBF24" },
+                  { icon:"bi-calendar-week", label:"This Week",     value: trackStats.thisWeek,   accent:"#F472B6" },
                 ].map((s, i) => (
                   <div key={s.label} style={{ flex:1, padding:"16px 20px", borderLeft: i>0 ? "1px solid rgba(255,255,255,.07)" : "none",
                     borderTop:"1px solid rgba(255,255,255,.07)" }}>
@@ -686,54 +772,90 @@ export default function AdminUsers() {
 
             {/* ── CONTROLS ── */}
             <div style={{ background:"#FAFAFA", borderBottom:"1px solid #EFEFEF",
-              padding:"12px 24px", display:"flex", flexWrap:"wrap", gap:10, alignItems:"center", flexShrink:0 }}>
+              padding:"10px 24px 0", flexShrink:0 }}>
 
-              {/* Category segmented control */}
-              <div style={{ display:"flex", background:"#F1F3F6", borderRadius:10, padding:3, gap:2 }}>
-                {CATEGORY_TABS.map(t => (
-                  <button key={t.key}
-                    onClick={() => {
-                      setTrackCategory(t.key);
-                      fetchTrackLogs(trackUser._id, t.key, trackDate.start, trackDate.end);
-                    }}
-                    style={{ padding:"6px 16px", fontSize:12, fontWeight:700, border:"none", cursor:"pointer",
-                      borderRadius:8, transition:"all .15s",
-                      background: trackCategory===t.key ? "#fff" : "transparent",
-                      color:      trackCategory===t.key ? "#4F46E5" : "#6B7280",
-                      boxShadow:  trackCategory===t.key ? "0 1px 6px rgba(0,0,0,.1)" : "none" }}>
-                    {t.label}
-                  </button>
-                ))}
+              {/* Row 1: Category tabs + date range */}
+              <div style={{ display:"flex", flexWrap:"wrap", gap:10, alignItems:"center", paddingBottom:10 }}>
+                {/* Category segmented control */}
+                <div style={{ display:"flex", background:"#F1F3F6", borderRadius:10, padding:3, gap:2, flexWrap:"wrap" }}>
+                  {CATEGORY_TABS.map(t => (
+                    <button key={t.key}
+                      onClick={() => {
+                        setTrackCategory(t.key);
+                        fetchTrackLogs(trackUser._id, t.key, trackDate.start, trackDate.end);
+                      }}
+                      style={{ padding:"6px 14px", fontSize:12, fontWeight:700, border:"none", cursor:"pointer",
+                        borderRadius:8, transition:"all .15s",
+                        background: trackCategory===t.key ? "#fff" : "transparent",
+                        color:      trackCategory===t.key ? "#4F46E5" : "#6B7280",
+                        boxShadow:  trackCategory===t.key ? "0 1px 6px rgba(0,0,0,.1)" : "none" }}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom date range */}
+                <div style={{ display:"flex", gap:6, marginLeft:"auto", alignItems:"center" }}>
+                  <i className="bi bi-calendar3" style={{ fontSize:13, color:"#9CA3AF" }} />
+                  <input type="date" value={trackDate.start} className="um-input"
+                    style={{ padding:"6px 10px", fontSize:12, width:132, borderRadius:9 }}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setTrackDate(d => ({ ...d, start: v }));
+                      setTrackPreset("custom");
+                      fetchTrackLogs(trackUser._id, trackCategory, v, trackDate.end);
+                    }} />
+                  <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:600 }}>—</span>
+                  <input type="date" value={trackDate.end} className="um-input"
+                    style={{ padding:"6px 10px", fontSize:12, width:132, borderRadius:9 }}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setTrackDate(d => ({ ...d, end: v }));
+                      setTrackPreset("custom");
+                      fetchTrackLogs(trackUser._id, trackCategory, trackDate.start, v);
+                    }} />
+                  {(trackDate.start || trackDate.end) && (
+                    <button className="um-btn"
+                      style={{ padding:"5px 10px", fontSize:11, background:"#FEE2E2", color:"#DC2626", borderRadius:8 }}
+                      onClick={() => {
+                        setTrackDate({ start:"", end:"" });
+                        setTrackPreset("all");
+                        fetchTrackLogs(trackUser._id, trackCategory, "", "");
+                      }}>
+                      <i className="bi bi-x-circle" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Date range */}
-              <div style={{ display:"flex", gap:6, marginLeft:"auto", alignItems:"center" }}>
-                <i className="bi bi-funnel" style={{ fontSize:13, color:"#9CA3AF" }} />
-                <input type="date" value={trackDate.start} className="um-input"
-                  style={{ padding:"6px 10px", fontSize:12, width:138, borderRadius:9 }}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setTrackDate(d => ({ ...d, start: v }));
-                    fetchTrackLogs(trackUser._id, trackCategory, v, trackDate.end);
-                  }} />
-                <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:600 }}>—</span>
-                <input type="date" value={trackDate.end} className="um-input"
-                  style={{ padding:"6px 10px", fontSize:12, width:138, borderRadius:9 }}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setTrackDate(d => ({ ...d, end: v }));
-                    fetchTrackLogs(trackUser._id, trackCategory, trackDate.start, v);
-                  }} />
-                {(trackDate.start || trackDate.end) && (
-                  <button className="um-btn"
-                    style={{ padding:"6px 11px", fontSize:11, background:"#FEE2E2", color:"#DC2626", borderRadius:8 }}
-                    onClick={() => {
-                      setTrackDate({ start:"", end:"" });
-                      fetchTrackLogs(trackUser._id, trackCategory, "", "");
-                    }}>
-                    <i className="bi bi-x-circle" /> Reset
-                  </button>
-                )}
+              {/* Row 2: Quick day preset pills */}
+              <div style={{ display:"flex", gap:6, paddingBottom:10, flexWrap:"wrap" }}>
+                <span style={{ fontSize:11, color:"#9CA3AF", fontWeight:600, alignSelf:"center", marginRight:2 }}>
+                  <i className="bi bi-lightning-charge-fill" style={{ marginRight:3, color:"#FBBF24" }} />
+                  Quick:
+                </span>
+                {DAY_PRESETS.map(p => {
+                  const active = trackPreset === p.key;
+                  return (
+                    <button key={p.key}
+                      onClick={() => {
+                        const dates = presetToDates(p.key);
+                        setTrackPreset(p.key);
+                        setTrackDate(dates);
+                        fetchTrackLogs(trackUser._id, trackCategory, dates.start, dates.end);
+                      }}
+                      style={{
+                        padding:"4px 13px", fontSize:11, fontWeight:700,
+                        border: active ? "1.5px solid #6366F1" : "1.5px solid #E5E7EB",
+                        borderRadius:20, cursor:"pointer", transition:"all .15s",
+                        background: active ? "#EEF2FF" : "#fff",
+                        color:      active ? "#4F46E5" : "#6B7280",
+                        boxShadow:  active ? "0 1px 6px rgba(99,102,241,.15)" : "none",
+                      }}>
+                      {p.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -883,10 +1005,28 @@ export default function AdminUsers() {
                     );
                   })}
 
-                  {/* End of log */}
-                  <div style={{ textAlign:"center", padding:"24px 0 8px", color:"#CBD5E1", fontSize:12, fontWeight:600 }}>
-                    <i className="bi bi-check-circle-fill" style={{ marginRight:6, color:"#BBF7D0" }} />
-                    All activity shown · {trackLogs.length} total action{trackLogs.length !== 1 ? "s" : ""}
+                  {/* Pagination footer */}
+                  <div style={{ textAlign:"center", padding:"24px 0 16px" }}>
+                    {trackHasMore ? (
+                      <button
+                        onClick={loadMoreLogs}
+                        disabled={trackLoadingMore}
+                        style={{ padding:"10px 28px", borderRadius:12, border:"1.5px solid #E5E7EB",
+                          background:"#fff", color:"#4F46E5", fontWeight:700, fontSize:13,
+                          cursor: trackLoadingMore ? "default" : "pointer",
+                          display:"inline-flex", alignItems:"center", gap:8,
+                          boxShadow:"0 2px 8px rgba(99,102,241,.1)",
+                          opacity: trackLoadingMore ? .6 : 1, transition:"all .15s" }}>
+                        {trackLoadingMore
+                          ? <><span className="spinner-border spinner-border-sm" style={{ width:"1rem", height:"1rem" }} /> Loading…</>
+                          : <><i className="bi bi-chevron-down" /> Load More · showing {trackLogs.length} of {trackStats.total}</>}
+                      </button>
+                    ) : (
+                      <div style={{ color:"#CBD5E1", fontSize:12, fontWeight:600 }}>
+                        <i className="bi bi-check-circle-fill" style={{ marginRight:6, color:"#BBF7D0" }} />
+                        All {trackStats.total} action{trackStats.total !== 1 ? "s" : ""} loaded
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

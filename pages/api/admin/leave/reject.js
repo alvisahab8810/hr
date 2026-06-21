@@ -49,6 +49,8 @@ import { sendLeaveRejectedEmail } from "@/utils/email/sendLeaveStatusEmail";
 import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import { getEmployeeFromToken } from "@/utils/auth";
+import { getAdminUserPayload } from "@/utils/admin/adminAuthGuard";
+import { logAdminActivity } from "@/utils/tasks/logAdminActivity";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -57,10 +59,17 @@ export default async function handler(req, res) {
     await dbConnect();
 
     /* ================= AUTH ================= */
-    const { employee, error } = await getEmployeeFromToken(req);
+    const subAdmin = getAdminUserPayload(req);
+    const cookie = req.headers.cookie || "";
+    const isMainAdmin = cookie.includes("admin_auth=true");
 
-    if (error || !employee || employee.role !== "admin") {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+    let employee = null;
+    if (!subAdmin && !isMainAdmin) {
+      const { employee: emp, error } = await getEmployeeFromToken(req);
+      if (error || !emp || emp.role !== "admin") {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      employee = emp;
     }
 
     const { leaveId, remark = "" } = req.body;
@@ -88,9 +97,25 @@ export default async function handler(req, res) {
     leave.status = "Rejected";
     leave.adminRemark = remark;
     leave.rejectedAt = new Date();
-    leave.rejectedBy = employee._id; // 🔥 FIX HERE
+    leave.rejectedBy = employee?._id || null;
 
     await leave.save();
+
+    // Log admin activity for sub-admin/manager
+    if (subAdmin) {
+      const empName = leave.employee?.firstName
+        ? `${leave.employee.firstName} ${leave.employee.lastName || ""}`.trim()
+        : "Employee";
+      logAdminActivity({
+        adminUserId:   subAdmin.id,
+        adminUserName: subAdmin.name || "Manager",
+        adminUserRole: subAdmin.role || "",
+        action:        "leave_rejected",
+        category:      "leave",
+        description:   `Rejected ${leave.leaveType} for ${empName} (${leave.totalDays} day${leave.totalDays !== 1 ? "s" : ""})`,
+        metadata:      { employeeId: leave.employee?._id, employeeName: empName },
+      }).catch(() => {});
+    }
 
     // 🔔 Send email (NON-BLOCKING)
 sendLeaveRejectedEmail({

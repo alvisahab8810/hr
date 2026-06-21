@@ -721,6 +721,21 @@ export default function Leftbar({ role = "admin" }) {
             </a>
           </li>
 
+          {/* ── SMM Reports ── */}
+          <li style={{ listStyle: "none" }} className={pathname === "/dashboard/admin/smm-reports" ? "active" : ""}>
+            <a
+              href="/dashboard/admin/smm-reports"
+              className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}
+            >
+              <i className="bi bi-bar-chart-line-fill" style={{
+                fontSize: 17, width: 20, textAlign: "center", flexShrink: 0,
+                color: pathname === "/dashboard/admin/smm-reports" ? "#818CF8" : "rgba(0,0,0,0.5)",
+              }} />
+              <span style={{ flex: 1 }}>SMM Reports</span>
+            </a>
+          </li>
+
           {/* ── Task Management System ── */}
           <li id="task-management-area" className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
             <a

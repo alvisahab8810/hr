@@ -5,6 +5,7 @@ import dbConnect from "@/utils/dbConnect";
 import TaskComment from "@/models/tasks/TaskComment";
 import Task from "@/models/tasks/Task";
 import { logActivity } from "@/utils/tasks/logActivity";
+import { logAdminActivity } from "@/utils/tasks/logAdminActivity";
 import { sendNotification } from "@/utils/tasks/sendNotification";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 
@@ -53,6 +54,18 @@ export default async function handler(req, res) {
 
       // Notify task assignee
       const task = await Task.findById(id).lean();
+
+      // Track manager comment in admin activity log
+      if (commentedByModel === "AdminUser" && commentedById) {
+        logAdminActivity({
+          adminUserId:   commentedById,
+          adminUserName: commentedByName || "Manager",
+          action:        "comment_added",
+          category:      "comment",
+          description:   `Added a comment on task "${task?.title || id}"`,
+          metadata:      { taskId: id, taskTitle: task?.title || "" },
+        }).catch(() => {});
+      }
       if (task?.assignedTo && String(task.assignedTo) !== String(commentedById)) {
         await sendNotification({
           recipientId:    task.assignedTo,

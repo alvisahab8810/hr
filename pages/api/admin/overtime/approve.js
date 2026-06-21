@@ -58,6 +58,8 @@ import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
 import SalaryReport from "@/models/hr/SalaryReport";
 import { getEmployeeFromToken } from "@/utils/auth";
+import { getAdminUserPayload } from "@/utils/admin/adminAuthGuard";
+import { logAdminActivity } from "@/utils/tasks/logAdminActivity";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -65,11 +67,18 @@ export default async function handler(req, res) {
   try {
     await dbConnect();
 
-    // ✅ Admin auth
-    const { employee: admin, error } = await getEmployeeFromToken(req);
+    // Accept both employee-admin token and AdminUser JWT
+    const subAdmin = getAdminUserPayload(req);
+    const cookie = req.headers.cookie || "";
+    const isMainAdmin = cookie.includes("admin_auth=true");
 
-    if (error || !admin || admin.role !== "admin") {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+    let admin = null;
+    if (!subAdmin && !isMainAdmin) {
+      const { employee: emp, error } = await getEmployeeFromToken(req);
+      if (error || !emp || emp.role !== "admin") {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+      admin = emp;
     }
 
     const { id } = req.body;
@@ -95,9 +104,23 @@ export default async function handler(req, res) {
 
     // ✅ Approve OT
     overtime.status = "Approved";
-    overtime.approvedBy = admin._id;
+    overtime.approvedBy = admin?._id || null;
     overtime.approvedAt = new Date();
     await overtime.save();
+
+    // Log admin activity for sub-admin/manager
+    if (subAdmin) {
+      const empName = `${overtime.employee.personal?.firstName || ""} ${overtime.employee.personal?.lastName || ""}`.trim() || "Employee";
+      logAdminActivity({
+        adminUserId:   subAdmin.id,
+        adminUserName: subAdmin.name || "Manager",
+        adminUserRole: subAdmin.role || "",
+        action:        "overtime_approved",
+        category:      "overtime",
+        description:   `Approved overtime for ${empName} on ${overtime.date ? new Date(overtime.date).toLocaleDateString("en-IN") : ""}`,
+        metadata:      { employeeName: empName },
+      }).catch(() => {});
+    }
 
     // ================= SEND EMAILS (NON-BLOCKING) =================
     sendOvertimeApprovedEmail({

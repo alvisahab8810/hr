@@ -2551,7 +2551,7 @@ function PerformanceTab({ tasks, employee }) {
         <div style={{ width: 68, height: 68, borderRadius: "50%", background: gradeBg, border: `3px solid ${gradeColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 900, color: gradeColor, flexShrink: 0 }}>{grade}</div>
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: "#111" }}>{employee?.firstName} {employee?.lastName}</div>
-          <div style={{ fontSize: 13, color: "#9CA3AF" }}>{employee?.professional?.designation || "Team Member"}</div>
+          <div style={{ fontSize: 13, color: "#9CA3AF" }}>{employee?.professional?.designation || employee?.professional?.department || ""}</div>
         </div>
         <div style={{ flex: 1 }} />
         {[
@@ -3323,9 +3323,9 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
   const sbadge = STAGE_BADGE[submitStageKey] || STAGE_BADGE.S1;
   const barColor = isDone ? "#22c55e" : isRejected ? "#ef4444" : hasClientFeedback ? "#f59e0b" : "#f5a623";
 
-  // S2/S3/S4 employees are blocked until admin approves S1
+  // S2/S3 are blocked until admin approves S1. S4 (Digital Marketing / Posted) is free to submit any time.
   const s1Approved   = task.stages?.[0]?.approved === true;
-  const blockedByS1  = submitStageKey !== "S1" && !s1Approved;
+  const blockedByS1  = submitStageKey !== "S1" && submitStageKey !== "S4" && !s1Approved;
 
   return (
     <div className={`ep-tcard ${isRejected ? "rejected-card" : dl?.urgent ? "urgent" : dl?.today ? "today-card" : ""}`}
@@ -3911,7 +3911,7 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const dl = getDeadlineInfo({ ...task, dueDate: deadlineSrc });
 
   const s1Approved  = task.stages?.[0]?.approved === true;
-  const blockedByS1 = isProduction && submitStageKey !== "S1" && !s1Approved;
+  const blockedByS1 = isProduction && submitStageKey !== "S1" && submitStageKey !== "S4" && !s1Approved;
   const isDone      = myStage?.done === true;
   const isRejected  = myStage?.rejected === true && !myStage?.done;
   const isApproved  = myStage?.approved === true;
@@ -4974,12 +4974,7 @@ function PortalProfileView({ emp, empRole, loading }) {
             <div className="ep-profile-ava">{pIni(emp)}</div>
             <div>
               <div style={{ fontSize:17, fontWeight:800, color:"#e2e8f0" }}>{emp.firstName} {emp.lastName}</div>
-              <div style={{ fontSize:12, color:"#64748b", marginTop:3 }}>{RL[empRole]}</div>
-              <div style={{ marginTop:6 }}>
-                <span style={{ display:"inline-flex", alignItems:"center", padding:"3px 8px", borderRadius:5, fontSize:11, fontWeight:600, background:"rgba(245,166,35,.12)", color:"#f5a623" }}>
-                  {emp.professional?.designation || "Employee"}
-                </span>
-              </div>
+              <div style={{ fontSize:12, color:"#64748b", marginTop:3 }}>{emp.professional?.designation || emp.professional?.department || RL[empRole]}</div>
             </div>
           </div>
           {fields.map(f => (
@@ -5393,7 +5388,7 @@ function DarkPortal() {
             <div className="ep-ava">{pIni(employee)}</div>
             <div style={{ flex:1, minWidth:0 }}>
               <div className="ep-side-name">{employee ? `${employee.firstName} ${employee.lastName}` : "Loading…"}</div>
-              <div className="ep-side-role">{RL[empRole]}</div>
+              <div className="ep-side-role">{employee?.professional?.designation || employee?.professional?.department || RL[empRole]}</div>
             </div>
             <button onClick={logout} title="Logout" style={{ background:"none", border:"none", cursor:"pointer", color:"#64748b", fontSize:16, padding:4 }}>
               <i className="bi bi-box-arrow-right" />

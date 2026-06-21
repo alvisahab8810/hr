@@ -46,8 +46,9 @@ export default async function handler(req, res) {
     const taskCurIdx = STAGE_IDX[task.stage || "S1"] ?? 0;
     const isActiveStage = stageIdx === taskCurIdx;
 
-    // S2/S3/S4 cannot submit until admin has approved S1 (Script/Concept)
-    if (curStage !== "S1" && task.stages?.[0]?.approved !== true) {
+    // S2/S3 cannot submit until admin has approved S1 (Script/Concept).
+    // S4 (Posted/Live — Digital Marketing) is exempt: they can submit any time.
+    if (curStage !== "S1" && curStage !== "S4" && task.stages?.[0]?.approved !== true) {
       return res.status(403).json({ success: false, message: "S1 (Script/Concept) must be approved by admin before you can submit this stage." });
     }
 

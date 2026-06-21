@@ -300,10 +300,26 @@ export default async function handler(req, res) {
   /* ── DELETE ── */
   if (req.method === "DELETE") {
     try {
+      const task = await Task.findById(id).lean();
       await Task.findByIdAndDelete(id);
       await TaskComment.deleteMany({ taskId: id });
       await TaskActivity.deleteMany({ taskId: id });
       emitTaskEvent("task:deleted", { taskId: id });
+
+      // Log deletion for sub-admin/manager
+      const subAdmin = getAdminUserPayload(req);
+      if (subAdmin && task) {
+        logAdminActivity({
+          adminUserId:   subAdmin.id,
+          adminUserName: subAdmin.name || "Manager",
+          adminUserRole: subAdmin.role || "",
+          action:        "task_deleted",
+          category:      "task",
+          description:   `Deleted task "${task.title}"`,
+          metadata:      { taskId: id, taskTitle: task.title },
+        }).catch(() => {});
+      }
+
       return res.json({ success: true, message: "Task deleted" });
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message });

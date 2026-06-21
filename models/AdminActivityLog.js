@@ -6,7 +6,7 @@ const AdminActivityLogSchema = new mongoose.Schema(
     adminUserName: { type: String, required: true },
     adminUserRole: { type: String, default: "" },
     action:        { type: String, required: true },
-    category:      { type: String, enum: ["task", "leave", "overtime", "reimbursement", "employee", "other"], default: "task" },
+    category:      { type: String, enum: ["task", "leave", "overtime", "reimbursement", "employee", "comment", "other"], default: "task" },
     description:   { type: String, required: true },
     metadata: {
       taskId:       { type: mongoose.Schema.Types.ObjectId },
