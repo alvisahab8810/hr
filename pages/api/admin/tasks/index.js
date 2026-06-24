@@ -208,16 +208,29 @@ export default async function handler(req, res) {
       if (!taskType) return res.status(400).json({ success: false, message: "taskType is required" });
 
       /* ── Generate brand-wise serial task ID (e.g. CO001, TO002) ── */
+      // Uses max-existing-serial (not count) so deletions never cause duplicate key collisions.
       let taskId = "";
       let brandDoc = null;
       if (brandId) {
         brandDoc = await Brand.findById(brandId).select("name monthlyDeliverables").lean();
         const prefix = (brandDoc?.name || "XX").replace(/\s+/g, "").slice(0, 2).toUpperCase();
-        const brandCount = await Task.countDocuments({ brandId });
-        taskId = `${prefix}${String(brandCount + 1).padStart(3, "0")}`;
+        const lastTask = await Task.findOne(
+          { taskId: { $regex: `^${prefix}\\d+$` } },
+          { taskId: 1 }
+        ).sort({ taskId: -1 }).lean();
+        const lastSerial = lastTask?.taskId
+          ? parseInt(lastTask.taskId.slice(prefix.length), 10) || 0
+          : 0;
+        taskId = `${prefix}${String(lastSerial + 1).padStart(3, "0")}`;
       } else {
-        const totalCount = await Task.countDocuments({ brandId: null });
-        taskId = `T${String(totalCount + 1).padStart(4, "0")}`;
+        const lastTask = await Task.findOne(
+          { taskId: { $regex: `^T\\d+$` } },
+          { taskId: 1 }
+        ).sort({ taskId: -1 }).lean();
+        const lastSerial = lastTask?.taskId
+          ? parseInt(lastTask.taskId.slice(1), 10) || 0
+          : 0;
+        taskId = `T${String(lastSerial + 1).padStart(4, "0")}`;
       }
 
       /* ── Auto-generate nomenclature for production tasks ── */
@@ -272,7 +285,7 @@ export default async function handler(req, res) {
       const primaryAssignee = assignedTo || (Array.isArray(firstStageAssignees) ? firstStageAssignees[0] : firstStageAssignees) || null;
       const primaryDueDate  = dueDate || stagesArr[stagesArr.length - 1]?.deadline || null;
 
-      const task = await Task.create({
+      const taskData = {
         title:         finalTitle,
         description:   description   || "",
         taskType,
@@ -298,7 +311,29 @@ export default async function handler(req, res) {
           assignedTo: Array.isArray(s.assignedTo) ? s.assignedTo.filter(Boolean) : (s.assignedTo ? [s.assignedTo] : []),
           deadline:   s.deadline || null,
         })),
-      });
+      };
+
+      // Retry up to 5 times on duplicate taskId (concurrent creation race condition)
+      let task;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          task = await Task.create(taskData);
+          break;
+        } catch (e) {
+          if (e.code === 11000 && e.keyPattern?.taskId) {
+            // Another request just grabbed this ID — increment and retry
+            const curSerial = parseInt(taskData.taskId.replace(/^[A-Z]+/, ""), 10) || 0;
+            const pad = brandId ? 3 : 4;
+            const pfx = brandId
+              ? taskData.taskId.replace(/\d+$/, "")
+              : "T";
+            taskData.taskId = `${pfx}${String(curSerial + 1).padStart(pad, "0")}`;
+          } else {
+            throw e;
+          }
+        }
+      }
+      if (!task) throw new Error("Could not generate a unique task ID after retries");
 
       // Activity log
       await logActivity({
