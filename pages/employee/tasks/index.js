@@ -3296,14 +3296,18 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
   const curIdx     = stagesArr.indexOf(task.stage);
   const brandColor = task.brandId?.color || "#5A57FB";
 
-  const myStageIdx = empId
-    ? (task.stages || []).findIndex(s =>
-        toArr(s.assignedTo).some(a => {
-          const aid = a?._id ? String(a._id) : String(a || "");
-          return aid === String(empId);
-        })
-      )
-    : -1;
+  const myStageIdx = (() => {
+    if (!empId) return -1;
+    const explicit = (task.stages || []).findIndex(s =>
+      toArr(s.assignedTo).some(a => {
+        const aid = a?._id ? String(a._id) : String(a || "");
+        return aid === String(empId);
+      })
+    );
+    // DM employees auto-see S4 tasks without explicit stage assignment
+    if (explicit === -1 && task.taskType === "production" && task.stage === "S4") return 3;
+    return explicit;
+  })();
 
   const myStage        = myStageIdx >= 0 ? task.stages[myStageIdx] : null;
   const submitStageKey = myStageIdx >= 0 ? stagesArr[myStageIdx] : (task.stage || "S1");
@@ -3459,26 +3463,34 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
 // ─── PORTAL SubmitStageModal ──────────────────────────────────────────────────
 function PSubmitModal({ task, stageKey, onClose, onSuccess }) {
   const [proofUrl,   setProofUrl]   = useState("");
+  const [noLink,     setNoLink]     = useState(false);
   const [notes,      setNotes]      = useState("");
   const [submitting, setSubmitting] = useState(false);
   const effectiveStage = stageKey || task.stage || "S1";
+  const isS4 = effectiveStage === "S4";
   const nextStage = NEXT_STAGE[effectiveStage] || effectiveStage;
   const nextNum   = STAGE_NUM[nextStage] || "";
 
-  // Determine if this submission goes to client review or next internal stage
   const STAGE_IDX_MAP = { S1: 0, S2: 1, S3: 2, S4: 3 };
   const nextIdx = STAGE_IDX_MAP[nextStage];
   const nextEntry = task.stages?.[nextIdx];
   const nextHasAssignee = nextEntry && Array.isArray(nextEntry.assignedTo) && nextEntry.assignedTo.length > 0;
   const goesToClientReview = nextStage === "S4" || !nextHasAssignee;
 
+  // S4: can submit without URL if "no link" selected; otherwise URL required
+  const canSubmit = noLink ? true : proofUrl.trim().length > 0;
+
   async function handleSubmit() {
-    if (!proofUrl.trim()) { toast.warn("Please enter a Proof URL"); return; }
+    if (!noLink && !proofUrl.trim()) { toast.warn("Please enter a Proof URL or select 'Link not provided'"); return; }
     setSubmitting(true);
     try {
+      const finalUrl   = noLink ? "" : proofUrl.trim();
+      const finalNotes = noLink
+        ? `[Link not provided] ${notes}`.trim()
+        : notes;
       const r = await fetch("/api/employee/stage-submit", {
         method: "POST", headers: authH(),
-        body: JSON.stringify({ taskId: task._id, proofUrl: proofUrl.trim(), notes, stageKey: effectiveStage }),
+        body: JSON.stringify({ taskId: task._id, proofUrl: finalUrl, notes: finalNotes, stageKey: effectiveStage }),
       });
       const d = await r.json();
       if (d.success) { toast.success("Stage submitted!"); onSuccess(d.task); }
@@ -3486,6 +3498,12 @@ function PSubmitModal({ task, stageKey, onClose, onSuccess }) {
     } catch { toast.error("Network error"); }
     finally { setSubmitting(false); }
   }
+
+  const toggleBtnStyle = (active) => ({
+    flex: 1, padding: "9px 12px", borderRadius: 8, border: `1.5px solid ${active ? "#5A57FB" : "#e2e8f0"}`,
+    background: active ? "#EEF2FF" : "#fff", color: active ? "#4338CA" : "#64748b",
+    fontWeight: 600, fontSize: 12.5, cursor: "pointer", transition: "all .15s", fontFamily: "inherit",
+  });
 
   return (
     <div className="ep-overlay" onClick={onClose}>
@@ -3525,20 +3543,50 @@ function PSubmitModal({ task, stageKey, onClose, onSuccess }) {
             <option>Stage {STAGE_NUM[effectiveStage]} — {STAGE_LABEL[effectiveStage]} (auto-detected)</option>
           </select>
         </div>
+
+        {/* Proof URL section with toggle for S4 */}
         <div className="ep-form-g">
-          <label className="ep-label">Proof URL <span style={{ color:"#ef4444" }}>*</span></label>
-          <input className="ep-input" placeholder="https://drive.google.com/… or delivery link"
-            value={proofUrl} onChange={e => setProofUrl(e.target.value)} />
-          <div style={{ fontSize:10.5, color:"#64748b", marginTop:4 }}>Drive, Figma, Instagram, or any delivery URL</div>
+          <label className="ep-label">
+            Proof URL {!isS4 && <span style={{ color:"#ef4444" }}>*</span>}
+          </label>
+
+          {/* Toggle buttons — only for S4 */}
+          {isS4 && (
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              <button style={toggleBtnStyle(!noLink)} onClick={() => setNoLink(false)}>
+                🔗 Provide Link
+              </button>
+              <button style={toggleBtnStyle(noLink)} onClick={() => setNoLink(true)}>
+                🚫 Link Not Provided
+              </button>
+            </div>
+          )}
+
+          {noLink ? (
+            <div style={{ background:"#FFF7ED", border:"1.5px solid #FED7AA", borderRadius:9, padding:"12px 14px", display:"flex", gap:10, alignItems:"flex-start" }}>
+              <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
+              <div style={{ fontSize:12.5, color:"#92400E" }}>
+                <strong>No link will be submitted.</strong> This is recorded as "Link not provided" — admin will be notified. Use notes below to explain.
+              </div>
+            </div>
+          ) : (
+            <>
+              <input className="ep-input" placeholder="https://drive.google.com/… or delivery link"
+                value={proofUrl} onChange={e => setProofUrl(e.target.value)} />
+              <div style={{ fontSize:10.5, color:"#64748b", marginTop:4 }}>Drive, Figma, Instagram, or any delivery URL</div>
+            </>
+          )}
         </div>
+
         <div className="ep-form-g">
-          <label className="ep-label">Notes (optional)</label>
-          <textarea className="ep-textarea" rows={3} placeholder="Anything the next stage should know?"
+          <label className="ep-label">Notes {noLink ? <span style={{ color:"#D97706", fontSize:11 }}>(explain why no link)</span> : "(optional)"}</label>
+          <textarea className="ep-textarea" rows={3}
+            placeholder={noLink ? "e.g. S3 editor didn't share the drive link, posted directly from phone…" : "Anything the next stage should know?"}
             value={notes} onChange={e => setNotes(e.target.value)} />
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:4 }}>
           <button className="ep-btn ep-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="ep-btn ep-btn-primary" onClick={handleSubmit} disabled={submitting||!proofUrl.trim()}
+          <button className="ep-btn ep-btn-primary" onClick={handleSubmit} disabled={submitting || !canSubmit}
             style={{ background: goesToClientReview ? "linear-gradient(135deg,#16A34A,#15803D)" : undefined }}>
             {submitting ? "Submitting…" : goesToClientReview ? "✓ Submit for Client Review" : `✓ Submit & Move to Stage ${nextNum}`}
           </button>
@@ -3893,10 +3941,14 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const isProduction = task.taskType === "production";
 
   const toArr = v => Array.isArray(v) ? v : (v ? [v] : []);
-  const myStageIdx = empId && isProduction
-    ? (task.stages||[]).findIndex(s => toArr(s.assignedTo).some(a => String(a?._id||a||"") === String(empId)))
-    : -1;
-  const myStage        = myStageIdx >= 0 ? task.stages[myStageIdx] : null;
+  const myStageIdx = (() => {
+    if (!empId || !isProduction) return -1;
+    const explicit = (task.stages||[]).findIndex(s => toArr(s.assignedTo).some(a => String(a?._id||a||"") === String(empId)));
+    // DM employees auto-own S4 stage tasks without explicit assignment
+    if (explicit === -1 && task.stage === "S4") return 3;
+    return explicit;
+  })();
+  const myStage        = myStageIdx >= 0 ? (task.stages[myStageIdx] || null) : null;
   const submitStageKey = myStageIdx >= 0 ? stagesArr[myStageIdx] : (task.stage || "S1");
   const submitStageNum = myStageIdx >= 0 ? myStageIdx + 1 : (STAGE_NUM[task.stage] || "");
   // For production: use the employee's stage doneAt only — never task.submittedAt which may be set by another stage
@@ -4153,7 +4205,7 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
 // ─── PORTAL MY TASKS VIEW ─────────────────────────────────────────────────────
 function PortalMyTasksView({ tasks, loading, empId }) {
   const now = new Date();
-  const [tab,          setTab]          = useState("all");
+  const [tab,          setTab]          = useState("pending");
   const [search,       setSearch]       = useState("");
   const [filterYear,   setFilterYear]   = useState(now.getFullYear());
   const [filterMonth,  setFilterMonth]  = useState(now.getMonth()); // 0-indexed
@@ -4212,7 +4264,6 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   }
 
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const weekEnd    = new Date(todayStart); weekEnd.setDate(todayStart.getDate() + 7);
 
   // Unique brands and content types for filters
   // For project tasks: use task.brandId OR task.projectId.brandId
@@ -4233,9 +4284,11 @@ function PortalMyTasksView({ tasks, loading, empId }) {
 
   const isApprovedTask = t => t.status === "completed" || (t.stages||[]).some(s => s.approved === true);
 
+  const isPendingTask = t => !isApprovedTask(t);
+
   const byTab = (tab === "overdue" ? allBrandTasks : brandTasks).filter(t => {
-    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }
-    if (tab === "week")     { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }
+    if (tab === "pending")  return isPendingTask(t);
+    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && isPendingTask(t) : false; }
     if (tab === "overdue")  { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }
     if (tab === "approved") return isApprovedTask(t);
     if (tab === "rejected") return (t.stages||[]).some(s => s.rejected === true && !s.done);
@@ -4252,17 +4305,16 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   });
 
   const counts = {
-    all:      brandTasks.length,
-    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) : false; }).length,
-    week:     brandTasks.filter(t => { const d = t.dueDate ? new Date(t.dueDate) : null; return d && d >= todayStart && d <= weekEnd; }).length,
+    pending:  brandTasks.filter(isPendingTask).length,
+    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && isPendingTask(t) : false; }).length,
     overdue:  allBrandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }).length,
     approved: brandTasks.filter(isApprovedTask).length,
     rejected: brandTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
   };
 
   const TABS = [
+    { key:"pending",  label:"Pending" },
     { key:"today",    label:"Today" },
-    { key:"week",     label:"This Week" },
     { key:"overdue",  label:"Overdue" },
     { key:"approved", label:"Approved" },
     { key:"rejected", label:"Rejected" },
@@ -4287,7 +4339,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
       {allBrands.length > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
           {(() => { const sel = allBrands.find(b => String(b._id) === brandFilter); return sel ? <span style={{ width:10, height:10, borderRadius:"50%", background:sel.color||"#6366F1", display:"inline-block", flexShrink:0 }} /> : null; })()}
-          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setTab("all"); setPage(0); }}
+          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setTab("pending"); setPage(0); }}
             style={{ padding:"7px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, fontWeight:600, color:"#1e293b", outline:"none", cursor:"pointer", background:"#fff" }}>
             <option value="">All Brands ({monthTasks.length})</option>
             {allBrands.map(b => {
@@ -4296,6 +4348,43 @@ function PortalMyTasksView({ tasks, loading, empId }) {
             })}
           </select>
         </div>
+      )}
+
+      {/* 6 PM posting banner — shown when there are tasks due today */}
+      {isCurrentMonth && counts.today > 0 && (
+        (() => {
+          const nowTs    = new Date();
+          const deadline = new Date(nowTs.getFullYear(), nowTs.getMonth(), nowTs.getDate(), 18, 0, 0); // 6 PM local
+          const diffMs   = deadline - nowTs;
+          const isPast   = diffMs < 0;
+          const absMs    = Math.abs(diffMs);
+          const hrs      = Math.floor(absMs / 3600000);
+          const mins     = Math.floor((absMs % 3600000) / 60000);
+          const timeStr  = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+          return (
+            <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 18px", marginBottom:12,
+              background: isPast ? "#FEF2F2" : "#FFF7ED",
+              border: `1.5px solid ${isPast ? "#FECACA" : "#FED7AA"}`,
+              borderRadius:10 }}>
+              <span style={{ fontSize:20 }}>{isPast ? "⚠️" : "🕕"}</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color: isPast ? "#991B1B" : "#92400E" }}>
+                  {isPast
+                    ? `6:00 PM posting deadline passed — ${timeStr} ago`
+                    : `6:00 PM posting deadline in ${timeStr}`}
+                </div>
+                <div style={{ fontSize:12, color: isPast ? "#B91C1C" : "#B45309", marginTop:2 }}>
+                  {counts.today} task{counts.today !== 1 ? "s" : ""} due today — submit before 6:00 PM IST
+                </div>
+              </div>
+              <button onClick={() => setTab("today")}
+                style={{ padding:"6px 14px", borderRadius:8, border:"none", fontSize:12, fontWeight:700,
+                  background: isPast ? "#DC2626" : "#D97706", color:"#fff", cursor:"pointer", whiteSpace:"nowrap" }}>
+                View Today
+              </button>
+            </div>
+          );
+        })()
       )}
 
       {/* Tab row + type filter + search */}

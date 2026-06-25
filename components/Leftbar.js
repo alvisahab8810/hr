@@ -782,11 +782,11 @@ export default function Leftbar({ role = "admin" }) {
               <li style={{ padding: "8px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em", borderTop: "1px solid rgba(99,102,241,0.12)", marginTop: 4 }}>
                 Social Media
               </li>
-<li className={pathname === "/dashboard/admin/tasks/pipeline" ? "active" : ""}>
+{/* <li className={pathname === "/dashboard/admin/tasks/pipeline" ? "active" : ""}>
                 <Link href="/dashboard/admin/tasks/pipeline">
                   <i className="bi bi-funnel-fill" style={{ marginRight: 6, fontSize: 12 }} />Pipeline Stages
                 </Link>
-              </li>
+              </li> */}
               <li className={pathname === "/dashboard/admin/tasks/weekly" ? "active" : ""}>
                 <Link href="/dashboard/admin/tasks/weekly">
                   <i className="bi bi-clock-history" style={{ marginRight: 6, fontSize: 12 }} />Weekly Tracker

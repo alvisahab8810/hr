@@ -212,7 +212,7 @@ export default async function handler(req, res) {
       let taskId = "";
       let brandDoc = null;
       if (brandId) {
-        brandDoc = await Brand.findById(brandId).select("name monthlyDeliverables").lean();
+        brandDoc = await Brand.findById(brandId).select("name monthlyDeliverables weeklySchedule").lean();
         const prefix = (brandDoc?.name || "XX").replace(/\s+/g, "").slice(0, 2).toUpperCase();
         const lastTask = await Task.findOne(
           { taskId: { $regex: `^${prefix}\\d+$` } },
@@ -275,15 +275,52 @@ export default async function handler(req, res) {
         nomenclature = `${contentType}${serial} ${MONTH_SHORT[taskMonth]}'${String(taskYear).slice(2)}`;
       }
 
+      /* ── Auto-compute S4 posting deadline from brand weekly schedule ── */
+      // 6:00 PM IST = 12:30 UTC. Picks the Nth posting date of the month where N = task serial.
+      let s4Deadline = null;
+      if (taskType === "production" && brandId && contentType && brandDoc?.weeklySchedule?.length) {
+        const postingDays = [...new Set(
+          (brandDoc.weeklySchedule || [])
+            .filter(s => s.contentType === contentType)
+            .map(s => s.day)
+        )];
+        if (postingDays.length > 0) {
+          const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+          const mth = typeof taskMonth !== "undefined" ? taskMonth : new Date().getMonth();
+          const yr  = typeof taskYear  !== "undefined" ? taskYear  : new Date().getFullYear();
+          const ser = typeof serial    !== "undefined" ? serial    : 1;
+          const allDates = [];
+          const cursor   = new Date(Date.UTC(yr, mth, 1));
+          while (cursor.getUTCMonth() === mth) {
+            if (postingDays.includes(DAY_NAMES[cursor.getUTCDay()])) {
+              allDates.push(new Date(Date.UTC(yr, mth, cursor.getUTCDate(), 12, 30, 0)));
+            }
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+          }
+          s4Deadline = allDates[ser - 1] || null;
+        }
+      }
+
       /* ── Derive title for production tasks ── */
       const finalTitle = title?.trim() || nomenclature;
       if (!finalTitle) return res.status(400).json({ success: false, message: "Title is required" });
 
       /* ── For production tasks, derive primary assignee & dueDate from stages ── */
       const stagesArr = Array.isArray(stages) ? stages : [];
+
+      // Ensure 4 stage slots exist for production tasks, set S4 deadline from weekly schedule
+      if (taskType === "production") {
+        while (stagesArr.length < 4) stagesArr.push({ name: "", assignedTo: [], deadline: null });
+        if (s4Deadline) stagesArr[3].deadline = s4Deadline;
+        // Name the stages if not already set
+        const STAGE_NAMES_DEFAULT = ["Script/Concept","Shoot/Design","Edit/Develop","Posted/Live"];
+        stagesArr.forEach((s, i) => { if (!s.name) s.name = STAGE_NAMES_DEFAULT[i]; });
+      }
+
       const firstStageAssignees = stagesArr[0]?.assignedTo;
       const primaryAssignee = assignedTo || (Array.isArray(firstStageAssignees) ? firstStageAssignees[0] : firstStageAssignees) || null;
-      const primaryDueDate  = dueDate || stagesArr[stagesArr.length - 1]?.deadline || null;
+      // For production tasks: primary due date = S4 posting deadline (when content must go live)
+      const primaryDueDate  = dueDate || s4Deadline || stagesArr[stagesArr.length - 1]?.deadline || null;
 
       const taskData = {
         title:         finalTitle,

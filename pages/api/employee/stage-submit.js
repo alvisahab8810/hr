@@ -3,8 +3,8 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Task from "@/models/tasks/Task";
+import Employee from "@/models/hr/Employee";
 import "@/models/tasks/Brand";
-import "@/models/hr/Employee";
 import { emitTaskEvent } from "@/utils/tasks/emitTaskEvent";
 
 function verifyToken(req) {
@@ -33,10 +33,20 @@ export default async function handler(req, res) {
       ? new mongoose.Types.ObjectId(payload.id)
       : payload.id;
 
-    const task = await Task.findOne({
+    // Check if this is a DM employee (gets auto-access to all S4 tasks)
+    const empDoc = await Employee.findById(empId).select("professional").lean();
+    const dept   = (empDoc?.professional?.department || "").toLowerCase();
+    const isDM   = dept.includes("digital marketing") || dept.includes("digital") || dept.includes("marketing");
+
+    const taskQuery = {
       _id: taskId,
-      $or: [{ assignedTo: empId }, { "stages.assignedTo": empId }],
-    });
+      $or: [
+        { assignedTo: empId },
+        { "stages.assignedTo": empId },
+        ...(isDM ? [{ taskType: "production", stage: "S4" }] : []),
+      ],
+    };
+    const task = await Task.findOne(taskQuery);
     if (!task) return res.status(404).json({ success: false, message: "Task not found or not assigned to you" });
 
     // Use the stage the employee is explicitly submitting, fallback to task.stage
@@ -61,13 +71,15 @@ export default async function handler(req, res) {
     // • S3 (Edit) done → review (client approval, next is S4/Posted)
     let newStatus = "in_progress";
     if (isActiveStage) {
-      if (curStage === "S1") {
+      if (curStage === "S4") {
+        // S4 (Posted/Live) submitted → goes to admin review (mark as posted)
+        newStatus = "review";
+      } else if (curStage === "S1") {
         newStatus = "in_progress";
       } else if (nextStage === "S4") {
-        // S3 editing done → goes to client review
+        // S3 done → ready for posting (S4), status = review for admin awareness
         newStatus = "review";
       } else {
-        // S2 submitted → S3 still needs editing, always in_progress
         newStatus = "in_progress";
       }
     }
