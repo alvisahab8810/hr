@@ -4282,7 +4282,20 @@ function PortalMyTasksView({ tasks, loading, empId }) {
     ? localTasks.filter(t => { const b = getTaskBrand(t); return !b || String(b._id) === brandFilter; })
     : localTasks;
 
-  const isApprovedTask = t => t.status === "completed" || (t.stages||[]).some(s => s.approved === true);
+  // A production task is only "done" from the employee's perspective when:
+  // — task.status === "completed" (admin marked it done), OR
+  // — the CURRENT active stage (task.stage) is approved.
+  // Checking ANY stage is approved is wrong — S3 being approved just means it moved to S4,
+  // the task is still pending S4 submission.
+  const STAGE_IDX = { S1:0, S2:1, S3:2, S4:3 };
+  const isApprovedTask = t => {
+    if (t.status === "completed") return true;
+    if (t.taskType === "production" && t.stage) {
+      const idx = STAGE_IDX[t.stage];
+      if (idx !== undefined) return t.stages?.[idx]?.approved === true;
+    }
+    return (t.stages||[]).some(s => s.approved === true);
+  };
 
   const isPendingTask = t => !isApprovedTask(t);
 
