@@ -4203,9 +4203,9 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
 }
 
 // ─── PORTAL MY TASKS VIEW ─────────────────────────────────────────────────────
-function PortalMyTasksView({ tasks, loading, empId }) {
+function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
   const now = new Date();
-  const [tab,          setTab]          = useState("pending");
+  const [tab,          setTab]          = useState(isDM ? "pending" : "all");
   const [search,       setSearch]       = useState("");
   const [filterYear,   setFilterYear]   = useState(now.getFullYear());
   const [filterMonth,  setFilterMonth]  = useState(now.getMonth()); // 0-indexed
@@ -4282,26 +4282,25 @@ function PortalMyTasksView({ tasks, loading, empId }) {
     ? localTasks.filter(t => { const b = getTaskBrand(t); return !b || String(b._id) === brandFilter; })
     : localTasks;
 
-  // A production task is only "done" from the employee's perspective when:
-  // — task.status === "completed" (admin marked it done), OR
-  // — the CURRENT active stage (task.stage) is approved.
-  // Checking ANY stage is approved is wrong — S3 being approved just means it moved to S4,
-  // the task is still pending S4 submission.
-  const STAGE_IDX = { S1:0, S2:1, S3:2, S4:3 };
+  // For DM (S4/Digital Marketing) employees: a task is "approved" only when the
+  // CURRENT active stage itself is approved — S3 approval doesn't count for S4.
+  // For all other roles: original logic (any stage approved = task approved).
+  const STAGE_IDX_MAP = { S1:0, S2:1, S3:2, S4:3 };
   const isApprovedTask = t => {
     if (t.status === "completed") return true;
-    if (t.taskType === "production" && t.stage) {
-      const idx = STAGE_IDX[t.stage];
+    if (isDM && t.taskType === "production" && t.stage) {
+      const idx = STAGE_IDX_MAP[t.stage];
       if (idx !== undefined) return t.stages?.[idx]?.approved === true;
     }
     return (t.stages||[]).some(s => s.approved === true);
   };
 
+  // "Pending" concept (not done yet) — only used for DM employees
   const isPendingTask = t => !isApprovedTask(t);
 
   const byTab = (tab === "overdue" ? allBrandTasks : brandTasks).filter(t => {
-    if (tab === "pending")  return isPendingTask(t);
-    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && isPendingTask(t) : false; }
+    if (tab === "pending")  return isDM ? isPendingTask(t) : true;
+    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && (isDM ? isPendingTask(t) : true) : false; }
     if (tab === "overdue")  { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }
     if (tab === "approved") return isApprovedTask(t);
     if (tab === "rejected") return (t.stages||[]).some(s => s.rejected === true && !s.done);
@@ -4318,15 +4317,15 @@ function PortalMyTasksView({ tasks, loading, empId }) {
   });
 
   const counts = {
-    pending:  brandTasks.filter(isPendingTask).length,
-    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && isPendingTask(t) : false; }).length,
+    ...(isDM ? { pending: brandTasks.filter(isPendingTask).length } : {}),
+    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return isDueToday(d ? d : null) && d; }).length,
     overdue:  allBrandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }).length,
     approved: brandTasks.filter(isApprovedTask).length,
     rejected: brandTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
   };
 
   const TABS = [
-    { key:"pending",  label:"Pending" },
+    ...(isDM ? [{ key:"pending", label:"Pending" }] : []),
     { key:"today",    label:"Today" },
     { key:"overdue",  label:"Overdue" },
     { key:"approved", label:"Approved" },
@@ -4352,7 +4351,7 @@ function PortalMyTasksView({ tasks, loading, empId }) {
       {allBrands.length > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
           {(() => { const sel = allBrands.find(b => String(b._id) === brandFilter); return sel ? <span style={{ width:10, height:10, borderRadius:"50%", background:sel.color||"#6366F1", display:"inline-block", flexShrink:0 }} /> : null; })()}
-          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setTab("pending"); setPage(0); }}
+          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setTab(isDM ? "pending" : "all"); setPage(0); }}
             style={{ padding:"7px 12px", border:"1.5px solid #e2e8f0", borderRadius:8, fontSize:13, fontWeight:600, color:"#1e293b", outline:"none", cursor:"pointer", background:"#fff" }}>
             <option value="">All Brands ({monthTasks.length})</option>
             {allBrands.map(b => {
@@ -4363,8 +4362,8 @@ function PortalMyTasksView({ tasks, loading, empId }) {
         </div>
       )}
 
-      {/* 6 PM posting banner — shown when there are tasks due today */}
-      {isCurrentMonth && counts.today > 0 && (
+      {/* 6 PM posting banner — only for Digital Marketing (S4) employees */}
+      {isDM && isCurrentMonth && counts.today > 0 && (
         (() => {
           const nowTs    = new Date();
           const deadline = new Date(nowTs.getFullYear(), nowTs.getMonth(), nowTs.getDate(), 18, 0, 0); // 6 PM local
@@ -5419,6 +5418,8 @@ function DarkPortal() {
   useTaskSync(refreshTasks, { empId: employee?._id || null });
 
   const isContent = empRole === "content";
+  const dept  = (employee?.professional?.department || "").toLowerCase();
+  const isDM  = dept.includes("digital marketing");
 
   // Listen for "View →" clicks from content-team Today/Upcoming table rows
   useEffect(() => {
@@ -5525,7 +5526,7 @@ function DarkPortal() {
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "tasks"       && (isContent
             ? <div className="ep-content"><MyTasksTab tasks={tasks} openInEditor={t => { prevViewRef.current = "tasks"; setEditorTask(t); setView("editor"); }} empId={employee?._id} /></div>
-            : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} />
+            : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} isDM={isDM} />
           )}
           {view === "week"        && <PortalThisWeekView />}
           {view === "history"     && <PortalHistoryView       tasks={tasks} loading={loading} />}
