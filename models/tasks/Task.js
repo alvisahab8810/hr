@@ -138,6 +138,8 @@ TaskSchema.index({ status: 1, priority: 1 });
 TaskSchema.index({ brandId: 1, stage: 1 });
 TaskSchema.index({ brandId: 1, contentType: 1, createdAt: -1 });
 TaskSchema.index({ taskId: 1 }, { unique: true, sparse: true });
+// Prevent duplicate nomenclature per brand (e.g. two "reel16 jun'26" for same brand)
+TaskSchema.index({ brandId: 1, nomenclature: 1 }, { unique: true, sparse: true });
 
 /* Clear cached model so schema changes take effect on hot reload */
 delete mongoose.models["Task"];

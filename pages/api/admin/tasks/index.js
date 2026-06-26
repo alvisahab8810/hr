@@ -235,48 +235,79 @@ export default async function handler(req, res) {
 
       /* ── Auto-generate nomenclature for production tasks ── */
       let nomenclature = "";
+      // Declared at outer scope so the S4 deadline block can read them
+      let serial, taskMonth, taskYear;
+
       if (taskType === "production" && brandId && contentType) {
-        const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-        const DELIV_KEY   = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
+        const MONTH_SHORT_N = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+        const DELIV_KEY     = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
 
         const now = new Date();
-        const curMonthStr = `${MONTH_SHORT[now.getMonth()]}'${String(now.getFullYear()).slice(2)}`;
 
-        // Count by nomenclature pattern so rolled-over tasks (createdAt in current month
-        // but nomenclature in next month) don't inflate the current month count
-        const count = await Task.countDocuments({
-          brandId,
-          contentType,
-          nomenclature: { $regex: `^${contentType}\\d+ ${curMonthStr}$` },
-        });
+        // Find the latest existing task for this brand+contentType to determine the
+        // effective month (tasks may already be rolled ahead of the current calendar month).
+        const latestTask = await Task.findOne(
+          { brandId, contentType, nomenclature: { $regex: `^${contentType}\\d+ ` } },
+          { nomenclature: 1 },
+          { sort: { createdAt: -1 } }
+        );
+
+        // Parse month/year from the latest task's nomenclature (e.g. "reel16 jul'26")
+        let effectiveMonth = now.getMonth();
+        let effectiveYear  = now.getFullYear();
+        if (latestTask?.nomenclature) {
+          const m = latestTask.nomenclature.match(/([a-z]{3})'(\d{2})$/);
+          if (m) {
+            const parsedMonth = MONTH_SHORT_N.indexOf(m[1]);
+            const parsedYear  = 2000 + parseInt(m[2], 10);
+            // Use whichever is later: current calendar month or the parsed month
+            if (parsedYear > effectiveYear || (parsedYear === effectiveYear && parsedMonth > effectiveMonth)) {
+              effectiveMonth = parsedMonth;
+              effectiveYear  = parsedYear;
+            }
+          }
+        }
+
+        // Helper: max serial from nomenclature docs
+        const maxSerialFrom = (docs) => docs.reduce((max, t) => {
+          const n = parseInt((t.nomenclature || "").match(/^[a-z]+(\d+)/)?.[1] || "0", 10);
+          return Math.max(max, n);
+        }, 0);
 
         const delivKey     = DELIV_KEY[contentType];
         const monthlyLimit = brandDoc?.monthlyDeliverables?.[delivKey] || 0;
 
-        let serial, taskMonth, taskYear;
-        if (monthlyLimit > 0 && count >= monthlyLimit) {
-          // Monthly quota full — count already-rolled-over tasks for next month
-          const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-          const nextMonthStr  = `${MONTH_SHORT[nextMonthDate.getMonth()]}'${String(nextMonthDate.getFullYear()).slice(2)}`;
-          const nextCount = await Task.countDocuments({
-            brandId,
-            contentType,
-            nomenclature: { $regex: `^${contentType}\\d+ ${nextMonthStr}$` },
-          });
-          taskMonth = nextMonthDate.getMonth();
-          taskYear  = nextMonthDate.getFullYear();
-          serial    = nextCount + 1;
-        } else {
-          taskMonth = now.getMonth();
-          taskYear  = now.getFullYear();
-          serial    = count + 1;
+        // Walk forward month by month until we find one that isn't full (max 24 months safety cap).
+        // This handles the case where multiple consecutive months are already at quota.
+        let walkMonth = effectiveMonth;
+        let walkYear  = effectiveYear;
+
+        for (let i = 0; i < 24; i++) {
+          const mStr = `${MONTH_SHORT_N[walkMonth]}'${String(walkYear).slice(2)}`;
+          const docs = await Task.find(
+            { brandId, contentType, nomenclature: { $regex: `^${contentType}\\d+ ${mStr}$` } },
+            { nomenclature: 1, _id: 0 }
+          ).lean();
+
+          if (monthlyLimit === 0 || docs.length < monthlyLimit) {
+            taskMonth = walkMonth;
+            taskYear  = walkYear;
+            serial    = maxSerialFrom(docs) + 1;
+            break;
+          }
+
+          // Month is full — advance to next
+          const next = new Date(walkYear, walkMonth + 1, 1);
+          walkMonth  = next.getMonth();
+          walkYear   = next.getFullYear();
         }
 
-        nomenclature = `${contentType}${serial} ${MONTH_SHORT[taskMonth]}'${String(taskYear).slice(2)}`;
+        nomenclature = `${contentType}${serial} ${MONTH_SHORT_N[taskMonth]}'${String(taskYear).slice(2)}`;
       }
 
       /* ── Auto-compute S4 posting deadline from brand weekly schedule ── */
       // 6:00 PM IST = 12:30 UTC. Picks the Nth posting date of the month where N = task serial.
+      // Uses taskMonth/taskYear/serial from the nomenclature block above (same scope).
       let s4Deadline = null;
       if (taskType === "production" && brandId && contentType && brandDoc?.weeklySchedule?.length) {
         const postingDays = [...new Set(
@@ -286,9 +317,9 @@ export default async function handler(req, res) {
         )];
         if (postingDays.length > 0) {
           const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-          const mth = typeof taskMonth !== "undefined" ? taskMonth : new Date().getMonth();
-          const yr  = typeof taskYear  !== "undefined" ? taskYear  : new Date().getFullYear();
-          const ser = typeof serial    !== "undefined" ? serial    : 1;
+          const mth = taskMonth ?? new Date().getMonth();
+          const yr  = taskYear  ?? new Date().getFullYear();
+          const ser = serial    ?? 1;
           const allDates = [];
           const cursor   = new Date(Date.UTC(yr, mth, 1));
           while (cursor.getUTCMonth() === mth) {

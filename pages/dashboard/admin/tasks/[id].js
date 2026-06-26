@@ -500,9 +500,12 @@ export default function TaskDetail() {
     : STATUS_META[effectiveStatus] || {};
   const pm       = PRIORITY_META[task.priority] || {};
   const tm       = TYPE_META[task.taskType]     || {};
-  // Use earliest undone stage deadline, fall back to task.dueDate
+  // Use earliest undone stage deadline (S1–S3 only for production), fall back to task.dueDate.
+  // S4 (Posted/Live) deadline is auto-set from brand schedule and should not drive overdue state.
   const effectiveDueDate = (() => {
-    const stageDLs = (task.stages || []).filter(s => s.deadline && !s.done).map(s => new Date(s.deadline));
+    const stages = task.stages || [];
+    const relevantStages = task.taskType === "production" ? stages.slice(0, 3) : stages;
+    const stageDLs = relevantStages.filter(s => s.deadline && !s.done).map(s => new Date(s.deadline));
     if (stageDLs.length) return stageDLs.reduce((a, b) => a < b ? a : b);
     return task.dueDate ? new Date(task.dueDate) : null;
   })();
@@ -783,10 +786,13 @@ export default function TaskDetail() {
                                 <span style={{ color: "#94A3B8" }}>Unassigned</span>
                               )}
                             </div>
-                            <div>
-                              <span style={{ color: "#94A3B8" }}>Deadline: </span>
-                              <strong style={{ color: "#1E293B", fontFamily: "monospace" }}>{fmtDateTime(stg.deadline)}</strong>
-                            </div>
+                            {/* S4 (Posted/Live) deadline is auto-set from brand schedule — not shown here */}
+                            {i < 3 && (
+                              <div>
+                                <span style={{ color: "#94A3B8" }}>Deadline: </span>
+                                <strong style={{ color: "#1E293B", fontFamily: "monospace" }}>{fmtDateTime(stg.deadline)}</strong>
+                              </div>
+                            )}
                           </div>
 
                           {/* Rejected reason */}

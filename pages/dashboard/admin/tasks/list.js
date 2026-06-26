@@ -173,13 +173,21 @@ function fmtDateTime(d) {
   return `${pad(dt.getDate())}-${pad(dt.getMonth()+1)}-${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 }
 function isOverdue(t) {
-  return t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
-}
-// True if any stage has an overdue deadline that isn't yet submitted
-function hasLateStage(t) {
   if (t.status === "completed") return false;
   const now = new Date();
-  return (t.stages || []).some(s => s.deadline && !s.done && new Date(s.deadline) < now);
+  if (t.taskType === "production") {
+    // dueDate is the S4 posting date — use S1–S3 stage deadlines instead
+    const dls = (t.stages || []).slice(0, 3).filter(s => s.deadline && !s.done).map(s => new Date(s.deadline));
+    return dls.length > 0 && dls.some(d => d < now);
+  }
+  return !!(t.dueDate && new Date(t.dueDate) < now);
+}
+// True if any stage (S1–S3 for production) has an overdue deadline that isn't yet submitted
+function hasLateStage(t) {
+  if (t.status === "completed") return false;
+  const now    = new Date();
+  const stages = t.taskType === "production" ? (t.stages || []).slice(0, 3) : (t.stages || []);
+  return stages.some(s => s.deadline && !s.done && new Date(s.deadline) < now);
 }
 function getEmpName(t) {
   const a = t.assignedTo;
