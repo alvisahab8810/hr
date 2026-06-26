@@ -2724,10 +2724,11 @@ function getDeadlineInfo(task) {
   const diff = Math.round((d - now) / 86400000);
   const diffH = Math.round((raw - new Date()) / 3600000);
 
-  // Always include the real date + time as a subtitle
+  // Always include the real date + time (with day name) as a subtitle
+  const dayName = raw.toLocaleDateString("en-IN", { weekday:"short" });
   const dateStr = raw.toLocaleDateString("en-IN", { day:"numeric", month:"short" });
   const timeStr = raw.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit" });
-  const full    = `${dateStr}, ${timeStr}`;
+  const full    = `${dayName}, ${dateStr}, ${timeStr}`;
 
   if (diff < 0) {
     const days = -diff;
@@ -3304,8 +3305,8 @@ function PTaskCard({ task, onSubmit, onNonSMMSubmit, onNonSMMDetail, empId }) {
         return aid === String(empId);
       })
     );
-    // DM employees auto-see S4 tasks without explicit stage assignment
-    if (explicit === -1 && task.taskType === "production" && task.stage === "S4") return 3;
+    // DM employees own S4 (posting) for all production tasks regardless of current stage
+    if (explicit === -1 && task.taskType === "production") return 3;
     return explicit;
   })();
 
@@ -3934,7 +3935,7 @@ function PortalTodayView({ emp, tasks, loading, empId }) {
 }
 
 // ─── PORTAL MY TASKS TABLE ROW ────────────────────────────────────────────────
-function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
+function TaskTableRow({ task, idx, empId, isDM, onSubmit, onNonSMMSubmit, onView }) {
   const stagesArr  = ["S1","S2","S3","S4"];
   const effectiveBrand = task.brandId || task.projectId?.brandId || null;
   const brandColor = effectiveBrand?.color || "#94a3b8";
@@ -3944,8 +3945,8 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
   const myStageIdx = (() => {
     if (!empId || !isProduction) return -1;
     const explicit = (task.stages||[]).findIndex(s => toArr(s.assignedTo).some(a => String(a?._id||a||"") === String(empId)));
-    // DM employees auto-own S4 stage tasks without explicit assignment
-    if (explicit === -1 && task.stage === "S4") return 3;
+    // DM employees own S4 (posting) for all production tasks regardless of current stage
+    if (isDM && explicit === -1) return 3;
     return explicit;
   })();
   const myStage        = myStageIdx >= 0 ? (task.stages[myStageIdx] || null) : null;
@@ -3958,9 +3959,36 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
 
   const sprintDeadline = task.sprintId?.endDate || null;
   const projectDeadline = task.projectId?.endDate || null;
-  const deadlineSrc = (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline
-    : task.dueDate || sprintDeadline || projectDeadline;
+  // For DM employees viewing production tasks: show the actual posting deadline.
+  // Priority: S4 stage deadline → S3 deadline (content-ready = posting day) → dueDate.
+  // dueDate last because legacy manager-created tasks have wrong dueDate (ser=1 bug).
+  const deadlineSrc = (() => {
+    if (isDM && isProduction) {
+      const s4d = task.stages?.[3]?.deadline;
+      if (s4d) return s4d;
+      const s3d = task.stages?.[2]?.deadline;
+      if (s3d) return s3d;
+      return task.dueDate || null;
+    }
+    return (myStageIdx >= 0 && myStage?.deadline) ? myStage.deadline
+      : task.dueDate || sprintDeadline || projectDeadline;
+  })();
   const dl = getDeadlineInfo({ ...task, dueDate: deadlineSrc });
+
+  // Suppress LATE badge if the task's nomenclature month is still in the future
+  // (S4 deadlines on manager-created tasks may be stored as wrong past dates due to a historical bug)
+  const _nomM = (() => {
+    if (!isProduction || !task.nomenclature) return null;
+    const _m = task.nomenclature.match(/([a-z]{3})'(\d{2})$/);
+    if (!_m) return null;
+    const _NMS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const mi = _NMS.indexOf(_m[1]);
+    return mi >= 0 ? { month: mi, year: 2000 + parseInt(_m[2], 10) } : null;
+  })();
+  const _today = new Date();
+  const isFutureNomMonth = _nomM
+    ? (_nomM.year > _today.getFullYear() || (_nomM.year === _today.getFullYear() && _nomM.month > _today.getMonth()))
+    : false;
 
   const s1Approved  = task.stages?.[0]?.approved === true;
   const blockedByS1 = isProduction && submitStageKey !== "S1" && submitStageKey !== "S4" && !s1Approved;
@@ -4084,7 +4112,8 @@ function TaskTableRow({ task, idx, empId, onSubmit, onNonSMMSubmit, onView }) {
                 const done = isDone || isApproved;
                 const submittedOnTime = done &&
                   (!submittedAt || !deadlineSrc || new Date(submittedAt) <= new Date(deadlineSrc));
-                const showLate = dl.urgent && !submittedOnTime;
+                // Suppress LATE for tasks whose nomenclature month is still ahead
+                const showLate = dl.urgent && !submittedOnTime && !isFutureNomMonth;
 
                 let displayText = dl.text;
                 if (showLate && done && submittedAt && deadlineSrc) {
@@ -4253,14 +4282,47 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
   const isCurrentMonth = filterYear === now.getFullYear() && filterMonth === now.getMonth();
   const monthLabel = new Date(filterYear, filterMonth, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
-  // Month-scoped tasks: dueDate falls in selected month, OR sprint/project endDate, OR scheduledFor, OR createdAt as fallback
+  // Month-scoped tasks
   const monthStart = new Date(filterYear, filterMonth, 1);
   const monthEnd   = new Date(filterYear, filterMonth + 1, 0, 23, 59, 59);
+  const MNTH_NOM = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  // For production tasks with nomenclature (e.g. "reel3 jul'26"), trust the nomenclature
+  // month as the canonical month — dueDate may be wrong due to historical S4 deadline bug.
+  function getNomMonth(t) {
+    if (t.taskType !== "production" || !t.nomenclature) return null;
+    const m = t.nomenclature.match(/([a-z]{3})'(\d{2})$/);
+    if (!m) return null;
+    const mi = MNTH_NOM.indexOf(m[1]);
+    return mi >= 0 ? { month: mi, year: 2000 + parseInt(m[2], 10) } : null;
+  }
   function inSelectedMonth(t) {
+    const nm = getNomMonth(t);
+    if (nm) return nm.year === filterYear && nm.month === filterMonth;
     const d = t.dueDate || t.sprintId?.endDate || t.projectId?.endDate || t.scheduledFor || t.createdAt;
     if (!d) return true;
     const dt = new Date(d);
     return dt >= monthStart && dt <= monthEnd;
+  }
+  // A production task is not overdue if its nomenclature month is still in the future
+  function isTaskOverdue(t) {
+    if (t.status === "completed") return false;
+    const nm = getNomMonth(t);
+    if (nm && (nm.year > now.getFullYear() || (nm.year === now.getFullYear() && nm.month > now.getMonth()))) return false;
+    const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null));
+    return !!(d && isOverdue(d));
+  }
+
+  // For DM employees: posting deadline priority = S4 → S3 (content-ready = post day) → dueDate.
+  // dueDate is LAST because it may be wrong (ser=1 bug set it to the 1st posting day for all tasks).
+  // S3 deadline is a reliable proxy: whatever day content is ready, the DM posts it that day.
+  function getDMPostDeadline(t) {
+    if (t.taskType !== "production") return getStageDeadline(t);
+    const s4d = t.stages?.[3]?.deadline;
+    if (s4d) return new Date(s4d);
+    const s3d = t.stages?.[2]?.deadline;
+    if (s3d) return new Date(s3d);
+    if (t.dueDate) return new Date(t.dueDate);
+    return null;
   }
 
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
@@ -4287,8 +4349,14 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
   // For all other roles: original logic (any stage approved = task approved).
   const STAGE_IDX_MAP = { S1:0, S2:1, S3:2, S4:3 };
   const isApprovedTask = t => {
+    // For DM employees: approved means THEIR S4 was approved by admin.
+    // Ignore task.status ("completed" may be set by admin on the production side
+    // before Anurag has actually posted — that should NOT count as approved for DM).
+    if (isDM && t.taskType === "production") {
+      return t.stages?.[3]?.approved === true;
+    }
     if (t.status === "completed") return true;
-    if (isDM && t.taskType === "production" && t.stage) {
+    if (t.taskType === "production" && t.stage) {
       const idx = STAGE_IDX_MAP[t.stage];
       if (idx !== undefined) return t.stages?.[idx]?.approved === true;
     }
@@ -4300,8 +4368,11 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
 
   const byTab = (tab === "overdue" ? allBrandTasks : brandTasks).filter(t => {
     if (tab === "pending")  return isDM ? isPendingTask(t) : true;
-    if (tab === "today")    { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return d ? isDueToday(d) && (isDM ? isPendingTask(t) : true) : false; }
-    if (tab === "overdue")  { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }
+    if (tab === "today") {
+      const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null));
+      return d ? isDueToday(d) && (isDM ? isPendingTask(t) : true) : false;
+    }
+    if (tab === "overdue")  return isTaskOverdue(t);
     if (tab === "approved") return isApprovedTask(t);
     if (tab === "rejected") return (t.stages||[]).some(s => s.rejected === true && !s.done);
     return true;
@@ -4318,8 +4389,8 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
 
   const counts = {
     ...(isDM ? { pending: brandTasks.filter(isPendingTask).length } : {}),
-    today:    brandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return isDueToday(d ? d : null) && d; }).length,
-    overdue:  allBrandTasks.filter(t => { const d = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null); return !!(d && isOverdue(d) && t.status !== "completed"); }).length,
+    today:    brandTasks.filter(t => { const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null)); return isDueToday(d ? d : null) && d; }).length,
+    overdue:  allBrandTasks.filter(isTaskOverdue).length,
     approved: brandTasks.filter(isApprovedTask).length,
     rejected: brandTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
   };
@@ -4444,7 +4515,7 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
                       ? <tr><td colSpan={8} style={{ padding:40, textAlign:"center", color:"#94a3b8" }}>
                           <i className="bi bi-inbox" style={{ fontSize:28, display:"block", marginBottom:8 }} />No tasks found
                         </td></tr>
-                      : paginated.map((t, i) => <TaskTableRow key={t._id} task={t} idx={safePage*PAGE_SIZE+i} empId={empId}
+                      : paginated.map((t, i) => <TaskTableRow key={t._id} task={t} idx={safePage*PAGE_SIZE+i} empId={empId} isDM={isDM}
                           onSubmit={(tk,sk) => setSubmitInfo({task:tk,stageKey:sk})}
                           onNonSMMSubmit={setNonSMMTask}
                           onView={setViewTask} />)

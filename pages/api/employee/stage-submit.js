@@ -43,7 +43,8 @@ export default async function handler(req, res) {
       $or: [
         { assignedTo: empId },
         { "stages.assignedTo": empId },
-        ...(isDM ? [{ taskType: "production", stage: "S4" }] : []),
+        // DM employees can submit any production task regardless of S4 deadline
+        ...(isDM ? [{ taskType: "production" }] : []),
       ],
     };
     const task = await Task.findOne(taskQuery);
