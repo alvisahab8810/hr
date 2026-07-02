@@ -227,6 +227,22 @@ export default function TasksListPage() {
   const [projects,            setProjects]            = useState([]);
   const [sprints,             setSprints]             = useState([]);
 
+  /* Delete confirmation */
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleting,      setDeleting]      = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      const res  = await fetch(`/api/admin/tasks/${deleteConfirm._id}`, { method: "DELETE", credentials: "include" });
+      const data = await res.json();
+      if (data.success) { toast.success("Task deleted"); setDeleteConfirm(null); fetchTasks(); }
+      else toast.error(data.message || "Delete failed");
+    } catch { toast.error("Delete failed"); }
+    finally { setDeleting(false); }
+  };
+
   /* Stage editor */
   const [stageModal,        setStageModal]        = useState(false);
   const [stageTask,         setStageTask]         = useState(null);
@@ -892,6 +908,16 @@ export default function TasksListPage() {
                                     </td>
                                   );
                                 })}
+                                {!adminUser && (
+                                  <td onClick={e => e.stopPropagation()} style={{ width: 36, textAlign: "center" }}>
+                                    <button onClick={() => setDeleteConfirm(t)} title="Delete task"
+                                      style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", fontSize: 14, padding: "2px 4px", borderRadius: 4, opacity: 0.7 }}
+                                      onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                                      onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                                      <i className="bi bi-trash3" />
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -959,6 +985,16 @@ export default function TasksListPage() {
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
                                 </td>
+                                {!adminUser && (
+                                  <td onClick={e => e.stopPropagation()} style={{ width: 36, textAlign: "center" }}>
+                                    <button onClick={() => setDeleteConfirm(t)} title="Delete task"
+                                      style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", fontSize: 14, padding: "2px 4px", borderRadius: 4, opacity: 0.7 }}
+                                      onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                                      onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                                      <i className="bi bi-trash3" />
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -1031,6 +1067,16 @@ export default function TasksListPage() {
                                     </span>
                                   ) : "—"}
                                 </td>
+                                {!adminUser && (
+                                  <td onClick={e => e.stopPropagation()} style={{ width: 36, textAlign: "center" }}>
+                                    <button onClick={() => setDeleteConfirm(t)} title="Delete task"
+                                      style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", fontSize: 14, padding: "2px 4px", borderRadius: 4, opacity: 0.7 }}
+                                      onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                                      onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                                      <i className="bi bi-trash3" />
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -1094,6 +1140,16 @@ export default function TasksListPage() {
                                 <td>
                                   <span className="tl-badge" style={{ background: sm.bg, color: sm.color }}>{sm.label}</span>
                                 </td>
+                                {!adminUser && (
+                                  <td onClick={e => e.stopPropagation()} style={{ width: 36, textAlign: "center" }}>
+                                    <button onClick={() => setDeleteConfirm(t)} title="Delete task"
+                                      style={{ border: "none", background: "none", cursor: "pointer", color: "#EF4444", fontSize: 14, padding: "2px 4px", borderRadius: 4, opacity: 0.7 }}
+                                      onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                                      onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                                      <i className="bi bi-trash3" />
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -1447,6 +1503,38 @@ export default function TasksListPage() {
           </div>
         );
       })()}
+
+      {/* ════ DELETE CONFIRMATION MODAL ════ */}
+      {deleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => !deleting && setDeleteConfirm(null)}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "28px 32px", maxWidth: 420, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.18)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 10, background: "#FEE2E2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className="bi bi-trash3-fill" style={{ color: "#EF4444", fontSize: 18 }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#1E293B" }}>Delete Task?</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>Yeh action reverse nahi ho sakta</div>
+              </div>
+            </div>
+            <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#374151", fontWeight: 600 }}>
+              {deleteConfirm.nomenclature || deleteConfirm.title}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button disabled={deleting} onClick={() => setDeleteConfirm(null)}
+                style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#374151", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
+                No, Cancel
+              </button>
+              <button disabled={deleting} onClick={handleDelete}
+                style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: deleting ? "#FCA5A5" : "#EF4444", color: "#fff", fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                {deleting ? <><i className="bi bi-hourglass-split" /> Deleting…</> : <><i className="bi bi-trash3" /> Yes, Delete</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ════ STAGE EDITOR MODAL ════ */}
       {stageModal && stageTask && (
