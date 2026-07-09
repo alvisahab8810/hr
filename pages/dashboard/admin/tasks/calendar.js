@@ -91,14 +91,28 @@ export default function ContentCalendarPage() {
     const q = new URLSearchParams({ limit: 500, dateStart: start, dateEnd: end });
     if (brandFilter) q.set("brandId", brandFilter);
 
+    const CAL_MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const mAbbr  = CAL_MONTHS[month];
+    const yShort = String(year).slice(2);
+    const monthRx = new RegExp(`${mAbbr}'${yShort}`, "i");
+
     fetch(`/api/admin/tasks?${q}`, { credentials: "include" })
       .then(r => r.json())
       .then(d => {
         if (d.success) {
-          // Show all production/content tasks so every pipeline stage is visible
-          const filtered = (d.tasks || []).filter(t =>
-            t.taskType === "production" || t.contentType
-          );
+          const filtered = (d.tasks || []).filter(t => {
+            if (!(t.taskType === "production" || t.contentType)) return false;
+            // Use nomenclature as the definitive month marker to prevent
+            // stage-deadline bleed (June tasks with July S3/S4 deadlines
+            // were filling July calendar slots before this fix).
+            if (t.nomenclature) return monthRx.test(t.nomenclature);
+            // Fallback for tasks without nomenclature: check dueDate month
+            if (t.dueDate) {
+              const dd = new Date(t.dueDate);
+              return dd.getMonth() === month && dd.getFullYear() === year;
+            }
+            return false;
+          });
           setTasks(filtered);
         }
       })

@@ -34,19 +34,15 @@ export default async function handler(req, res) {
   // Return ALL SM production tasks for the month so the brand-schedule
   // placement algorithm has the full picture (not just this employee's tasks)
   const q = { taskType: "production" };
-  if (start || end) {
-    const conditions = [];
-    if (start) {
-      const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
-      const mAbbr  = MONTHS[start.getMonth()];
-      const yShort = String(start.getFullYear()).slice(-2);
-      conditions.push({ nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") });
-    }
-    if (start || end) {
-      const range = { ...(start ? { $gte: start } : {}), ...(end ? { $lte: end } : {}) };
-      conditions.push({ scheduledFor: range });
-    }
-    if (conditions.length) q.$or = conditions;
+  if (start) {
+    const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const mAbbr  = MONTHS[start.getMonth()];
+    const yShort = String(start.getFullYear()).slice(-2);
+    const range  = { ...(start ? { $gte: start } : {}), ...(end ? { $lte: end } : {}) };
+    q.$or = [
+      { nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") },
+      { nomenclature: { $in: [null, ""] }, scheduledFor: range },
+    ];
   }
 
   const [tasks, brands] = await Promise.all([

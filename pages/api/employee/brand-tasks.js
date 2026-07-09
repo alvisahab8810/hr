@@ -33,19 +33,18 @@ export default async function handler(req, res) {
       // This is the definitive content-month marker set when admin creates tasks.
       // Stage deadlines, dueDate, and process timestamps (updatedAt etc.) all span
       // across months and cause past-month tasks to leak into future calendar slots.
-      const conditions = [];
+      // Use nomenclature as the definitive month marker — prevents stage deadlines
+      // and scheduledFor dates from leaking wrong-month tasks into the calendar.
       if (ds) {
         const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
         const mAbbr  = MONTHS[ds.getMonth()];
         const yShort = String(ds.getFullYear()).slice(-2);
-        conditions.push({ nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") });
+        query.$or = [
+          { nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") },
+          // Fallback only for tasks that have no nomenclature set
+          { nomenclature: { $in: [null, ""] }, scheduledFor: { ...(ds ? { $gte: ds } : {}), ...(de ? { $lte: de } : {}) } },
+        ];
       }
-      // Fallback: scheduledFor date (explicit posting date, not a production deadline)
-      if (ds || de) {
-        const range = { ...(ds ? { $gte: ds } : {}), ...(de ? { $lte: de } : {}) };
-        conditions.push({ scheduledFor: range });
-      }
-      if (conditions.length) query.$or = conditions;
     }
 
     const tasks = await Task.find(query)

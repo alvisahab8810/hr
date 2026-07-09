@@ -4232,7 +4232,7 @@ function TaskTableRow({ task, idx, empId, isDM, onSubmit, onNonSMMSubmit, onView
 }
 
 // ─── PORTAL MY TASKS VIEW ─────────────────────────────────────────────────────
-function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
+function PortalMyTasksView({ tasks, loading, empId, isDM = false, empRole = "" }) {
   const now = new Date();
   const [tab,          setTab]          = useState(isDM ? "pending" : "all");
   const [search,       setSearch]       = useState("");
@@ -4303,12 +4303,19 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
     const dt = new Date(d);
     return dt >= monthStart && dt <= monthEnd;
   }
-  // A production task is not overdue if its nomenclature month is still in the future
+  // A production task is not overdue if its nomenclature month is still in the future.
+  // For role-specific employees (designer=S2, editor=S3): a task is overdue only if
+  // THEIR stage deadline is past AND their stage is not yet done. Once they submit their
+  // stage, the task should no longer appear as overdue for them (even if S3/S4 is still pending).
   function isTaskOverdue(t) {
     if (t.status === "completed") return false;
+    if (myStageIdx >= 0 && t.taskType === "production") {
+      const myStage = t.stages?.[myStageIdx];
+      if (myStage?.done && !myStage?.rejected) return false;
+    }
     const nm = getNomMonth(t);
     if (nm && (nm.year > now.getFullYear() || (nm.year === now.getFullYear() && nm.month > now.getMonth()))) return false;
-    const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null));
+    const d = getMyStageDeadline(t);
     return !!(d && isOverdue(d));
   }
 
@@ -4323,6 +4330,21 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
     if (s3d) return new Date(s3d);
     if (t.dueDate) return new Date(t.dueDate);
     return null;
+  }
+
+  // Role-to-stage-index mapping: used to show Today/Overdue/Approved relative to
+  // the employee's OWN pipeline stage, not the current active pipeline stage.
+  // This prevents S3/S4 deadlines from bleeding into a designer's (S2) Overdue tab.
+  const ROLE_STAGE_IDX = { design: 1, editor: 2 };
+  const myStageIdx = isDM ? 3 : (ROLE_STAGE_IDX[empRole] ?? -1);
+
+  function getMyStageDeadline(t) {
+    if (isDM) return getDMPostDeadline(t);
+    if (t.taskType !== "production") return t.dueDate ? new Date(t.dueDate) : null;
+    if (myStageIdx >= 0 && t.stages?.[myStageIdx]?.deadline) {
+      return new Date(t.stages[myStageIdx].deadline);
+    }
+    return getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
   }
 
   const todayStart = new Date(); todayStart.setHours(0,0,0,0);
@@ -4344,16 +4366,16 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
     ? localTasks.filter(t => { const b = getTaskBrand(t); return !b || String(b._id) === brandFilter; })
     : localTasks;
 
-  // For DM (S4/Digital Marketing) employees: a task is "approved" only when the
-  // CURRENT active stage itself is approved — S3 approval doesn't count for S4.
-  // For all other roles: original logic (any stage approved = task approved).
+  // For DM (S4/Digital Marketing) employees: a task is "approved" only when S4 is approved.
+  // For role-specific employees (design=S2, editor=S3): approved means THEIR stage was approved.
+  // This prevents a designer from seeing a task as "approved" just because S1 (script) was approved.
   const STAGE_IDX_MAP = { S1:0, S2:1, S3:2, S4:3 };
   const isApprovedTask = t => {
-    // For DM employees: approved means THEIR S4 was approved by admin.
-    // Ignore task.status ("completed" may be set by admin on the production side
-    // before Anurag has actually posted — that should NOT count as approved for DM).
     if (isDM && t.taskType === "production") {
       return t.stages?.[3]?.approved === true;
+    }
+    if (t.taskType === "production" && myStageIdx >= 0) {
+      return t.stages?.[myStageIdx]?.approved === true;
     }
     if (t.status === "completed") return true;
     if (t.taskType === "production" && t.stage) {
@@ -4369,7 +4391,7 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
   const byTab = (tab === "overdue" ? allBrandTasks : brandTasks).filter(t => {
     if (tab === "pending")  return isDM ? isPendingTask(t) : true;
     if (tab === "today") {
-      const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null));
+      const d = getMyStageDeadline(t);
       return d ? isDueToday(d) && (isDM ? isPendingTask(t) : true) : false;
     }
     if (tab === "overdue")  return isTaskOverdue(t);
@@ -4389,7 +4411,7 @@ function PortalMyTasksView({ tasks, loading, empId, isDM = false }) {
 
   const counts = {
     ...(isDM ? { pending: brandTasks.filter(isPendingTask).length } : {}),
-    today:    brandTasks.filter(t => { const d = isDM ? getDMPostDeadline(t) : (getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null)); return isDueToday(d ? d : null) && d; }).length,
+    today:    brandTasks.filter(t => { const d = getMyStageDeadline(t); return isDueToday(d ? d : null) && d; }).length,
     overdue:  allBrandTasks.filter(isTaskOverdue).length,
     approved: brandTasks.filter(isApprovedTask).length,
     rejected: brandTasks.filter(t => (t.stages||[]).some(s => s.rejected)).length,
@@ -5597,7 +5619,7 @@ function DarkPortal() {
           {view === "today"       && <PortalTodayView        emp={employee} tasks={tasks} loading={loading} empId={employee?._id} />}
           {view === "tasks"       && (isContent
             ? <div className="ep-content"><MyTasksTab tasks={tasks} openInEditor={t => { prevViewRef.current = "tasks"; setEditorTask(t); setView("editor"); }} empId={employee?._id} /></div>
-            : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} isDM={isDM} />
+            : <PortalMyTasksView tasks={tasks} loading={loading} empId={employee?._id} isDM={isDM} empRole={empRole} />
           )}
           {view === "week"        && <PortalThisWeekView />}
           {view === "history"     && <PortalHistoryView       tasks={tasks} loading={loading} />}
