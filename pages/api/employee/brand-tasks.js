@@ -26,19 +26,26 @@ export default async function handler(req, res) {
     const query = { taskType: "production" };
     if (brandId) query.brandId = brandId;
     if (dateStart || dateEnd) {
-      const range = {
-        ...(dateStart ? { $gte: new Date(dateStart) } : {}),
-        ...(dateEnd   ? { $lte: new Date(dateEnd)   } : {}),
-      };
-      query.$or = [
-        { scheduledFor:      range },
-        { dueDate:           range },
-        { "stages.deadline": range },
-        { "stages.doneAt":   range },
-        { submittedAt:       range },
-        { updatedAt:         range },
-        { createdAt:         range },
-      ];
+      const ds = dateStart ? new Date(dateStart) : null;
+      const de = dateEnd   ? new Date(dateEnd)   : null;
+
+      // Primary: match nomenclature month-year (e.g. "jul'26").
+      // This is the definitive content-month marker set when admin creates tasks.
+      // Stage deadlines, dueDate, and process timestamps (updatedAt etc.) all span
+      // across months and cause past-month tasks to leak into future calendar slots.
+      const conditions = [];
+      if (ds) {
+        const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+        const mAbbr  = MONTHS[ds.getMonth()];
+        const yShort = String(ds.getFullYear()).slice(-2);
+        conditions.push({ nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") });
+      }
+      // Fallback: scheduledFor date (explicit posting date, not a production deadline)
+      if (ds || de) {
+        const range = { ...(ds ? { $gte: ds } : {}), ...(de ? { $lte: de } : {}) };
+        conditions.push({ scheduledFor: range });
+      }
+      if (conditions.length) query.$or = conditions;
     }
 
     const tasks = await Task.find(query)

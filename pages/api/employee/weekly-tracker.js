@@ -35,15 +35,18 @@ export default async function handler(req, res) {
   // placement algorithm has the full picture (not just this employee's tasks)
   const q = { taskType: "production" };
   if (start || end) {
-    const range = {};
-    if (start) range.$gte = start;
-    if (end)   range.$lte = end;
-    q.$or = [
-      { scheduledFor: range },
-      { dueDate: range },
-      { "stages.deadline": range },
-      { createdAt: range },
-    ];
+    const conditions = [];
+    if (start) {
+      const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+      const mAbbr  = MONTHS[start.getMonth()];
+      const yShort = String(start.getFullYear()).slice(-2);
+      conditions.push({ nomenclature: new RegExp(`${mAbbr}'${yShort}`, "i") });
+    }
+    if (start || end) {
+      const range = { ...(start ? { $gte: start } : {}), ...(end ? { $lte: end } : {}) };
+      conditions.push({ scheduledFor: range });
+    }
+    if (conditions.length) q.$or = conditions;
   }
 
   const [tasks, brands] = await Promise.all([

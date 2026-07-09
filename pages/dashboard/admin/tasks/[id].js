@@ -157,6 +157,46 @@ export default function TaskDetail() {
   const [stageRejectMode,   setStageRejectMode]   = useState(false);
   const [stageRejectReason, setStageRejectReason] = useState("");
 
+  const [editingScript, setEditingScript] = useState(false);
+  const [editScript,    setEditScript]    = useState("");
+  const [editCaption,   setEditCaption]   = useState("");
+  const [savingScript,  setSavingScript]  = useState(false);
+
+  async function saveScript() {
+    setSavingScript(true);
+    try {
+      const r = await fetch(`/api/admin/tasks/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: editScript, caption: editCaption }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setTask(prev => ({ ...prev, description: editScript, caption: editCaption }));
+        setEditingScript(false);
+        toast.success("Script updated!");
+      } else toast.error(d.message || "Save failed");
+    } catch { toast.error("Network error"); }
+    setSavingScript(false);
+  }
+
+  async function handleRequestReEdit() {
+    if (!window.confirm("S1 stage unlock ho jayega — content writer se script dobara likhwana chahte ho?")) return;
+    try {
+      const updatedStages = (task.stages || []).map((s, i) =>
+        i === 0 ? { ...s, done: false, approved: false, rejected: false, doneAt: null } : s
+      );
+      const r = await fetch(`/api/admin/tasks/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stages: updatedStages, status: "in_progress", performedByName: adminUser?.name || "Admin" }),
+      });
+      const d = await r.json();
+      if (d.success) { toast.success("Task re-edit ke liye unlock ho gaya!"); fetchTask(); }
+      else toast.error(d.message || "Failed");
+    } catch { toast.error("Network error"); }
+  }
+
   /* ── Fetch ─────────────────────────────────────────────────────────────── */
   useEffect(() => {
     fetch("/api/admin-users/me", { credentials: "include" })
@@ -1037,10 +1077,18 @@ export default function TaskDetail() {
                       <div style={{ fontWeight: 800, fontSize: 13, color: titleColor, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                         <i className={`bi ${titleIcon}`} />
                         {titleText}
+                        <button onClick={() => { setEditScript(task.description || ""); setEditCaption(task.caption || ""); setEditingScript(true); }}
+                          style={{ marginLeft: "auto", background: "#EEF2FF", border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#4338CA", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                          <i className="bi bi-pencil" /> Edit Script
+                        </button>
                       </div>
                       {s1Approved && (
                         <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10, padding:"6px 10px", background:"#DCFCE7", borderRadius:7, fontSize:11, fontWeight:700, color:"#15803D" }}>
                           <i className="bi bi-check-circle-fill" /> S1 Script/Concept approved by admin
+                          <button onClick={handleRequestReEdit}
+                            style={{ marginLeft:"auto", background:"#FEF3C7", border:"1px solid #FDE68A", borderRadius:6, padding:"3px 10px", fontSize:10, fontWeight:700, color:"#92400E", cursor:"pointer", whiteSpace:"nowrap" }}>
+                            <i className="bi bi-arrow-counterclockwise me-1" />Re-edit Request
+                          </button>
                         </div>
                       )}
                       {task.submittedAt && (
@@ -1048,21 +1096,44 @@ export default function TaskDetail() {
                           Submitted {fmtDateTime(task.submittedAt)}
                         </div>
                       )}
-                      {task.description && (
+                      {editingScript ? (
                         <div style={{ marginBottom: 10 }}>
                           <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Script</div>
-                          <div style={{ fontSize: 12, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "8px 10px", maxHeight: 120, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-                            {task.description}
+                          <textarea value={editScript} onChange={e => setEditScript(e.target.value)} rows={6}
+                            style={{ width: "100%", fontSize: 12, color: "#374151", background: "#fff", border: "1.5px solid #c7d2fe", borderRadius: 7, padding: "8px 10px", lineHeight: 1.5, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", margin: "8px 0 4px" }}>Caption</div>
+                          <textarea value={editCaption} onChange={e => setEditCaption(e.target.value)} rows={4}
+                            style={{ width: "100%", fontSize: 12, color: "#374151", background: "#fff", border: "1.5px solid #c7d2fe", borderRadius: 7, padding: "8px 10px", lineHeight: 1.5, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                            <button onClick={saveScript} disabled={savingScript}
+                              style={{ flex: 1, background: "#4338CA", color: "#fff", border: "none", borderRadius: 7, padding: "7px 0", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: savingScript ? .6 : 1 }}>
+                              {savingScript ? "Saving…" : "Save Changes"}
+                            </button>
+                            <button onClick={() => setEditingScript(false)}
+                              style={{ background: "#F1F5F9", color: "#475569", border: "none", borderRadius: 7, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                              Cancel
+                            </button>
                           </div>
                         </div>
-                      )}
-                      {task.caption && (
-                        <div style={{ marginBottom: 10 }}>
-                          <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Caption</div>
-                          <div style={{ fontSize: 12, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "8px 10px", maxHeight: 80, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-                            {task.caption}
-                          </div>
-                        </div>
+                      ) : (
+                        <>
+                          {task.description && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Script</div>
+                              <div style={{ fontSize: 12, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "8px 10px", maxHeight: 120, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                                {task.description}
+                              </div>
+                            </div>
+                          )}
+                          {task.caption && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 10, color: "#92400E", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Caption</div>
+                              <div style={{ fontSize: 12, color: "#374151", background: "#FEF3C7", borderRadius: 7, padding: "8px 10px", maxHeight: 80, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                                {task.caption}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                       {task.tags?.length > 0 && (
                         <div style={{ marginBottom: 10 }}>
