@@ -52,6 +52,11 @@ const LeaveApplicationSchema = new mongoose.Schema(
       sandwichLeave: { type: Boolean, default: false },
     },
 
+    isPaid: {
+      type: Boolean,
+      default: true,
+    },
+
     adminRemark: {
       type: String,
       default: "",

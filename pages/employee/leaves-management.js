@@ -376,6 +376,13 @@ export default function LeaveManagement() {
                                       padding: "2px 8px", borderRadius: 20,
                                     }}>Draft</span>
                                   )}
+                                  {leave.leaveType === "Half Day" && leave.isPaid === false && (
+                                    <span style={{
+                                      marginLeft: 8, fontSize: 11, fontWeight: 600,
+                                      background: "#fef3c7", color: "#92400e",
+                                      padding: "2px 8px", borderRadius: 20,
+                                    }}>Unpaid</span>
+                                  )}
                                 </div>
                                 <div className="vl-leave-date">
                                   {new Date(leave.startDate).toDateString()} –{" "}
@@ -824,17 +831,37 @@ export default function LeaveManagement() {
                 </select>
               </div>
 
-              {leaveType === "Half Day" && (
-                <div style={{
-                  display: "flex", alignItems: "flex-start", gap: 10,
-                  background: "#EFF6FF", border: "1.5px solid #BFDBFE",
-                  borderRadius: 10, padding: "10px 14px", marginBottom: 12,
-                  fontSize: 13, color: "#1e40af", lineHeight: 1.5,
-                }}>
-                  <i className="bi bi-info-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}></i>
-                  <span><strong>Half Day Policy:</strong> Only 1 paid half day is allowed per month. The leave will cover the selected date only.</span>
-                </div>
-              )}
+              {leaveType === "Half Day" && (() => {
+                const selDate = new Date(startDate || today);
+                const paidHalfDayUsed = (leaveHistory || []).some(l =>
+                  l.leaveType === "Half Day" &&
+                  l.isPaid !== false &&
+                  ["Pending", "Approved"].includes(l.status) &&
+                  new Date(l.startDate).getFullYear() === selDate.getFullYear() &&
+                  new Date(l.startDate).getMonth() === selDate.getMonth()
+                );
+                return paidHalfDayUsed ? (
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    background: "#FFF7ED", border: "1.5px solid #FED7AA",
+                    borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+                    fontSize: 13, color: "#92400e", lineHeight: 1.5,
+                  }}>
+                    <i className="bi bi-exclamation-triangle-fill" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}></i>
+                    <span><strong>Unpaid Half Day:</strong> You have already used your 1 paid half day this month. This leave will be <strong>unpaid</strong> — half day salary deduction will apply.</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    background: "#EFF6FF", border: "1.5px solid #BFDBFE",
+                    borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+                    fontSize: 13, color: "#1e40af", lineHeight: 1.5,
+                  }}>
+                    <i className="bi bi-info-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}></i>
+                    <span><strong>Half Day Policy:</strong> 1st half day per month is paid. Additional half days in the same month will be unpaid.</span>
+                  </div>
+                );
+              })()}
 
               {/* Dates */}
               <div className="row">

@@ -146,10 +146,18 @@ export default async function handler(req, res) {
       endDate:   { $gte: monthStart },
     }).lean();
 
-    const paidLeaveDates   = new Set();
-    const unpaidLeaveDates = new Set();
+    const paidLeaveDates      = new Set();
+    const unpaidLeaveDates    = new Set();
+    const unpaidHalfDayDates  = new Set();
 
     approvedLeaves.forEach((leave) => {
+      // Half Day leave handled separately — single day, paid or unpaid
+      if (leave.leaveType === "Half Day") {
+        const dk = toDateStr(new Date(leave.startDate));
+        if (leave.isPaid === false) unpaidHalfDayDates.add(dk);
+        else                        paidLeaveDates.add(dk);
+        return;
+      }
       const s   = new Date(Math.max(new Date(leave.startDate), monthStart));
       const e   = new Date(Math.min(new Date(leave.endDate), new Date(monthEnd - 1)));
       const cur = new Date(s);
@@ -187,8 +195,9 @@ export default async function handler(req, res) {
 
       const rec = attMap[dk] || null;
 
-      if (paidLeaveDates.has(dk))   { presentDays++; continue; }
-      if (unpaidLeaveDates.has(dk)) { continue; }
+      if (paidLeaveDates.has(dk))     { presentDays++; continue; }
+      if (unpaidHalfDayDates.has(dk)) { halfDayCount++; continue; }
+      if (unpaidLeaveDates.has(dk))   { continue; }
 
       if (rec?.startTime) {
         presentDays++;

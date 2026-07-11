@@ -290,9 +290,10 @@ router.post(async (req, res) => {
     let sandwichLeave = false;
     let extraDeductedDays = 0;
 
+    let isPaid = true;
     if (leaveType === "Half Day") {
       totalDays = 0.5;
-      // Half day: enforce max 1 paid half day per month
+      // First half day of the month = paid; any additional = unpaid (deduction applies)
       const monthStart = new Date(s.getFullYear(), s.getMonth(), 1);
       const monthEnd   = new Date(s.getFullYear(), s.getMonth() + 1, 1);
       const existing = await LeaveApplication.countDocuments({
@@ -301,12 +302,7 @@ router.post(async (req, res) => {
         status: { $in: ["Pending", "Approved"] },
         startDate: { $gte: monthStart, $lt: monthEnd },
       });
-      if (existing >= 1) {
-        return res.status(400).json({
-          success: false,
-          message: "You have already used your 1 paid half day leave this month.",
-        });
-      }
+      isPaid = existing === 0; // 1st = paid, 2nd+ = unpaid
     } else {
       /* ================= BASE DAYS ================= */
 
@@ -412,6 +408,7 @@ router.post(async (req, res) => {
       reason,
       documents,
       status,
+      isPaid,
 
       policyFlags: {
         needsMedicalDoc,
