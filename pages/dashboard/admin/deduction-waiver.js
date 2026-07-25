@@ -374,7 +374,7 @@ export default function AdminDeductionWaiver() {
                             <img src={avatar} alt="" style={{ width:44, height:44, borderRadius:12, objectFit:"cover", border:`2px solid ${abg}`, position:"absolute", inset:0 }}
                               onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />
                           )}
-                          <div style={{ width:44, height:44, borderRadius:12, background:abg, position:"absolute", inset:0,
+                          <div style={{ width:44, height:44, borderRadius:50, background:abg, position:"absolute", inset:0,
                             display: avatar ? "none" : "flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:acol }}>
                             {inits}
                           </div>

@@ -265,7 +265,7 @@ export default function AdminReimbursement() {
           }
           .rb-emp-card-top { padding:18px 18px 14px; display:flex; align-items:center; gap:13px; }
           .rb-emp-avatar {
-            width:46px; height:46px; border-radius:14px;
+            width:46px; height:46px; border-radius:50px;
             display:flex; align-items:center; justify-content:center;
             font-size:16px; font-weight:800; flex-shrink:0;
           }
