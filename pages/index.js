@@ -3,7 +3,6 @@ import Link from "next/link";
 import Dashnav from "../components/Dashnav";
 import Leftbar from "../components/Leftbar";
 import Head from "next/head";
-import { getSocket } from "@/utils/socket";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import DateTimeGreeting from "@/components/DateTimeGreeting";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
@@ -13,46 +12,41 @@ const MONTHS = ["January","February","March","April","May","June","July","August
 const fmtMoney = n => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 const fmtTime  = d => d ? new Date(d).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : "--";
 
-const PRIO = {
-  urgent: { bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444" },
-  high:   { bg: "#FFEDD5", text: "#EA580C", dot: "#F97316" },
-  medium: { bg: "#DBEAFE", text: "#1D4ED8", dot: "#3B82F6" },
-  low:    { bg: "#F3F4F6", text: "#6B7280", dot: "#9CA3AF" },
-};
-const ST = {
-  todo:        { label: "To Do",       bg: "#F3F4F6", text: "#6B7280" },
-  in_progress: { label: "In Progress", bg: "#DBEAFE", text: "#1D4ED8" },
-  review:      { label: "Review",      bg: "#EDE9FE", text: "#7C3AED" },
-  completed:   { label: "Done",        bg: "#DCFCE7", text: "#16A34A" },
-  blocked:     { label: "Blocked",     bg: "#FEE2E2", text: "#DC2626" },
+const DELIV_META = {
+  reel:     { icon: "bi-camera-reels-fill",  color: "#6366F1", bg: "#EEF2FF" },
+  story:    { icon: "bi-broadcast",          color: "#EC4899", bg: "#FDF2F8" },
+  carousel: { icon: "bi-images",             color: "#F59E0B", bg: "#FFFBEB" },
+  post:     { icon: "bi-grid-3x3-gap-fill",  color: "#10B981", bg: "#ECFDF5" },
 };
 
 /* ─── Reusable top stat card ─────────────────────────────────────── */
 function KpiCard({ icon, label, value, sub, accent, link }) {
   const card = (
     <div className="kpi-card" style={{
-      background: "#fff", borderRadius: 14, padding: "14px 16px",
-      border: "1px solid #F0F0F8", boxShadow: "0 2px 8px rgba(99,102,241,.06)",
-      display: "flex", alignItems: "center", gap: 12, height: "100%",
-      transition: "box-shadow .2s, transform .2s",
+      background: `linear-gradient(160deg, #fff 55%, ${accent.bg} 165%)`,
+      borderRadius: 16, padding: "17px 18px 16px",
+      border: `1px solid ${accent.bg}`, boxShadow: "0 3px 12px rgba(15,23,42,.06)",
+      display: "flex", alignItems: "center", gap: 14, height: "100%",
+      position: "relative", overflow: "hidden",
     }}>
+      <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:accent.icon }} />
       <div style={{
-        width: 42, height: 42, borderRadius: 12, flexShrink: 0,
-        background: accent.bg,
+        width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+        background: accent.icon,
         display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: `0 4px 12px ${accent.shadow}`,
+        boxShadow: `0 6px 16px ${accent.shadow}`,
       }}>
-        <i className={`bi ${icon}`} style={{ fontSize: 18, color: accent.icon }} />
+        <i className={`bi ${icon}`} style={{ fontSize: 19, color: "#fff" }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#0F172A", lineHeight: 1.1, letterSpacing: "-0.5px" }}>{value}</div>
-        <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600, marginTop: 2 }}>{label}</div>
-        {sub && <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 1 }}>{sub}</div>}
+        <div style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", lineHeight: 1.05, letterSpacing: "-0.8px" }}>{value}</div>
+        <div style={{ fontSize: 12, color: "#475569", fontWeight: 700, marginTop: 3 }}>{label}</div>
+        {sub && <div style={{ fontSize: 10, color: accent.icon, fontWeight: 700, marginTop: 2 }}>{sub}</div>}
       </div>
     </div>
   );
   return link
-    ? <Link href={link} style={{ textDecoration: "none", display: "block", height: "100%" }}>{card}</Link>
+    ? <Link href={link} className="kpi-card-link" style={{ textDecoration: "none", display: "block", height: "100%" }}>{card}</Link>
     : card;
 }
 
@@ -95,10 +89,10 @@ function Chip({ n, bg, text }) {
 
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function AdminHome() {
-  const [employeeStatus, setEmployeeStatus] = useState({});
   const [summary, setSummary]               = useState(null);
   const [loading, setLoading]               = useState(true);
   const [showAbsent, setShowAbsent]         = useState(false);
+  const [showPayroll, setShowPayroll]       = useState(false);
   const [announcements, setAnnouncements]   = useState([]);
   const [holidays, setHolidays]             = useState([]);
   const [selectedBrand, setSelectedBrand]   = useState(null);
@@ -112,19 +106,6 @@ export default function AdminHome() {
       .catch(() => {});
   }, []);
 
-  /* Socket */
-  useEffect(() => {
-    fetch("/api/socket");
-    const socket = getSocket();
-    const onConnect = () => socket.emit("admin:requestSnapshot");
-    const onUpdate  = d  => setEmployeeStatus(p => ({ ...p, [d.employeeId]: d }));
-    const onSnap    = arr => { const m = {}; arr.forEach(i => { m[i.employeeId] = i; }); setEmployeeStatus(m); };
-    socket.on("connect",              onConnect);
-    socket.on("employeeStatusUpdate", onUpdate);
-    socket.on("employeeStatusSnapshot", onSnap);
-    return () => { socket.off("connect", onConnect); socket.off("employeeStatusUpdate", onUpdate); socket.off("employeeStatusSnapshot", onSnap); };
-  }, []);
-
   /* Summary */
   const fetchSummary = useCallback(async () => {
     setLoading(true);
@@ -133,7 +114,7 @@ export default function AdminHome() {
       const d = await r.json();
       if (d.success) {
         setSummary(d.data);
-        setSelectedBrand(p => p ?? d.data.brandTasks?.[0]?.name ?? null);
+        setSelectedBrand(p => p ?? d.data.brandDeliverables?.[0]?.name ?? null);
       }
     } catch {}
     finally { setLoading(false); }
@@ -149,11 +130,17 @@ export default function AdminHome() {
   const s           = summary;
   const now         = new Date();
   const monthLabel  = MONTHS[now.getMonth()];
-  const brandList   = s?.brandTasks || [];
+  const brandList   = s?.brandDeliverables || [];
   const activeBrand = brandList.find(b => b.name === selectedBrand) || brandList[0] || null;
-  const onlineCount = Object.values(employeeStatus).filter(e => e.status === "online").length;
 
   const _v = (val) => loading ? "—" : val ?? "—";
+
+  // Hide these two panels once loaded if there's genuinely nothing to show —
+  // no point showing an empty-state card for a 0.
+  const showLatePanel  = loading || (s?.today?.late || 0) > 0;
+  const showLeavePanel = loading || (s?.todayLeaves?.length || 0) > 0;
+  const row2Visible = showLatePanel || showLeavePanel;
+  const row2GridTemplate = showLatePanel && showLeavePanel ? "1fr 1fr" : "1fr";
 
   return (
     <section className="main-dashboard-area">
@@ -162,6 +149,10 @@ export default function AdminHome() {
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+          .kpi-card { transition: transform .2s ease, box-shadow .2s ease; }
+          .kpi-card-link:hover .kpi-card { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }
+        `}</style>
       </Head>
 
       <div className="main-nav">
@@ -228,8 +219,14 @@ export default function AdminHome() {
                     <span style={{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,.8)", letterSpacing:"0.05em", textTransform:"uppercase" }}>{monthLabel} {s?.monthlySalary?.year || now.getFullYear()} Payroll</span>
                   </div>
 
-                  <div style={{ fontSize:34, fontWeight:900, color:"#fff", letterSpacing:"-1px", lineHeight:1.1, marginBottom:6 }}>
-                    {loading ? "—" : `₹${fmtMoney(s?.monthlySalary?.total)}`}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+                    <button onClick={() => setShowPayroll(v => !v)}
+                      style={{ border:"none", background:"rgba(255,255,255,.18)", cursor:"pointer", color:"#fff", fontSize:14, width:28, height:28, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <i className={`bi bi-eye${showPayroll ? "-slash" : ""}`} />
+                    </button>
+                    <div style={{ fontSize:34, fontWeight:900, color:"#fff", letterSpacing: showPayroll ? "-1px" : 3, lineHeight:1.1 }}>
+                      {loading ? "—" : showPayroll ? `₹${fmtMoney(s?.monthlySalary?.total)}` : "₹ ••••••"}
+                    </div>
                   </div>
                   <div style={{ fontSize:12, color:"rgba(255,255,255,.65)", marginBottom:20 }}>Total Net Pay</div>
 
@@ -279,7 +276,7 @@ export default function AdminHome() {
                       <i className={`bi ${x.icon}`} style={{ fontSize:14, color:x.color }} />
                     </div>
                     <div>
-                      <div style={{ fontSize:15, fontWeight:900, color:"#0F172A", letterSpacing:"-0.3px" }}>{loading ? "—" : x.value}</div>
+                      <div style={{ fontSize:15, fontWeight:900, color:"#0F172A", letterSpacing: showPayroll ? "-0.3px" : 2 }}>{loading ? "—" : showPayroll ? x.value : "₹ ••••"}</div>
                       <div style={{ fontSize:11, color:"#64748B", fontWeight:600, marginTop:1 }}>{x.label}</div>
                     </div>
                   </div>
@@ -287,11 +284,11 @@ export default function AdminHome() {
               </div>
             </div>
 
-            {/* ── ROW 2: Late + Leave/Absent + Task Overview ─────── */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 300px", gap:12, marginBottom:14 }}>
+            {/* ── ROW 2: Late + Leave/Absent ──────────────────────── */}
+            {row2Visible && <div style={{ display:"grid", gridTemplateColumns:row2GridTemplate, gap:12, marginBottom:14 }}>
 
-              {/* Late Arrivals */}
-              <Panel>
+              {/* Late Arrivals — hidden once loaded if nobody's late today */}
+              {showLatePanel && <Panel>
                 <PanelHead icon="bi-alarm-fill" iconColor="#EA580C" title="Late Arrivals"
                   badge={!loading && s?.today?.late > 0 && <Chip n={s.today.late} bg="#FFEDD5" text="#EA580C" />}
                 />
@@ -309,10 +306,10 @@ export default function AdminHome() {
                     </div>
                   ))}
                 </div>
-              </Panel>
+              </Panel>}
 
-              {/* Leaves / Absent toggle */}
-              <Panel>
+              {/* Leaves / Absent toggle — hidden once loaded if nobody's on leave or absent today */}
+              {showLeavePanel && <Panel>
                 <PanelHead
                   icon={showAbsent ? "bi-x-circle-fill" : "bi-calendar-x-fill"}
                   iconColor={showAbsent ? "#DC2626" : "#9333EA"}
@@ -383,61 +380,11 @@ export default function AdminHome() {
                     </>
                   )}
                 </div>
-              </Panel>
+              </Panel>}
+            </div>}
 
-              {/* Task Overview */}
-              <Panel>
-                <PanelHead icon="bi-kanban-fill" iconColor="#6366F1" title="Task Overview" />
-                <div style={{ padding:"14px 18px" }}>
-                  {loading ? <Skeleton /> : (
-                    <>
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
-                        {[
-                          { label:"Total",     value:s?.taskStats?.total,               bg:"#EEF2FF", color:"#6366F1" },
-                          { label:"Completed", value:s?.taskStats?.byStatus?.completed,  bg:"#DCFCE7", color:"#16A34A" },
-                          { label:"Overdue",   value:s?.taskStats?.overdue,              bg:"#FEE2E2", color:"#DC2626" },
-                          { label:"Done Rate", value:`${s?.taskStats?.completionRate}%`, bg:"#DBEAFE", color:"#1D4ED8" },
-                        ].map(x => (
-                          <div key={x.label} style={{ background:x.bg, borderRadius:12, padding:"10px 12px" }}>
-                            <div style={{ fontSize:20, fontWeight:900, color:x.color, letterSpacing:"-0.5px" }}>{x.value}</div>
-                            <div style={{ fontSize:10, color:x.color, opacity:.75, fontWeight:700, marginTop:1 }}>{x.label}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {[
-                        { key:"todo",        label:"To Do",       color:"#9CA3AF" },
-                        { key:"in_progress", label:"In Progress", color:"#6366F1" },
-                        { key:"review",      label:"Review",      color:"#8B5CF6" },
-                        { key:"blocked",     label:"Blocked",     color:"#EF4444" },
-                      ].map(row => {
-                        const count = s?.taskStats?.byStatus?.[row.key] || 0;
-                        const pct   = s?.taskStats?.total > 0 ? Math.round((count/s.taskStats.total)*100) : 0;
-                        return (
-                          <div key={row.key} style={{ marginBottom:8 }}>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748B", marginBottom:3, fontWeight:600 }}>
-                              <span>{row.label}</span><span style={{ color:row.color, fontWeight:700 }}>{count}</span>
-                            </div>
-                            <div style={{ height:5, background:"#F1F5F9", borderRadius:6 }}>
-                              <div style={{ height:5, width:`${pct}%`, background:row.color, borderRadius:6, transition:"width .4s" }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <Link href="/dashboard/admin/tasks" style={{
-                        display:"flex", alignItems:"center", justifyContent:"center", gap:5, marginTop:12,
-                        background:"linear-gradient(135deg,#6366F1,#818CF8)",
-                        color:"#fff", textDecoration:"none", borderRadius:10, padding:"8px", fontSize:12, fontWeight:700,
-                      }}>
-                        View All Tasks <i className="bi bi-arrow-right" style={{ fontSize:11 }} />
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </Panel>
-            </div>
-
-            {/* ── ROW 3: Brand Tasks + Today's Assignments ────────── */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+            {/* ── ROW 3: Brand Tasks ──────────────────────────────── */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:12, marginBottom:14 }}>
 
               {/* Brand Tasks — dropdown */}
               <Panel>
@@ -459,50 +406,80 @@ export default function AdminHome() {
                   }
                 />
                 {loading ? <div style={{ padding:"20px 18px" }}><Skeleton /></div>
-                  : brandList.length === 0 ? <Empty icon="bi-bookmark-x-fill" color="#94A3B8" msg="No brand tasks yet" />
+                  : brandList.length === 0 ? <Empty icon="bi-bookmark-x-fill" color="#94A3B8" msg="No social media brands yet" />
                   : activeBrand && (
                   <div style={{ padding:"18px" }}>
-                    {/* Brand name + bar */}
+                    {/* Brand name + month + overall bar */}
                     <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
                       <span style={{ width:10, height:10, borderRadius:"50%", background:activeBrand.color, flexShrink:0, display:"inline-block", boxShadow:`0 0 0 3px ${activeBrand.color}33` }} />
                       <span style={{ fontSize:16, fontWeight:900, color:"#0F172A" }}>{activeBrand.name}</span>
+                      <span style={{ fontSize:11, color:"#94A3B8", fontWeight:600 }}>{monthLabel}</span>
                       <span style={{ fontSize:11, color:"#64748B", background:"#F1F5F9", borderRadius:8, padding:"2px 9px", marginLeft:"auto" }}>
-                        {activeBrand.total} tasks
+                        {activeBrand.totalDone}/{activeBrand.totalTarget} done
                       </span>
                     </div>
-                    <div style={{ marginBottom:16 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748B", marginBottom:5, fontWeight:600 }}>
-                        <span>Completion</span>
-                        <span style={{ color:activeBrand.color, fontWeight:800 }}>
-                          {activeBrand.total > 0 ? Math.round((activeBrand.completed/activeBrand.total)*100) : 0}%
-                        </span>
-                      </div>
-                      <div style={{ height:8, background:"#F1F5F9", borderRadius:8 }}>
-                        <div style={{
-                          height:8, borderRadius:8, background:`linear-gradient(90deg,${activeBrand.color},${activeBrand.color}99)`,
-                          width:`${activeBrand.total>0 ? Math.round((activeBrand.completed/activeBrand.total)*100) : 0}%`,
-                          transition:"width .5s", boxShadow:`0 2px 6px ${activeBrand.color}55`,
-                        }} />
-                      </div>
-                    </div>
-                    {/* 6-cell grid */}
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
-                      {[
-                        { label:"Done",      value:activeBrand.completed,  bg:"#DCFCE7", color:"#16A34A" },
-                        { label:"Active",    value:activeBrand.inProgress, bg:"#DBEAFE", color:"#1D4ED8" },
-                        { label:"Review",    value:activeBrand.review,     bg:"#EDE9FE", color:"#7C3AED" },
-                        { label:"To Do",     value:activeBrand.todo,       bg:"#F3F4F6", color:"#6B7280" },
-                        { label:"Blocked",   value:activeBrand.blocked,    bg:"#FEE2E2", color:"#DC2626" },
-                        { label:"Total",     value:activeBrand.total,      bg:"#EEF2FF", color:"#6366F1" },
-                      ].map(x => (
-                        <div key={x.label} style={{ background:x.bg, borderRadius:12, padding:"10px 12px", textAlign:"center" }}>
-                          <div style={{ fontSize:22, fontWeight:900, color:x.color, letterSpacing:"-0.5px" }}>{x.value}</div>
-                          <div style={{ fontSize:10, color:x.color, opacity:.75, fontWeight:700 }}>{x.label}</div>
+
+                    {activeBrand.totalTarget === 0 ? (
+                      <Empty icon="bi-clipboard-x" color="#94A3B8" msg="No monthly deliverable targets set for this brand" />
+                    ) : (
+                      <>
+                        <div style={{ marginBottom:18 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#64748B", marginBottom:5, fontWeight:600 }}>
+                            <span>Overall Completion</span>
+                            <span style={{ color:activeBrand.color, fontWeight:800 }}>
+                              {Math.round((activeBrand.totalDone/activeBrand.totalTarget)*100)}%
+                            </span>
+                          </div>
+                          <div style={{ height:8, background:"#F1F5F9", borderRadius:8 }}>
+                            <div style={{
+                              height:8, borderRadius:8, background:`linear-gradient(90deg,${activeBrand.color},${activeBrand.color}99)`,
+                              width:`${Math.min(100, Math.round((activeBrand.totalDone/activeBrand.totalTarget)*100))}%`,
+                              transition:"width .5s", boxShadow:`0 2px 6px ${activeBrand.color}55`,
+                            }} />
+                          </div>
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Per deliverable-type cards: target / done / pending */}
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:12, marginBottom:16 }}>
+                          {activeBrand.deliverables.filter(d => d.target > 0).map(d => {
+                            const meta     = DELIV_META[d.type];
+                            const pct      = d.target > 0 ? Math.round((d.done/d.target)*100) : 0;
+                            const complete = d.pending === 0;
+                            return (
+                              <div key={d.type} style={{ background:meta.bg, borderRadius:14, padding:"14px 16px" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                                  <div style={{ width:30, height:30, borderRadius:9, background:"#fff", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:`0 2px 6px ${meta.color}33`, flexShrink:0 }}>
+                                    <i className={`bi ${meta.icon}`} style={{ fontSize:14, color:meta.color }} />
+                                  </div>
+                                  <span style={{ fontSize:13, fontWeight:800, color:"#0F172A" }}>{d.label}</span>
+                                  {complete && (
+                                    <span style={{ marginLeft:"auto", fontSize:9, fontWeight:800, color:"#16A34A", background:"#DCFCE7", padding:"3px 8px", borderRadius:20, whiteSpace:"nowrap" }}>
+                                      <i className="bi bi-check-lg" /> Done
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ display:"flex", alignItems:"baseline", gap:5, marginBottom:9 }}>
+                                  <span style={{ fontSize:24, fontWeight:900, color:meta.color, letterSpacing:"-0.5px", lineHeight:1 }}>{d.done}</span>
+                                  <span style={{ fontSize:13, fontWeight:700, color:"#94A3B8" }}>/ {d.target}</span>
+                                  {!complete && (
+                                    <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#EA580C" }}>{d.pending} left</span>
+                                  )}
+                                </div>
+                                <div style={{ height:6, background:"rgba(255,255,255,.8)", borderRadius:6 }}>
+                                  <div style={{
+                                    height:6, width:`${Math.min(100,pct)}%`, borderRadius:6,
+                                    background:meta.color, transition:"width .4s",
+                                  }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+
                     <Link href="/dashboard/admin/tasks/brands" style={{
-                      display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+                      display:"flex", alignItems:"center", justifyContent:"center", gap:7, marginTop:4,
                       background:`linear-gradient(135deg,${activeBrand.color},${activeBrand.color}cc)`,
                       color:"#fff", textDecoration:"none", borderRadius:12, padding:"10px",
                       fontSize:13, fontWeight:800, boxShadow:`0 4px 14px ${activeBrand.color}44`,
@@ -513,59 +490,10 @@ export default function AdminHome() {
                   </div>
                 )}
               </Panel>
-
-              {/* Today's Due Tasks */}
-              <Panel>
-                <PanelHead icon="bi-list-task" iconColor="#10B981" title="Today's Due Tasks"
-                  badge={!loading && (s?.todayAssignments||[]).length>0 && <Chip n={s.todayAssignments.length} bg="#DCFCE7" text="#16A34A" />}
-                />
-                <div style={{ maxHeight:360, overflowY:"auto", padding:"6px 0" }}>
-                  {loading ? <Skeleton /> : (s?.todayAssignments||[]).length===0 ? (
-                    <Empty icon="bi-calendar-check-fill" color="#22C55E" msg="No tasks due today" />
-                  ) : (
-                    (s.todayAssignments).map((t, i) => {
-                      const p  = PRIO[t.priority] || PRIO.low;
-                      const st = ST[t.status]     || ST.todo;
-                      return (
-                        <Link key={i} href="/dashboard/admin/tasks/list" style={{ textDecoration:"none", display:"flex", alignItems:"flex-start", gap:10, padding:"10px 18px", borderBottom:"1px solid #F4F4FD", transition:"background .12s" }}
-                          onMouseEnter={e => e.currentTarget.style.background="#FAFAFF"}
-                          onMouseLeave={e => e.currentTarget.style.background="transparent"}
-                        >
-                          <span style={{ width:8, height:8, borderRadius:"50%", background:p.dot, flexShrink:0, marginTop:5, boxShadow:`0 0 0 2px ${p.dot}33` }} />
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:"#0F172A", marginBottom:4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                              {t.title}
-                            </div>
-                            <div style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                              {t.assignee && (
-                                <span style={{ fontSize:11, color:"#64748B", display:"flex", alignItems:"center", gap:3, fontWeight:600 }}>
-                                  <i className="bi bi-person-fill" style={{ fontSize:10 }} />{t.assignee}
-                                </span>
-                              )}
-                              {t.brand && (
-                                <span style={{ fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:8, background:t.brand.color+"22", color:t.brand.color }}>
-                                  {t.brand.name}
-                                </span>
-                              )}
-                              <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:8, background:st.bg, color:st.text }}>{st.label}</span>
-                              <span style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:8, background:p.bg, color:p.text }}>{t.priority}</span>
-                            </div>
-                          </div>
-                        </Link>
-                      );
-                    })
-                  )}
-                </div>
-                <div style={{ padding:"10px 18px", borderTop:"1px solid #F4F4FD" }}>
-                  <Link href="/dashboard/admin/tasks/list" style={{ fontSize:12, fontWeight:700, color:"#6366F1", textDecoration:"none" }}>
-                    View all tasks →
-                  </Link>
-                </div>
-              </Panel>
             </div>
 
-            {/* ── ROW 4: Notices + Holidays + Live ───────────────── */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
+            {/* ── ROW 4: Notices + Holidays ───────────────────────── */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
 
               {/* Notices */}
               <Panel>
@@ -609,7 +537,12 @@ export default function AdminHome() {
                 <div style={{ maxHeight:280, overflowY:"auto", padding:"6px 0" }}>
                   {holidays.length===0 ? <Empty icon="bi-calendar" color="#94A3B8" msg="No upcoming holidays" /> :
                     holidays.slice(0,8).map((h,i) => {
-                      const isToday = new Date(h.date).toDateString()===new Date().toDateString();
+                      const fmtShort = (d) => new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+                      const start = new Date(h.startDate);
+                      const end = new Date(h.endDate || h.startDate);
+                      const now = new Date();
+                      const isToday = now.toDateString()===start.toDateString() || (now>=start && now<=end);
+                      const isMulti = h.endDate && start.toDateString()!==end.toDateString();
                       return (
                         <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 18px", borderBottom:"1px solid #F4F4FD", background:isToday?"#FFFBEB":"transparent" }}>
                           <div>
@@ -622,45 +555,11 @@ export default function AdminHome() {
                             color:     isToday?"#fff":"#6B7280",
                             border:    isToday?"none":"1px solid #E5E7EB",
                           }}>
-                            {new Date(h.date).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+                            {isMulti ? `${fmtShort(start)} – ${fmtShort(end)}` : fmtShort(start)}
                           </span>
                         </div>
                       );
                     })
-                  }
-                </div>
-              </Panel>
-
-              {/* Live Activity */}
-              <Panel>
-                <PanelHead icon="bi-activity" iconColor="#10B981" title="Live Activity"
-                  badge={onlineCount>0 && <Chip n={`${onlineCount} online`} bg="#DCFCE7" text="#16A34A" />}
-                />
-                <div style={{ maxHeight:280, overflowY:"auto", padding:"6px 0" }}>
-                  {Object.values(employeeStatus).length===0 ? <Empty icon="bi-wifi-off" color="#94A3B8" msg="No activity yet…" /> :
-                    Object.values(employeeStatus).map(emp => (
-                      <div key={emp.employeeId} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 18px", borderBottom:"1px solid #F4F4FD" }}>
-                        <div style={{ position:"relative", flexShrink:0 }}>
-                          <Avatar name={emp.name||"?"} bg={emp.status==="online"?"#DCFCE7":"#F3F4F6"} color={emp.status==="online"?"#16A34A":"#9CA3AF"} />
-                          <span style={{
-                            position:"absolute", bottom:0, right:0,
-                            width:8, height:8, borderRadius:"50%", border:"2px solid #fff",
-                            background:emp.status==="online"?"#22C55E":"#9CA3AF",
-                          }} />
-                        </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:13, fontWeight:700, color:"#0F172A" }}>{emp.name}</div>
-                          <div style={{ fontSize:11, color:"#94A3B8", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                            {emp.url || fmtTime(emp.lastActive)}
-                          </div>
-                        </div>
-                        <span style={{
-                          fontSize:10, fontWeight:700, padding:"3px 8px", borderRadius:20, flexShrink:0,
-                          background:emp.status==="online"?"#DCFCE7":"#F3F4F6",
-                          color:     emp.status==="online"?"#16A34A":"#9CA3AF",
-                        }}>{emp.status}</span>
-                      </div>
-                    ))
                   }
                 </div>
               </Panel>

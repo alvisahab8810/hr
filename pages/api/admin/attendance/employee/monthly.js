@@ -79,6 +79,7 @@ export default async function handler(req, res) {
       name: `${emp.firstName} ${emp.lastName}`,
       designation: emp.professional?.designation,
       type: emp.professional?.employeeType,
+      dateOfJoining: emp.professional?.dateOfJoining || null,
     },
     days,
   });

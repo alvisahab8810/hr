@@ -49,14 +49,17 @@ export default function TimeTracker() {
   const [storedDesc,    setStoredDesc]    = useState(null);
   const [faceEnrolled,  setFaceEnrolled]  = useState(false);
 
-  // Auto lunch
-  const [autoLunchFired,  setAutoLunchFired]  = useState(false);
+  // Lunch reminder (13:30) — reminds only, never auto-starts the break
   const [showLunchNotice, setShowLunchNotice] = useState(false);
 
   // Refs
   const workIntervalRef  = useRef(null);
   const breakIntervalRef = useRef(null);
   const lunchCheckRef    = useRef(null);
+  const lunchAudioRef    = useRef(null);
+  const audioUnlockedRef = useRef(false);
+  const isClockedInRef   = useRef(false);
+  const isOnBreakRef     = useRef(false);
 
   const token = typeof window !== "undefined" ? localStorage.getItem("employeeToken") : null;
 
@@ -122,6 +125,43 @@ export default function TimeTracker() {
     };
   }, []);
 
+  // Keep refs in sync so the lunch-reminder interval (mounted once, see below)
+  // always reads current values without needing to be torn down/rebuilt.
+  useEffect(() => { isClockedInRef.current = isClockedIn; }, [isClockedIn]);
+  useEffect(() => { isOnBreakRef.current   = isOnBreak;   }, [isOnBreak]);
+
+  // ── Unlock audio playback ────────────────────────────────────────────────
+  // Browsers block programmatic Audio.play() until the page has seen a user
+  // gesture. Without this, the 13:30 reminder sound silently fails unless the
+  // employee happens to interact with the page (e.g. refresh) right at 13:30.
+  // Priming a play()+pause() on the very first click/keydown/touch "unlocks"
+  // playback for the rest of the session, so the later programmatic play()
+  // at 13:30 actually produces sound.
+  useEffect(() => {
+    lunchAudioRef.current = new Audio("/sounds/lunch-warning.mp3");
+    lunchAudioRef.current.load();
+
+    const unlock = () => {
+      if (audioUnlockedRef.current || !lunchAudioRef.current) return;
+      lunchAudioRef.current.play()
+        .then(() => {
+          lunchAudioRef.current.pause();
+          lunchAudioRef.current.currentTime = 0;
+          audioUnlockedRef.current = true;
+        })
+        .catch(() => {}); // still locked — will retry on next gesture
+    };
+
+    document.addEventListener("click", unlock);
+    document.addEventListener("keydown", unlock);
+    document.addEventListener("touchstart", unlock);
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("keydown", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+  }, []);
+
   // ── Work timer ─────────────────────────────────────────────────────────────
   useEffect(() => {
     clearInterval(workIntervalRef.current);
@@ -143,12 +183,17 @@ export default function TimeTracker() {
     return () => clearInterval(breakIntervalRef.current);
   }, [isOnBreak, breakStart]);
 
-  // ── Auto lunch at 13:30 ────────────────────────────────────────────────────
-  // Fires every 10s. Window: 13:28–13:35 to survive page reloads & slow clocks.
-  // Uses sessionStorage so a page reload at 13:31 doesn't double-trigger.
+  // ── Lunch reminder at 13:30 ─────────────────────────────────────────────────
+  // Reminds the employee to take lunch — does NOT start the break automatically
+  // anymore; the employee must tap "Lunch" themselves.
+  // Mounted once (no isClockedIn/isOnBreak deps) so the interval is never torn
+  // down/rebuilt mid-window — it reads live values via refs instead, which is
+  // what made the old version fire unreliably.
+  // Fires every 10s. Window: 13:28–13:35 to survive slow clocks & tab throttling.
+  // Uses sessionStorage so re-checks within the same window don't repeat.
   useEffect(() => {
-    lunchCheckRef.current = setInterval(async () => {
-      if (!isClockedIn || isOnBreak) return;
+    lunchCheckRef.current = setInterval(() => {
+      if (!isClockedInRef.current || isOnBreakRef.current) return;
 
       const now = new Date();
       const h = now.getHours(), m = now.getMinutes();
@@ -156,33 +201,18 @@ export default function TimeTracker() {
       if (!inWindow) return;
 
       // Deduplicate via sessionStorage (survives page refresh within same session)
-      const todayKey = `autoLunch_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}`;
+      const todayKey = `lunchReminder_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}`;
       if (sessionStorage.getItem(todayKey) === "fired") return;
-      if (autoLunchFired) return;
 
       sessionStorage.setItem(todayKey, "fired");
-      setAutoLunchFired(true);
 
-      // Play sound immediately
-      new Audio("/sounds/lunch-warning.mp3").play().catch(() => {});
+      lunchAudioRef.current?.play().catch(() => {});
 
-      try {
-        const r = await apiPost("/api/employee/time/break", { action: "start", type: "lunch" });
-        if (r.success) {
-          setAttendance(r.attendance);
-          setIsOnBreak(true);
-          const last = r.attendance.breaks?.slice(-1)[0];
-          if (last?.start) setBreakStart(new Date(last.start));
-          setShowLunchNotice(true);
-          setTimeout(() => setShowLunchNotice(false), 12000);
-        } else if (r.code === "ALREADY_ON_BREAK") {
-          // Lunch already started (e.g. manual), just update state
-          setIsOnBreak(true);
-        }
-      } catch { /* ignore */ }
+      setShowLunchNotice(true);
+      setTimeout(() => setShowLunchNotice(false), 12000);
     }, 10000); // every 10s — reliable within the 7-min window
     return () => clearInterval(lunchCheckRef.current);
-  }, [isClockedIn, isOnBreak, autoLunchFired, apiPost]);
+  }, []);
 
   // ── Open face scan ─────────────────────────────────────────────────────────
   function openFaceScan(clockAction) {
@@ -474,7 +504,7 @@ export default function TimeTracker() {
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:20 }}>🍽️</span>
-              <span style={{ color:"#fff", fontWeight:800, fontSize:14 }}>Lunch Break Started!</span>
+              <span style={{ color:"#fff", fontWeight:800, fontSize:14 }}>Time for Lunch!</span>
             </div>
             <button
               onClick={() => setShowLunchNotice(false)}
@@ -498,10 +528,10 @@ export default function TimeTracker() {
               }}>⏰</div>
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#111827" }}>
-                  01:30 PM — Auto break started
+                  01:30 PM — Lunch reminder
                 </div>
                 <div style={{ fontSize:11.5, color:"#6B7280", marginTop:2 }}>
-                  You have <strong style={{ color:"#D97706" }}>45 min</strong> for lunch. Deduction applies if exceeded.
+                  Tap <strong style={{ color:"#D97706" }}>Lunch</strong> to start your break. You'll have 45 min before deduction applies.
                 </div>
               </div>
             </div>

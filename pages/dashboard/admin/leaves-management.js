@@ -179,6 +179,234 @@ export default function LeaveManagement() {
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
         />
+        <style>{`
+          /* ════════════════════════════════════════════
+             TOPBAR
+          ════════════════════════════════════════════ */
+          .lv-topbar {
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 12px; margin-bottom: 22px;
+            background: #fff; border-radius: 16px; padding: 12px 16px;
+            border: 1px solid #F0F0F8; box-shadow: 0 2px 10px rgba(15,23,42,.05);
+          }
+          .lv-heading { font-size: 16px; font-weight: 800; color: #111827; margin: 0; letter-spacing: -0.2px; }
+          .lv-section-heading { font-size: 16px; font-weight: 800; color: #111827; margin-bottom: 16px; letter-spacing: -0.2px; }
+          .lv-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+          .lv-select {
+            border: 1.5px solid #E5E7EB; border-radius: 10px;
+            padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+            background: #fff; color: #374151; outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+          }
+          .lv-select:focus, .lv-select:hover { border-color: #4F46E5; }
+
+          .lv-filter-btn, .lv-export-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 10px;
+            font-size: 13px; font-weight: 700; cursor: pointer; border: none;
+            transition: transform 0.15s, box-shadow 0.15s; white-space: nowrap;
+          }
+          .lv-filter-btn { background: #F3F4F6; color: #374151; }
+          .lv-filter-btn:hover { background: #E5E7EB; }
+          .lv-export-btn { background: linear-gradient(135deg,#4F46E5,#6366F1); color: #fff; box-shadow: 0 4px 12px rgba(79,70,229,.25); }
+          .lv-export-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(79,70,229,.32); }
+
+          /* ════════════════════════════════════════════
+             SUMMARY CARDS — gradient-wash KPI style
+          ════════════════════════════════════════════ */
+          .lv-cards {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            align-items: start; gap: 16px; margin-bottom: 24px;
+          }
+          @media (max-width: 900px) { .lv-cards { grid-template-columns: repeat(2,1fr); } }
+          .lv-kpi-card { transition: transform .2s ease, box-shadow .2s ease; }
+          .lv-kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }
+          .lv-card {
+            box-sizing: border-box; height: 104px;
+            border-radius: 16px; padding: 17px 18px 16px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            border: 1px solid; box-shadow: 0 3px 12px rgba(15,23,42,.06);
+            position: relative; overflow: hidden;
+          }
+          .lv-card::before {
+            content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+          }
+          .lv-card.blue   { background: linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color: #DBEAFE; }
+          .lv-card.blue::before   { background: #2563EB; }
+          .lv-card.red    { background: linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color: #FEE2E2; }
+          .lv-card.red::before    { background: #DC2626; }
+          .lv-card.green  { background: linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color: #DCFCE7; }
+          .lv-card.green::before  { background: #16A34A; }
+          .lv-card.orange { background: linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color: #FFEDD5; }
+          .lv-card.orange::before { background: #EA580C; }
+
+          .lv-icon {
+            width: 46px; height: 46px; border-radius: 13px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            color: #fff; font-size: 19px;
+          }
+          .lv-icon.blue   { background: #2563EB; box-shadow: 0 6px 16px rgba(37,99,235,.18); }
+          .lv-icon.red    { background: #DC2626; box-shadow: 0 6px 16px rgba(239,68,68,.18); }
+          .lv-icon.green  { background: #16A34A; box-shadow: 0 6px 16px rgba(34,197,94,.18); }
+          .lv-icon.orange { background: #EA580C; box-shadow: 0 6px 16px rgba(249,115,22,.18); }
+          .lv-card-top    { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+          .lv-card-body   { flex: 1; min-width: 0; padding: 0; }
+          .lv-card-value  { font-size: 26px; font-weight: 900; color: #0F172A; line-height: 1.05; letter-spacing: -0.8px; white-space: nowrap; }
+          .lv-card-label  { font-size: 12px; color: #475569; font-weight: 700; margin-top: 3px; white-space: nowrap; }
+          .lv-progress-track { height: 6px; background: #F1F5F9; border-radius: 6px; }
+          .lv-progress-fill  { height: 6px; border-radius: 6px; transition: width .4s; }
+
+          /* ════════════════════════════════════════════
+             LEAVES TABLE
+          ════════════════════════════════════════════ */
+          .lv-table-wrap {
+            border-radius: 16px; overflow: hidden; border: 1px solid #F0F0F8;
+            box-shadow: 0 2px 10px rgba(15,23,42,.05); background: #fff; overflow-x: auto;
+          }
+          .lv-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+          .lv-table thead tr { background: #F8FAFC; border-bottom: 1.5px solid #EFEFEF; }
+          .lv-table thead th {
+            padding: 13px 16px; font-weight: 800; color: #64748B;
+            text-align: center; white-space: nowrap; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+          }
+          .lv-table thead th:first-child { text-align: left; padding-left: 20px; }
+          .lv-table tbody tr { border-bottom: 1px solid #F5F5F5; transition: background 0.15s; }
+          .lv-table tbody tr:last-child { border-bottom: none; }
+          .lv-table tbody tr:hover { background: #F8F9FF; }
+          .lv-table td { padding: 13px 16px; color: #374151; text-align: center; vertical-align: middle; }
+          .lv-table td:first-child { text-align: left; padding-left: 20px; white-space: nowrap; }
+
+          .lv-emp-cell { display: flex; align-items: center; gap: 10px; }
+          .lv-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: #EEF2FF; color: #4F46E5;
+            font-size: 12px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; text-transform: uppercase;
+          }
+          .lv-emp-name { font-weight: 600; color: #111827; font-size: 13.5px; }
+
+          .lv-days-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+          .lv-days-cell strong { font-size: 14px; color: #0F172A; }
+          .lv-extra-days { font-size: 10.5px; color: #EA580C; font-weight: 600; white-space: nowrap; }
+
+          .lv-status-stack { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+          .lv-status-pill {
+            display: inline-block; padding: 4px 12px; border-radius: 20px;
+            font-size: 11.5px; font-weight: 700; white-space: nowrap;
+          }
+          .lv-status-pill.pending  { background: #FEF3C7; color: #B45309; }
+          .lv-status-pill.approved { background: #DCFCE7; color: #15803D; }
+          .lv-status-pill.rejected { background: #FEE2E2; color: #DC2626; }
+          .lv-sandwich-badge {
+            font-size: 10px; font-weight: 700; color: #7C3AED;
+            background: #F3E8FF; padding: 2px 9px; border-radius: 20px; white-space: nowrap;
+          }
+
+          .lv-view-reason-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: #EEF2FF; color: #4F46E5; border: none; border-radius: 8px;
+            padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+            transition: background 0.15s;
+          }
+          .lv-view-reason-btn:hover { background: #E0E7FF; }
+
+          .lv-action-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+          .lv-view-btn, .lv-approve-btn, .lv-reject-btn {
+            border: none; border-radius: 8px; padding: 7px 14px;
+            font-size: 12px; font-weight: 700; cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s; white-space: nowrap;
+          }
+          .lv-view-btn { background: #F3F4F6; color: #374151; }
+          .lv-view-btn:hover { background: #E5E7EB; }
+          .lv-approve-btn { background: #16A34A; color: #fff; box-shadow: 0 3px 10px rgba(34,197,94,.25); }
+          .lv-approve-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(34,197,94,.32); }
+          .lv-reject-btn { background: #DC2626; color: #fff; box-shadow: 0 3px 10px rgba(239,68,68,.25); }
+          .lv-reject-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(239,68,68,.32); }
+
+          /* ════════════════════════════════════════════
+             FILTER PANEL (SIDE DRAWER)
+          ════════════════════════════════════════════ */
+          .lv-filter-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 998; }
+          .lv-filter-overlay.open { display: block; }
+          .lv-filter-panel {
+            position: fixed; top: 0; right: -360px; left: auto; width: 340px; height: 100vh;
+            background: #fff; z-index: 999; box-shadow: -4px 0 24px rgba(0,0,0,0.1);
+            transition: right 0.3s ease; transform: none; display: flex; flex-direction: column;
+            border-radius: 0;
+          }
+          .lv-filter-panel.open { right: 0; }
+          .lv-filter-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #F0F0F0; }
+          .lv-filter-header h6 { font-weight: 700; font-size: 15px; color: #111827; margin: 0; text-transform: none; }
+          .lv-close-btn { background: #F3F4F6; border: none; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: #6B7280; }
+          .lv-filter-body { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+          .lv-filter-group { display: flex; flex-direction: column; gap: 6px; }
+          .lv-filter-group label { font-size: 12px; font-weight: 600; color: #374151; text-transform: none; }
+          .lv-filter-group select, .lv-filter-group input[type="date"] {
+            padding: 9px 12px; border-radius: 9px; border: 1.5px solid #E5E7EB;
+            font-size: 13px; color: #374151; background: #fff; outline: none;
+            width: 100%; box-sizing: border-box; appearance: auto;
+          }
+          .lv-filter-group select:focus,
+          .lv-filter-group input[type="date"]:focus { border-color: #4F46E5; }
+          .lv-filter-footer { padding: 20px 24px; border-top: 1px solid #F0F0F0; display: flex; gap: 10px; }
+          .lv-apply-btn { flex: 1; background: #4F46E5; color: #fff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+          .lv-apply-btn:hover { background: #4338CA; }
+          .lv-reset-btn { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+          .lv-reset-btn:hover { background: #E5E7EB; }
+
+          /* ════════════════════════════════════════════
+             MODALS
+          ════════════════════════════════════════════ */
+          .lv-modal-root { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; }
+          .lv-modal-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,0.45); }
+          .lv-modal-card {
+            position: relative; background: #fff; border-radius: 16px; width: 420px;
+            max-width: 92vw; max-height: 82vh; display: flex; flex-direction: column;
+            box-shadow: 0 20px 50px rgba(15,23,42,.25); overflow: hidden;
+          }
+          .lv-modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 18px 22px; border-bottom: 1px solid #F0F0F0;
+            font-size: 15px; font-weight: 800; color: #111827;
+          }
+          .lv-modal-close { background: #F3F4F6; border: none; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 13px; color: #6B7280; }
+          .lv-modal-body { padding: 20px 22px; overflow-y: auto; font-size: 13.5px; color: #374151; line-height: 1.6; }
+          .lv-modal-body p { margin: 0 0 8px; }
+          .lv-modal-body hr { border: none; border-top: 1px solid #F0F0F0; margin: 14px 0; }
+          .lv-modal-footer { padding: 16px 22px; border-top: 1px solid #F0F0F0; display: flex; justify-content: flex-end; gap: 10px; }
+          .lv-doc-item { padding: 10px 0; border-bottom: 1px solid #F5F5F5; }
+          .lv-doc-item:last-child { border-bottom: none; }
+          .lv-doc-item a { color: #4F46E5; font-weight: 600; text-decoration: none; font-size: 13.5px; }
+          .lv-doc-item a:hover { text-decoration: underline; }
+          .lv-form-group { display: flex; flex-direction: column; gap: 6px; }
+          .lv-form-group label { font-size: 12.5px; font-weight: 700; color: #374151; }
+          .lv-form-group textarea {
+            border: 1.5px solid #E5E7EB; border-radius: 10px; padding: 10px 12px;
+            font-size: 13px; color: #374151; min-height: 90px; resize: vertical;
+            outline: none; font-family: inherit; box-sizing: border-box;
+          }
+          .lv-form-group textarea:focus { border-color: #4F46E5; }
+          .lv-submit-btn {
+            background: #4F46E5; color: #fff; border: none; border-radius: 10px;
+            padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
+          }
+          .lv-submit-btn:hover { background: #4338CA; }
+
+          .lv-warning-overlay { position: fixed; inset: 0; z-index: 1100; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center; }
+          .lv-warning-card {
+            background: #fff; border-radius: 16px; padding: 26px 24px; width: 400px; max-width: 92vw;
+            box-shadow: 0 20px 50px rgba(15,23,42,.25);
+          }
+          .lv-warning-card h4 { font-size: 16px; font-weight: 800; color: #111827; margin: 0 0 10px; }
+          .lv-warning-card p { font-size: 13.5px; color: #475569; line-height: 1.6; margin: 0 0 8px; }
+          .lv-warning-highlight { font-weight: 700; color: #DC2626 !important; }
+          .lv-warning-actions { display: flex; gap: 10px; margin-top: 18px; }
+          .lv-confirm-btn { flex: 1; background: #4F46E5; color: #fff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; }
+          .lv-cancel-btn { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer; }
+        `}</style>
       </Head>
 
       <div className="add-employee-area">
@@ -187,7 +415,7 @@ export default function LeaveManagement() {
           <LeftbarMobile />
           <Dashnav />
 
-          <section className="content home admin-attendance-summary">
+          <section className="content home lv-page">
             <div className="breadcrum-bx">
               <ul className="breadcrumb  bg-white">
                 <li className="breadcrumb-item">
@@ -200,139 +428,111 @@ export default function LeaveManagement() {
             </div>
 
             <div className="block-header add-emp-area">
-              <div className="attendance-topbar  leave-management-topbar">
-                {/* LEFT: TOGGLE */}
-                <h5 className="admin-main-heading">Leaves Management</h5>
+              <div className="lv-topbar">
+                <h5 className="lv-heading">Leaves Management</h5>
 
-                {/* RIGHT: ACTIONS */}
-                <div className="attendance-actions">
-                  {/* <div className="date-box" style={{ cursor: "pointer" }}>
-                    <input
-                      type="date"
-                      style={{
-                        position: "absolute",
-                        opacity: 0,
-                        pointerEvents: "none",
-                      }}
-                    />
+                <div className="lv-actions">
+                  <select
+                    className="lv-select"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  >
+                    {MONTHS.map((m, i) => (
+                      <option key={i + 1} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
 
-                    <i className="bi bi-calendar"></i>
-
-                    <span></span>
-
-                    <i className="bi bi-chevron-down"></i>
-                  </div> */}
-
-                  {/* Month / Year picker */}
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <select
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                      style={{
-                        border: "1px solid #e5e7eb", borderRadius: 8,
-                        padding: "6px 10px", fontSize: 13, cursor: "pointer",
-                        background: "#fff", color: "#374151",
-                      }}
-                    >
-                      {MONTHS.map((m, i) => (
-                        <option key={i + 1} value={i + 1}>{m}</option>
-                      ))}
-                    </select>
-
-                    <select
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(Number(e.target.value))}
-                      style={{
-                        border: "1px solid #e5e7eb", borderRadius: 8,
-                        padding: "6px 10px", fontSize: 13, cursor: "pointer",
-                        background: "#fff", color: "#374151",
-                      }}
-                    >
-                      {YEARS.map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    className="lv-select"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  >
+                    {YEARS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
 
                   <button
-                    className="filter-btn"
+                    className="lv-filter-btn"
                     onClick={() => setShowFilter(true)}
                   >
                     <i className="bi bi-funnel"></i> Filter
                   </button>
 
-                  <button className="export-btn" onClick={exportLeaves}>
-                    <i className="bi bi-download"></i> Attendance Export
+                  <button className="lv-export-btn" onClick={exportLeaves}>
+                    <i className="bi bi-download"></i> Export
                   </button>
                 </div>
               </div>
 
-              <h5 className="admin-main-heading">Summary View</h5>
+              <h5 className="lv-section-heading">Summary View</h5>
 
-              {/* ================= TODAY ATTENDANCE HIGHLIGHTS ================= */}
-              <div className="today-attendance-cards">
-                {/* CARD 1 */}
-                <div className="attendance-card blue">
-                  <div className="card-left">
-                    <div className="icon-circle blue">
-                      <img src="/icons/admin/icon4.svg" />
+              {/* ================= LEAVE SUMMARY CARDS ================= */}
+              <div className="lv-cards">
+                <div className="lv-kpi-card">
+                  <div className="lv-card blue">
+                    <div className="lv-card-top">
+                      <div className="lv-icon blue"><i className="bi bi-file-earmark-text"></i></div>
+                      <div className="lv-card-body">
+                        <div className="lv-card-value">{totalLeaves}</div>
+                        <div className="lv-card-label">Total Requests</div>
+                      </div>
                     </div>
-                    <div>
-                      <h6>Total Leave Requests</h6>
-                      <p>All submitted leaves</p>
+                    <div className="lv-progress-track">
+                      <div className="lv-progress-fill" style={{ width: "100%", background: "#2563EB" }} />
                     </div>
-                  </div>
-                  <div className="card-count">{totalLeaves}</div>
-                </div>
-
-                {/* CARD 2 */}
-                <div className="attendance-card red">
-                  <div className="card-left">
-                    <div className="icon-circle red">
-                      <img src="/icons/admin/icon2.svg" />
-                    </div>
-                    <div>
-                      <h6>Pending Leave Requests</h6>
-                      <p className="approval-pending">Waiting for approval</p>
-                    </div>
-                  </div>
-                  <div className="card-count">
-                    <span className="approval-pending">{pendingCount}</span>
                   </div>
                 </div>
 
-                {/* CARD 3 */}
-                <div className="attendance-card green">
-                  <div className="card-left">
-                    <div className="icon-circle green">
-                      <img src="/icons/admin/icon1.svg" />
+                <div className="lv-kpi-card">
+                  <div className="lv-card red">
+                    <div className="lv-card-top">
+                      <div className="lv-icon red"><i className="bi bi-hourglass-split"></i></div>
+                      <div className="lv-card-body">
+                        <div className="lv-card-value">{pendingCount}</div>
+                        <div className="lv-card-label">Pending</div>
+                      </div>
                     </div>
-                    <div>
-                      <h6>Approved Leaves</h6>
-                      <p>Successfully approved</p>
+                    <div className="lv-progress-track">
+                      <div className="lv-progress-fill" style={{ width: `${totalLeaves ? (pendingCount / totalLeaves) * 100 : 0}%`, background: "#DC2626" }} />
                     </div>
                   </div>
-                  <div className="card-count">{approvedCount}</div>
                 </div>
 
-                {/* CARD 4 */}
-                <div className="attendance-card orange">
-                  <div className="card-left">
-                    <div className="icon-circle orange">
-                      <img src="/icons/admin/icon3.svg" />
+                <div className="lv-kpi-card">
+                  <div className="lv-card green">
+                    <div className="lv-card-top">
+                      <div className="lv-icon green"><i className="bi bi-check-circle"></i></div>
+                      <div className="lv-card-body">
+                        <div className="lv-card-value">{approvedCount}</div>
+                        <div className="lv-card-label">Approved</div>
+                      </div>
                     </div>
-                    <div>
-                      <h6>Rejected Leaves</h6>
-                      <p>Not approved</p>
+                    <div className="lv-progress-track">
+                      <div className="lv-progress-fill" style={{ width: `${totalLeaves ? (approvedCount / totalLeaves) * 100 : 0}%`, background: "#16A34A" }} />
                     </div>
                   </div>
-                  <div className="card-count">{rejectedCount}</div>
+                </div>
+
+                <div className="lv-kpi-card">
+                  <div className="lv-card orange">
+                    <div className="lv-card-top">
+                      <div className="lv-icon orange"><i className="bi bi-x-circle"></i></div>
+                      <div className="lv-card-body">
+                        <div className="lv-card-value">{rejectedCount}</div>
+                        <div className="lv-card-label">Rejected</div>
+                      </div>
+                    </div>
+                    <div className="lv-progress-track">
+                      <div className="lv-progress-fill" style={{ width: `${totalLeaves ? (rejectedCount / totalLeaves) * 100 : 0}%`, background: "#EA580C" }} />
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* ================= LEAVE TABLE ================= */}
-              <div className="admin-leave-table-wrap table-wrapper">
-                <table className="admin-leave-table">
+              <div className="lv-table-wrap">
+                <table className="lv-table">
                   <thead>
                     <tr>
                       <th>Employee</th>
@@ -358,13 +558,13 @@ export default function LeaveManagement() {
                       filteredLeaves.map((leave) => (
                         <tr key={leave._id}>
                           <td>
-                            <div className="emp-cell">
+                            <div className="lv-emp-cell">
                               {leave.employee?.personal?.avatar
-                                ? <img src={leave.employee.personal.avatar} alt="avatar" className="avatar" style={{ objectFit:"cover", padding:0 }} />
-                                : <div className="avatar">{leave.employee?.firstName?.[0]}{leave.employee?.lastName?.[0]}</div>
+                                ? <img src={leave.employee.personal.avatar} alt="" className="lv-avatar" style={{ objectFit:"cover" }} />
+                                : <div className="lv-avatar">{leave.employee?.firstName?.[0]}{leave.employee?.lastName?.[0]}</div>
                               }
-                              {leave.employee?.firstName}{" "}
-                              {leave.employee?.lastName}
+                              <span className="lv-emp-name">{leave.employee?.firstName}{" "}
+                              {leave.employee?.lastName}</span>
                             </div>
                           </td>
 
@@ -390,11 +590,11 @@ export default function LeaveManagement() {
                           {/* <td>{leave.totalDays}</td> */}
 
                           <td>
-                            <div className="days-cell">
+                            <div className="lv-days-cell">
                               <strong>{leave.totalDays}</strong>
 
                               {leave.policyFlags?.sandwichLeave && (
-                                <small className="extra-days">
+                                <small className="lv-extra-days">
                                   + Weekend Deduction
                                 </small>
                               )}
@@ -448,7 +648,7 @@ export default function LeaveManagement() {
 
                           <td className="reason">
                             <button
-                              className="view-reason-btn"
+                              className="lv-view-reason-btn"
                               onClick={() => setReasonModalData(leave)}
                             >
                               <i className="bi bi-eye"></i> View Reason
@@ -471,9 +671,9 @@ export default function LeaveManagement() {
                           </td> */}
 
                           <td>
-                            <div className="leave-status-stack">
+                            <div className="lv-status-stack">
                               <span
-                                className={`status-pill ${
+                                className={`lv-status-pill ${
                                   leave.status === "Pending"
                                     ? "pending"
                                     : leave.status === "Approved"
@@ -485,7 +685,7 @@ export default function LeaveManagement() {
                               </span>
 
                               {leave.policyFlags?.sandwichLeave && (
-                                <span className="sandwich-badge">
+                                <span className="lv-sandwich-badge">
                                   Sandwich Leave
                                 </span>
                               )}
@@ -493,10 +693,11 @@ export default function LeaveManagement() {
                           </td>
 
                           <td>
+                            <div className="lv-action-cell">
                             {/* VIEW DOCUMENT */}
                             {leave.documents?.length > 0 && (
                               <button
-                                className="view-btn"
+                                className="lv-view-btn"
                                 onClick={() => {
                                   setSelectedDocs(leave.documents);
                                   setShowDocModal(true);
@@ -510,7 +711,7 @@ export default function LeaveManagement() {
                             {leave.status === "Pending" && (
                               <>
                                 <button
-                                  className="approve-btn"
+                                  className="lv-approve-btn"
                                   onClick={async () => {
                                     try {
                                       const res = await fetch(
@@ -554,7 +755,7 @@ export default function LeaveManagement() {
                                 </button>
 
                                 <button
-                                  className="reject-btn"
+                                  className="lv-reject-btn"
                                   onClick={() => {
                                     setActionLeave(leave);
                                     setActionType("reject");
@@ -565,6 +766,7 @@ export default function LeaveManagement() {
                                 </button>
                               </>
                             )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -578,26 +780,26 @@ export default function LeaveManagement() {
       </div>
 
       {showDocModal && (
-        <div className="leave-modal-root">
+        <div className="lv-modal-root">
           <div
-            className="leave-modal-backdrop"
+            className="lv-modal-backdrop"
             onClick={() => setShowDocModal(false)}
           />
 
-          <div className="leave-modal-card">
-            <div className="leave-modal-header">
+          <div className="lv-modal-card">
+            <div className="lv-modal-header">
               <span>Supporting Documents</span>
               <button
-                className="leave-modal-close"
+                className="lv-modal-close"
                 onClick={() => setShowDocModal(false)}
               >
                 ✕
               </button>
             </div>
 
-            <div className="leave-modal-body">
+            <div className="lv-modal-body">
               {selectedDocs.map((doc, idx) => (
-                <div key={idx} className="document-item">
+                <div key={idx} className="lv-doc-item">
                   <a href={doc} target="_blank" rel="noreferrer">
                     📄 View Document {idx + 1}
                   </a>
@@ -609,27 +811,27 @@ export default function LeaveManagement() {
       )}
 
       {showActionModal && (
-        <div className="leave-modal-root">
+        <div className="lv-modal-root">
           <div
-            className="leave-modal-backdrop"
+            className="lv-modal-backdrop"
             onClick={() => setShowActionModal(false)}
           />
 
-          <div className="leave-modal-card">
-            <div className="leave-modal-header">
+          <div className="lv-modal-card">
+            <div className="lv-modal-header">
               <span>
                 {actionType === "approve" ? "Approve Leave" : "Reject Leave"}
               </span>
               <button
-                className="leave-modal-close"
+                className="lv-modal-close"
                 onClick={() => setShowActionModal(false)}
               >
                 ✕
               </button>
             </div>
 
-            <div className="leave-modal-body">
-              <div className="form-group">
+            <div className="lv-modal-body">
+              <div className="lv-form-group">
                 <label>Admin Remark <span style={{color:"#9ca3af",fontWeight:400}}>(optional)</span></label>
                 <textarea
                   value={adminRemark}
@@ -639,9 +841,9 @@ export default function LeaveManagement() {
               </div>
             </div>
 
-            <div className="leave-modal-footer">
+            <div className="lv-modal-footer">
               <button
-                className="submit-btn"
+                className="lv-submit-btn"
                 onClick={async () => {
                   try {
                     const endpoint =
@@ -704,8 +906,8 @@ export default function LeaveManagement() {
       )}
 
       {showSandwichWarning && (
-        <div className="leave-warning-overlay">
-          <div className="leave-warning-card">
+        <div className="lv-warning-overlay">
+          <div className="lv-warning-card">
             <h4>Sandwich Leave Warning</h4>
 
             <p>
@@ -713,13 +915,13 @@ export default function LeaveManagement() {
               balance will be deducted.
             </p>
 
-            <p className="warning-highlight">
+            <p className="lv-warning-highlight">
               Total Deduction: {actionLeave?.totalDays} days
             </p>
 
-            <div className="warning-actions">
+            <div className="lv-warning-actions">
               <button
-                className="confirm-btn"
+                className="lv-confirm-btn"
                 onClick={() => {
                   setShowSandwichWarning(false);
                   setShowActionModal(true);
@@ -729,7 +931,7 @@ export default function LeaveManagement() {
               </button>
 
               <button
-                className="cancel-btn"
+                className="lv-cancel-btn"
                 onClick={() => {
                   setShowSandwichWarning(false);
                   setActionLeave(null);
@@ -743,17 +945,21 @@ export default function LeaveManagement() {
       )}
 
       {/* ===== LEAVE FILTER PANEL ===== */}
-      <div className={`admin-filter-panel ${showFilter ? "open" : ""}`}>
-        <div className="admin-filter-header">
+      <div
+        className={`lv-filter-overlay ${showFilter ? "open" : ""}`}
+        onClick={() => setShowFilter(false)}
+      />
+      <div className={`lv-filter-panel ${showFilter ? "open" : ""}`}>
+        <div className="lv-filter-header">
           <h6>Filter Leaves</h6>
-          <button className="close-btn" onClick={() => setShowFilter(false)}>
+          <button className="lv-close-btn" onClick={() => setShowFilter(false)}>
             ✕
           </button>
         </div>
 
-        <div className="admin-filter-body">
+        <div className="lv-filter-body">
           {/* Status */}
-          <div className="filter-group">
+          <div className="lv-filter-group">
             <label>Leave Status</label>
             <select
               value={filters.status}
@@ -769,7 +975,7 @@ export default function LeaveManagement() {
           </div>
 
           {/* Leave Type */}
-          <div className="filter-group">
+          <div className="lv-filter-group">
             <label>Leave Type</label>
             <select
               value={filters.leaveType}
@@ -786,7 +992,7 @@ export default function LeaveManagement() {
           </div>
 
           {/* Sandwich Leave */}
-          <div className="filter-group">
+          <div className="lv-filter-group">
             <label>Sandwich Leave</label>
             <select
               value={filters.sandwich}
@@ -801,7 +1007,7 @@ export default function LeaveManagement() {
           </div>
 
           {/* Date Range */}
-          <div className="filter-group">
+          <div className="lv-filter-group">
             <label>From Date</label>
             <input
               type="date"
@@ -812,7 +1018,7 @@ export default function LeaveManagement() {
             />
           </div>
 
-          <div className="filter-group">
+          <div className="lv-filter-group">
             <label>To Date</label>
             <input
               type="date"
@@ -824,13 +1030,13 @@ export default function LeaveManagement() {
           </div>
         </div>
 
-        <div className="admin-filter-footer">
-          <button className="apply-btn" onClick={() => setShowFilter(false)}>
+        <div className="lv-filter-footer">
+          <button className="lv-apply-btn" onClick={() => setShowFilter(false)}>
             Apply Filters
           </button>
 
           <button
-            className="reset-btn"
+            className="lv-reset-btn"
             onClick={() =>
               setFilters({
                 status: "",
@@ -849,24 +1055,24 @@ export default function LeaveManagement() {
       {/* =========================== reason model ===================== */}
 
       {reasonModalData && (
-        <div className="leave-modal-root">
+        <div className="lv-modal-root">
           <div
-            className="leave-modal-backdrop"
+            className="lv-modal-backdrop"
             onClick={() => setReasonModalData(null)}
           />
 
-          <div className="leave-modal-card">
-            <div className="leave-modal-header">
+          <div className="lv-modal-card">
+            <div className="lv-modal-header">
               <span>Leave Reason</span>
               <button
-                className="leave-modal-close"
+                className="lv-modal-close"
                 onClick={() => setReasonModalData(null)}
               >
                 ✕
               </button>
             </div>
 
-            <div className="leave-modal-body">
+            <div className="lv-modal-body">
               <p>
                 <strong>Reason:</strong>
               </p>

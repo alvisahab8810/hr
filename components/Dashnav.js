@@ -1,7 +1,5 @@
 "use client";
 
-import { confirmAlert } from "react-confirm-alert";
-import "react-confirm-alert/src/react-confirm-alert.css";
 import { toast } from "react-toastify";
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -322,12 +320,6 @@ export default function Dashnav() {
                   )}
                 </div>
               </li>
-
-              {/* Admin / brand logo chip */}
-              {/* <li style={{ listStyle: "none" }} className="log-out-btn">
-                <img src="/assets/images/admin/admin-logo.svg"
-                  style={{ height: 36, width: "auto", display: "block" }} />
-              </li> */}
 
             </ul>
           </div>

@@ -9,6 +9,8 @@ import Leftbar from "@/components/employee/Leftbar";
 import LeftbarMobile from "@/components/employee/LeftbarMobile";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { isOverdue, getStageDeadline, filterTasksByMonth, calcGrade } from "@/utils/tasks/employeeGrade";
+import { calcAttendancePoints, calcOverallScore } from "@/utils/attendance/attendancePoints";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const getToken = () => typeof window !== "undefined" ? localStorage.getItem("employeeToken") || "" : "";
@@ -44,27 +46,6 @@ function fmtDT(d) {
   const date = dt.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const time = dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
   return `${date}, ${time}`;
-}
-
-function isOverdue(d) {
-  if (!d) return false;
-  const n = new Date(); n.setHours(0, 0, 0, 0);
-  const x = new Date(d); x.setHours(0, 0, 0, 0);
-  return x < n;
-}
-
-// Returns the most relevant deadline for a task — stage deadline first for production tasks
-function getStageDeadline(task) {
-  if (task?.taskType === "production" && task.stages?.length) {
-    const deadlines = task.stages
-      .filter(s => s.deadline && !s.done)
-      .map(s => new Date(s.deadline));
-    if (deadlines.length) return deadlines.reduce((a, b) => a < b ? a : b);
-    // All stages done — use the earliest deadline anyway
-    const all = task.stages.map(s => s.deadline).filter(Boolean).map(x => new Date(x));
-    if (all.length) return all.reduce((a, b) => a < b ? a : b);
-  }
-  return task?.dueDate ? new Date(task.dueDate) : null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -2646,76 +2627,6 @@ const STATUS_COLOR = { todo: "#64748b", in_progress: "#3b82f6", review: "#f59e0b
 const SL           = { todo: "To Do", in_progress: "In Progress", review: "Review", completed: "Done", blocked: "Rejected" };
 const RL           = { content: "Content Writer", design: "Designer", editor: "Video Editor", developer: "Developer", general: "Team Member" };
 
-// filterTasksByMonth — shared helper used by callers of calcGrade
-function filterTasksByMonth(tasks, month, year) {
-  return tasks.filter(t => {
-    const dl = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
-    return dl && dl.getFullYear() === year && dl.getMonth() === month;
-  });
-}
-
-function calcGrade(tasks) {
-  // Score each task 0-5 based on submission lateness vs deadline
-  // 5=A(on time), 4=B(0-4h late), 3=C(4-12h late), 2=D(12-24h late), 1=F(24h+ late), 0=Incomplete
-  // NOTE: callers are responsible for pre-filtering tasks to the desired month
-
-  const total = tasks.length;
-  if (total === 0) {
-    return { letter:"—", color:"#94a3b8", rating:0, rate:0, total:0, completed:0, incomplete:0, aCnt:0, bCnt:0, cCnt:0, dCnt:0, fCnt:0 };
-  }
-
-  const scores = tasks.map(t => {
-    const deadline = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
-    if (!deadline) return null;
-
-    // Get submission time: stage doneAt for production, else submittedAt
-    let submittedAt = null;
-    if (t.taskType === "production" && t.stages?.length) {
-      const doneStages = t.stages.filter(s => s.done || s.approved);
-      const first = doneStages[0];
-      if (first?.doneAt) submittedAt = new Date(first.doneAt);
-    }
-    if (!submittedAt && t.submittedAt) submittedAt = new Date(t.submittedAt);
-
-    if (!submittedAt) {
-      if (t.status === "completed") return 5; // completed but no time tracked → assume on time
-      if (isOverdue(deadline))     return 0; // overdue, not submitted
-      return null; // not yet due — exclude from scoring
-    }
-
-    const diffH = (submittedAt - deadline) / 3600000;
-    if (diffH <= 0)  return 5; // A
-    if (diffH <= 4)  return 4; // B
-    if (diffH <= 12) return 3; // C
-    if (diffH <= 24) return 2; // D
-    return 1;                  // F
-  }).filter(s => s !== null);
-
-  const aCnt = scores.filter(s => s === 5).length;
-  const bCnt = scores.filter(s => s === 4).length;
-  const cCnt = scores.filter(s => s === 3).length;
-  const dCnt = scores.filter(s => s === 2).length;
-  const fCnt = scores.filter(s => s === 1).length;
-  const incomplete = scores.filter(s => s === 0).length;
-  const completed  = scores.filter(s => s > 0).length;
-
-  const sum    = scores.reduce((a, b) => a + b, 0);
-  const rating = scores.length > 0 ? Math.round((sum / scores.length) * 10) / 10 : 0;
-
-  let letter, color;
-  if (rating >= 4.5)     { letter = "A+"; color = "#16a34a"; }
-  else if (rating >= 4.0) { letter = "A";  color = "#22c55e"; }
-  else if (rating >= 3.5) { letter = "B+"; color = "#84cc16"; }
-  else if (rating >= 3.0) { letter = "B";  color = "#f5a623"; }
-  else if (rating >= 2.5) { letter = "C";  color = "#f59e0b"; }
-  else if (rating >= 1.5) { letter = "D";  color = "#ef4444"; }
-  else                    { letter = "F";  color = "#dc2626"; }
-
-  const rate = total > 0 ? Math.round(aCnt / total * 100) : 0;
-
-  return { letter, color, rating, rate, total, completed, incomplete, aCnt, bCnt, cCnt, dCnt, fCnt };
-}
-
 function getDeadlineInfo(task) {
   if (!task.dueDate) return null;
   const raw = new Date(task.dueDate);
@@ -4893,6 +4804,10 @@ function PortalGradesView({ tasks, loading }) {
   const now = new Date();
   const [selMonth, setSelMonth] = useState(now.getMonth());
   const [selYear,  setSelYear]  = useState(now.getFullYear());
+  const [attendance, setAttendance] = useState(null);
+  const [attLoading, setAttLoading] = useState(true);
+  const [pdGrade, setPdGrade] = useState(null);
+  const [pdLoading, setPdLoading] = useState(true);
 
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -4903,12 +4818,40 @@ function PortalGradesView({ tasks, loading }) {
     setSelMonth(m); setSelYear(y);
   }
 
+  useEffect(() => {
+    const monthStr = `${selYear}-${String(selMonth + 1).padStart(2, "0")}`;
+    setAttLoading(true);
+    fetch(`/api/employee/attendance/monthly/self?month=${monthStr}`, { headers: authH() })
+      .then(r => r.json())
+      .then(d => setAttendance(d.success ? d.summary : null))
+      .catch(() => setAttendance(null))
+      .finally(() => setAttLoading(false));
+  }, [selMonth, selYear]);
+
+  useEffect(() => {
+    setPdLoading(true);
+    fetch(`/api/employee/personal-development/self?month=${selMonth}&year=${selYear}`, { headers: authH() })
+      .then(r => r.json())
+      .then(d => setPdGrade(d.success ? d.grade : null))
+      .catch(() => setPdGrade(null))
+      .finally(() => setPdLoading(false));
+  }, [selMonth, selYear]);
+
   const monthTasks = tasks.filter(t => {
     const dl = getStageDeadline(t) || (t.dueDate ? new Date(t.dueDate) : null);
     return dl && dl.getFullYear() === selYear && dl.getMonth() === selMonth;
   });
 
   const grade = calcGrade(monthTasks);
+
+  // Attendance points (0-5) and the combined Overall score — same formula as
+  // the admin Team Performance page (utils/attendance/attendancePoints.js),
+  // so an employee's own number always matches what the admin sees.
+  const attPts = attLoading ? null : calcAttendancePoints({ late: attendance?.late ?? 0, absent: attendance?.absent ?? 0 });
+  const overallReady = !attLoading && !pdLoading;
+  const overall = overallReady
+    ? calcOverallScore([grade.rating, attPts.score, pdGrade ? pdGrade.score : null])
+    : { score: null, grade: { label: "", color: "#94a3b8", bg: "#f1f5f9" } };
 
   const GRADE_SCALE = [
     { g:"A+", range:"4.5 – 5.0", color:"#16a34a", desc:"Exceptional" },
@@ -4948,6 +4891,28 @@ function PortalGradesView({ tasks, loading }) {
         <button onClick={() => shiftMonth(-1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #e2e8f0", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
         <div style={{ fontWeight:700, fontSize:15, color:"#1e293b", minWidth:140, textAlign:"center" }}>{MONTHS[selMonth]} {selYear}</div>
         <button onClick={() => shiftMonth(1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #e2e8f0", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+      </div>
+
+      {/* ── OVERALL SCORE — average of Task Grade + Attendance + Personal Development ── */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"14px 20px", borderRadius:14, marginBottom:18, background: overall.grade.bg, border:`1.5px solid ${overall.grade.color}40` }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:800, color: overall.grade.color, letterSpacing:"0.05em", textTransform:"uppercase" }}>Overall Ave. Score — {MONTHS[selMonth]} {selYear}</div>
+          <div style={{ fontSize:11, color:"#64748b", marginTop:2 }}>
+            {overall.score != null ? (
+              <>
+                {[
+                  `Task ${grade.rating ?? 0}`,
+                  `Attendance ${attPts.score}`,
+                  pdGrade ? `Personal Dev ${pdGrade.score}` : null,
+                ].filter(Boolean).join(" + ")} → avg {overall.score}
+                {!pdGrade && " (Personal Dev not set this month, so not counted)"}
+              </>
+            ) : "Average of Task Grade, Attendance Points and Personal Development"}
+          </div>
+        </div>
+        <div style={{ fontSize:28, fontWeight:900, color: overall.grade.color, whiteSpace:"nowrap" }}>
+          {overall.score != null ? `${overall.score}/5` : "—"} <span style={{ fontSize:16 }}>{overall.score != null ? overall.grade.label : ""}</span>
+        </div>
       </div>
 
       {/* ── DEEP PERFORMANCE CARD ── */}
@@ -5035,6 +5000,69 @@ function PortalGradesView({ tasks, loading }) {
           💡 <strong style={{ color:"#e2e8f0" }}>How your grade is calculated:</strong> Each task is scored A(5) → F(0) based on how late you submitted vs the stage deadline. Your rating is the average score across all tasks this month. Incomplete/overdue tasks count as 0.
         </div>
       </div>
+
+      {/* ── ATTENDANCE SUMMARY CARD (separate from Task Grade) ── */}
+      <div style={{ background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:16, overflow:"hidden", marginBottom:18, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+        <div style={{ padding:"16px 24px", borderBottom:"1.5px solid #f1f5f9", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:800, color:"#1e293b", letterSpacing:"0.05em", textTransform:"uppercase" }}>Attendance Summary</div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>{MONTHS[selMonth]} {selYear}</div>
+          </div>
+          {attPts && (
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:11, color:"#94a3b8", fontWeight:600 }}>Attendance Points</div>
+              <div style={{ fontSize:18, fontWeight:900, color:attPts.grade.color }}>{attPts.score}/5 <span style={{ fontSize:12 }}>{attPts.grade.label}</span></div>
+            </div>
+          )}
+        </div>
+        {attLoading ? (
+          <div style={{ padding:30, textAlign:"center" }}><div className="ep-spinner" /></div>
+        ) : (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:0 }}>
+            {[
+              { label:"Present",  val: attendance?.present ?? 0,  color:"#16a34a" },
+              { label:"On Time",  val: attendance?.onTime ?? 0,   color:"#22c55e" },
+              { label:"Late",     val: attendance?.late ?? 0,     color:"#f59e0b" },
+              { label:"Absent",   val: attendance?.absent ?? 0,   color:"#ef4444" },
+            ].map((s, i) => (
+              <div key={s.label} style={{ padding:"18px 12px", textAlign:"center", borderRight: i<3 ? "1px solid #f1f5f9" : "none" }}>
+                <div style={{ fontSize:22, fontWeight:900, color:s.color }}>{s.val}</div>
+                <div style={{ fontSize:11, color:"#94a3b8", fontWeight:600, marginTop:4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── PERSONAL DEVELOPMENT CARD (admin-set, separate from Task Grade & Attendance) ── */}
+      <div style={{ background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:16, overflow:"hidden", marginBottom:18, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+        <div style={{ padding:"16px 24px", borderBottom:"1.5px solid #f1f5f9", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:800, color:"#1e293b", letterSpacing:"0.05em", textTransform:"uppercase" }}>Personal Development</div>
+            <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>{MONTHS[selMonth]} {selYear} · Set by admin</div>
+          </div>
+          <i className="bi bi-person-check" style={{ fontSize:20, color:"#7C3AED" }} />
+        </div>
+        {pdLoading ? (
+          <div style={{ padding:30, textAlign:"center" }}><div className="ep-spinner" /></div>
+        ) : !pdGrade ? (
+          <div style={{ padding:"24px", textAlign:"center", color:"#94a3b8", fontSize:13 }}>
+            <i className="bi bi-hourglass-split" style={{ fontSize:22, display:"block", marginBottom:8 }} />
+            Not yet reviewed this month
+          </div>
+        ) : (
+          <div style={{ display:"flex", gap:20, padding:"20px 24px", alignItems:"center" }}>
+            <div style={{ textAlign:"center", flexShrink:0 }}>
+              <div style={{ fontSize:40, fontWeight:900, color:"#7C3AED" }}>{pdGrade.score}</div>
+              <div style={{ fontSize:11, color:"#94a3b8" }}>out of 5</div>
+            </div>
+            <div style={{ flex:1, borderLeft:"1.5px solid #f1f5f9", paddingLeft:20 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:".05em", marginBottom:6 }}>Admin's Note</div>
+              <div style={{ fontSize:13, color:"#374151", lineHeight:1.6 }}>{pdGrade.note || "No additional comments."}</div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -5079,19 +5107,23 @@ function PortalNotificationsView({ tasks, loading }) {
 
 // ─── PORTAL PERFORMANCE VIEW ──────────────────────────────────────────────────
 function PortalPerformanceView({ tasks, loading, emp }) {
-  const total      = tasks.length;
-  const completed  = tasks.filter(t => t.status === "completed").length;
-  const overdue    = tasks.filter(t => isOverdue(t.dueDate) && t.status !== "completed").length;
-  const inProg     = tasks.filter(t => t.status === "in_progress").length;
-  const review     = tasks.filter(t => t.status === "review").length;
-  const onTime     = completed > 0 ? Math.round((tasks.filter(t => t.status === "completed" && !isOverdue(t.dueDate)).length / completed) * 100) : 0;
-  const grade      = onTime >= 90 ? "A" : onTime >= 75 ? "B" : onTime >= 60 ? "C" : "D";
-  const gradeColor = onTime >= 90 ? "#22c55e" : onTime >= 75 ? "#f5a623" : onTime >= 60 ? "#f59e0b" : "#ef4444";
+  const now = new Date();
+  const monthTasks = filterTasksByMonth(tasks, now.getMonth(), now.getFullYear());
+  const grade = calcGrade(monthTasks);
+
+  // Same-month status breakdown (for the "Task Breakdown" bars) — sourced from
+  // the same month-filtered task set the grade is computed from, so the two
+  // sections of this view never disagree with each other or with the Grades tab.
+  const inProg  = monthTasks.filter(t => t.status === "in_progress").length;
+  const review  = monthTasks.filter(t => t.status === "review").length;
+
+  const onTime     = grade.rate; // % of this month's tasks graded A (on time)
+  const gradeColor = grade.color;
   const BAR_DATA   = [
-    { label:"Completed", val:completed, color:"#22c55e" },
-    { label:"In Progress", val:inProg,  color:"#3b82f6" },
-    { label:"Review",      val:review,  color:"#f59e0b" },
-    { label:"Overdue",     val:overdue, color:"#ef4444" },
+    { label:"Completed", val:grade.completed, color:"#22c55e" },
+    { label:"In Progress", val:inProg,        color:"#3b82f6" },
+    { label:"Review",      val:review,        color:"#f59e0b" },
+    { label:"Overdue",     val:grade.incomplete, color:"#ef4444" },
   ];
   if (loading) return <div className="ep-content"><div className="ep-empty"><div className="ep-spinner" /></div></div>;
   return (
@@ -5100,7 +5132,7 @@ function PortalPerformanceView({ tasks, loading, emp }) {
         <div className="ep-card">
           <div className="ep-card-title"><i className="bi bi-trophy" style={{ color:"#f5a623" }} /> Overall Grade</div>
           <div style={{ display:"flex", alignItems:"center", gap:20, marginTop:8 }}>
-            <div className="ep-perf-grade" style={{ borderColor:gradeColor, color:gradeColor }}>{grade}</div>
+            <div className="ep-perf-grade" style={{ borderColor:gradeColor, color:gradeColor }}>{grade.letter}</div>
             <div>
               <div style={{ fontSize:13, color:"#64748b", marginBottom:4 }}>On-time completion rate</div>
               <div style={{ fontSize:28, fontWeight:800, color:gradeColor }}>{onTime}%</div>
@@ -5119,7 +5151,7 @@ function PortalPerformanceView({ tasks, loading, emp }) {
                   <span>{b.label}</span><span style={{ fontWeight:700, color:b.color }}>{b.val}</span>
                 </div>
                 <div className="ep-bar-track">
-                  <div className="ep-bar-fill" style={{ width: total ? `${(b.val/total)*100}%` : "0%", background:b.color }} />
+                  <div className="ep-bar-fill" style={{ width: grade.total ? `${(b.val/grade.total)*100}%` : "0%", background:b.color }} />
                 </div>
               </div>
             ))}
@@ -5130,10 +5162,10 @@ function PortalPerformanceView({ tasks, loading, emp }) {
         <div className="ep-card-title"><i className="bi bi-list-check" style={{ color:"#f5a623" }} /> Summary</div>
         <div className="ep-grid4">
           {[
-            { label:"Total Assigned", val:total,          color:"#e2e8f0" },
-            { label:"Completed",      val:completed,      color:"#22c55e" },
-            { label:"Overdue",        val:overdue,        color:"#ef4444" },
-            { label:"Pending",        val:total-completed, color:"#3b82f6" },
+            { label:"Total Assigned", val:grade.total,      color:"#e2e8f0" },
+            { label:"Completed",      val:grade.completed,  color:"#22c55e" },
+            { label:"Overdue",        val:grade.incomplete, color:"#ef4444" },
+            { label:"Pending",        val:grade.total - grade.completed - grade.incomplete, color:"#3b82f6" },
           ].map(s => (
             <div key={s.label} style={{ background:"#161a24", border:"1px solid #252a36", borderRadius:10, padding:"14px 18px" }}>
               <div style={{ fontSize:26, fontWeight:800, color:s.color }}>{s.val}</div>

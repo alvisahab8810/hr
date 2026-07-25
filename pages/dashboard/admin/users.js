@@ -304,10 +304,13 @@ export default function AdminUsers() {
     return (matchName || matchEmail) && matchRole;
   });
 
+  const activeCount  = users.filter(u => u.status === "Active").length;
+  const pendingCount = users.filter(u => u.status === "Pending").length;
+
   const stats = [
-    { label: "Total Users",    value: users.length,                                             icon: "bi-people-fill",   bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE" },
-    { label: "Active",         value: users.filter(u => u.status === "Active").length,          icon: "bi-check-circle-fill", bg: "#DCFCE7", color: "#15803D", border: "#BBF7D0" },
-    { label: "Pending Invite", value: users.filter(u => u.status === "Pending").length,         icon: "bi-hourglass-split",   bg: "#FEF3C7", color: "#B45309", border: "#FDE68A" },
+    { accent: "indigo", icon: "bi-people-fill",         val: users.length,  label: "Total Users",    pct: 100 },
+    { accent: "green",  icon: "bi-check-circle-fill",   val: activeCount,   label: "Active",          pct: users.length ? (activeCount / users.length) * 100 : 0 },
+    { accent: "orange", icon: "bi-hourglass-split",      val: pendingCount,  label: "Pending Invite",  pct: users.length ? (pendingCount / users.length) * 100 : 0 },
   ];
 
   return (
@@ -337,11 +340,41 @@ export default function AdminUsers() {
           .um-row:last-child { border-bottom:none; }
           .um-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px;
                       border-radius:20px; font-size:11px; font-weight:700; }
-          .um-stat { display:flex; align-items:center; gap:14px; padding:18px 20px;
-                     border-radius:16px; border:1.5px solid; }
           .um-check { width:18px; height:18px; border-radius:5px; border:2px solid #D1D5DB;
                       display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .15s; }
           .um-check.on { background:#6366F1; border-color:#6366F1; }
+
+          .um-stat {
+            box-sizing:border-box; height:104px; border-radius:16px;
+            padding:17px 18px 16px; display:flex; flex-direction:column;
+            justify-content:space-between; border:1px solid;
+            box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+            overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+          }
+          .um-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .um-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .um-stat-top { display:flex; align-items:center; gap:14px; }
+          .um-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+          .um-stat-body { flex:1; min-width:0; }
+          .um-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+          .um-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .um-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .um-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+
+          .um-stat.indigo::before { background:#4F46E5; }
+          .um-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+          .um-stat.indigo .um-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+          .um-stat.indigo .um-stat-fill { background:#4F46E5; }
+
+          .um-stat.green::before { background:#16A34A; }
+          .um-stat.green { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#BBF7D0; }
+          .um-stat.green .um-stat-icon { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+          .um-stat.green .um-stat-fill { background:#16A34A; }
+
+          .um-stat.orange::before { background:#EA580C; }
+          .um-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FED7AA; }
+          .um-stat.orange .um-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+          .um-stat.orange .um-stat-fill { background:#EA580C; }
         `}</style>
       </Head>
 
@@ -371,17 +404,18 @@ export default function AdminUsers() {
               </div>
 
               {/* Stats */}
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:12, marginBottom:20 }}>
-                {stats.map(s => (
-                  <div key={s.label} className="um-stat" style={{ background:s.bg, borderColor:s.border }}>
-                    <div style={{ width:44, height:44, borderRadius:12, background:"#fff",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      boxShadow:"0 1px 4px rgba(0,0,0,.08)", flexShrink:0 }}>
-                      <i className={`bi ${s.icon}`} style={{ fontSize:20, color:s.color }} />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:12, marginBottom:20, alignItems:"start" }}>
+                {stats.map((s, i) => (
+                  <div key={i} className={`um-stat ${s.accent}`}>
+                    <div className="um-stat-top">
+                      <div className="um-stat-icon"><i className={`bi ${s.icon}`} /></div>
+                      <div className="um-stat-body">
+                        <div className="um-stat-val">{s.val}</div>
+                        <div className="um-stat-label">{s.label}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize:22, fontWeight:800, color:"#111827", lineHeight:1.2 }}>{s.value}</div>
-                      <div style={{ fontSize:11, color:"#6B7280", fontWeight:500, marginTop:2 }}>{s.label}</div>
+                    <div className="um-stat-track">
+                      <div className="um-stat-fill" style={{ width:`${s.pct}%` }} />
                     </div>
                   </div>
                 ))}

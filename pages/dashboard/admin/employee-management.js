@@ -218,6 +218,14 @@ export default function AddEmployee() {
     ),
   ];
 
+  const STATUS_COLOR = {
+    Permanent: { bg: "#DCFCE7", color: "#16A34A" },
+    Probation: { bg: "#FFEDD5", color: "#EA580C" },
+    Contract:  { bg: "#DBEAFE", color: "#1D4ED8" },
+    Intern:    { bg: "#EDE9FE", color: "#7C3AED" },
+  };
+  const badgeStyle = (status) => STATUS_COLOR[status] || { bg: "#F1F5F9", color: "#64748B" };
+
   return (
     <div>
       <Head>
@@ -228,6 +236,10 @@ export default function AddEmployee() {
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
         />
+        <style>{`
+          .kpi-card { transition: transform .2s ease, box-shadow .2s ease; }
+          .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }
+        `}</style>
       </Head>
 
       <div className="add-employee-area">
@@ -249,40 +261,46 @@ export default function AddEmployee() {
 
             <div className="block-header add-emp-area">
               {/* 🔹 Header */}
-              <div className="search-bar-bx d-flex justify-content-between align-items-center ">
-                <div className="search-bx-img">
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12, marginBottom:20 }}>
+                <div style={{ position:"relative", flex:"1 1 260px", maxWidth:360 }}>
+                  <i className="bi bi-search" style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"#94A3B8", fontSize:14 }} />
                   <input
                     type="text"
-                    placeholder="Search"
+                    placeholder="Search by name or employee ID"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="form-control border-light"
+                    style={{
+                      width:"100%", boxSizing:"border-box", padding:"10px 14px 10px 38px",
+                      border:"1px solid #E5E7EB", borderRadius:10, fontSize:13, outline:"none",
+                      background:"#fff",
+                    }}
                   />
-                  <img src="/icons/search.png" alt=""></img>
                 </div>
-                <div className="d-flex gap-2 filter-bx-row">
+                <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                   <Link
                     href="/dashboard/admin/former-employees"
                     style={{
                       display:"flex", alignItems:"center", gap:6,
                       background:"#FEE2E2", color:"#DC2626",
                       border:"1.5px solid #FECACA", borderRadius:10,
-                      padding:"8px 14px", fontSize:13, fontWeight:700,
+                      padding:"9px 16px", fontSize:13, fontWeight:700,
                       textDecoration:"none",
                     }}
                   >
                     <i className="bi bi-person-dash-fill" /> Former Employees
                   </Link>
-                  <a
+                  <Link
                     href="/dashboard/admin/add-employee"
-                    className="invite-btn "
+                    style={{
+                      display:"flex", alignItems:"center", gap:6,
+                      background:"linear-gradient(135deg,#6366F1,#818CF8)", color:"#fff",
+                      border:"none", borderRadius:10,
+                      padding:"9px 16px", fontSize:13, fontWeight:700,
+                      textDecoration:"none", boxShadow:"0 4px 12px rgba(99,102,241,.3)",
+                    }}
                   >
-                    <img
-                      src="/icons/add-circle.svg"
-                      alt="Add Employee Icon"
-                    ></img>
-                    Add New Employee
-                  </a>
+                    <i className="bi bi-plus-circle-fill" /> Add New Employee
+                  </Link>
                 </div>
               </div>
 
@@ -301,108 +319,54 @@ export default function AddEmployee() {
                 </div>
               )}
 
-              <h5 class="admin-main-heading">Employee Management Highlights</h5>
-              <div className="attendance-highlight-wrap">
-                <div className="attendance-card active">
-                  <div className="card-left">
-                    <div className="icon green">
-                      <img src="/icons/active-employee.svg"></img>
-                    </div>
-                    <div>
-                      <span>Active Employees</span>
-                      <div className="bar">
-                        <span
-                          style={{
-                            width: `${
-                              (attendanceStats.active / attendanceStats.total) *
-                              100
-                            }%`,
-                          }}
-                        />
+              <h5 style={{ fontSize:15, fontWeight:800, color:"#0F172A", marginBottom:14 }}>Employee Management Highlights</h5>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:22 }}>
+                {[
+                  { label:"Active Employees",   value:attendanceStats.active,    icon:"bi-people-fill",           accent:{ bg:"#DCFCE7", icon:"#16A34A", shadow:"rgba(34,197,94,.18)"  } },
+                  { label:"On Probation",       value:attendanceStats.probation, icon:"bi-hourglass-split",       accent:{ bg:"#FFEDD5", icon:"#EA580C", shadow:"rgba(249,115,22,.18)" } },
+                  { label:"Contract Employees", value:attendanceStats.resigned,  icon:"bi-file-earmark-text-fill",accent:{ bg:"#EEF2FF", icon:"#6366F1", shadow:"rgba(99,102,241,.18)" } },
+                  { label:"Interns",            value:attendanceStats.inactive,  icon:"bi-mortarboard-fill",      accent:{ bg:"#F3E8FF", icon:"#9333EA", shadow:"rgba(168,85,247,.18)" } },
+                ].map((c) => {
+                  const pct = attendanceStats.total ? Math.round((c.value / attendanceStats.total) * 100) : 0;
+                  return (
+                    <div key={c.label} className="kpi-card" style={{
+                      background:`linear-gradient(160deg, #fff 55%, ${c.accent.bg} 165%)`,
+                      borderRadius:16, border:`1px solid ${c.accent.bg}`,
+                      boxShadow:"0 3px 12px rgba(15,23,42,.06)", padding:"17px 18px 16px",
+                      position:"relative", overflow:"hidden",
+                    }}>
+                      <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:c.accent.icon }} />
+                      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
+                        <div style={{
+                          width:46, height:46, borderRadius:13, flexShrink:0,
+                          background:c.accent.icon,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          boxShadow:`0 6px 16px ${c.accent.shadow}`,
+                        }}>
+                          <i className={`bi ${c.icon}`} style={{ fontSize:19, color:"#fff" }} />
+                        </div>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontSize:26, fontWeight:900, color:"#0F172A", lineHeight:1.05, letterSpacing:"-0.8px" }}>{c.value}</div>
+                          <div style={{ fontSize:12, color:"#475569", fontWeight:700, marginTop:3, whiteSpace:"nowrap" }}>{c.label}</div>
+                        </div>
+                      </div>
+                      <div style={{ height:6, background:"#F1F5F9", borderRadius:6 }}>
+                        <div style={{ height:6, width:`${pct}%`, borderRadius:6, background:c.accent.icon, transition:"width .4s" }} />
                       </div>
                     </div>
-                  </div>
-                  <h3>{attendanceStats.active}</h3>
-                </div>
-
-                <div className="attendance-card probation">
-                  <div className="card-left">
-                    <div className="icon orange">
-                      <img src="/icons/on-probation.svg"></img>
-                    </div>
-                    <div>
-                      <span>On Probation</span>
-                      <div className="bar">
-                        <span
-                          style={{
-                            width: `${
-                              (attendanceStats.probation /
-                                attendanceStats.total) *
-                              100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <h3>{attendanceStats.probation}</h3>
-                </div>
-
-                <div className="attendance-card resigned">
-                  <div className="card-left">
-                    <div className="icon red">
-                      <img src="/icons/redisgned.svg"></img>
-                    </div>
-                    <div>
-                      {/* <span>Resigned / Notice</span> */}
-                      <span>Contract Employees</span>
-                      <div className="bar">
-                        <span
-                          style={{
-                            width: `${
-                              (attendanceStats.resigned /
-                                attendanceStats.total) *
-                              100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <h3>{attendanceStats.resigned}</h3>
-                </div>
-
-                <div className="attendance-card inactive">
-                  <div className="card-left">
-                    <div className="icon purple">
-                      <img src="/icons/inactive.svg"></img>
-                    </div>
-                    <div>
-                      {/* <span>Inactive</span> */}
-                      <span>Interns</span>
-                      <div className="bar">
-                        <span
-                          style={{
-                            width: `${
-                              (attendanceStats.inactive /
-                                attendanceStats.total) *
-                              100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <h3>{attendanceStats.inactive}</h3>
-                </div>
+                  );
+                })}
               </div>
 
-              <div className="d-flex gap-2 filter-bx-row1">
+              <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
                 {/* Status Filter */}
                 <select
-                  className="form-select"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{
+                    padding:"9px 14px", borderRadius:10, border:"1px solid #E5E7EB",
+                    fontSize:13, fontWeight:600, color:"#374151", background:"#fff", outline:"none", minWidth:160,
+                  }}
                 >
                   <option value="">All Status</option>
                   {statusOptions.map((status) => (
@@ -414,9 +378,12 @@ export default function AddEmployee() {
 
                 {/* Department Filter */}
                 <select
-                  className="form-select"
                   value={departmentFilter}
                   onChange={(e) => setDepartmentFilter(e.target.value)}
+                  style={{
+                    padding:"9px 14px", borderRadius:10, border:"1px solid #E5E7EB",
+                    fontSize:13, fontWeight:600, color:"#374151", background:"#fff", outline:"none", minWidth:160,
+                  }}
                 >
                   <option value="">All Departments</option>
                   {departmentOptions.map((dept) => (
@@ -428,169 +395,189 @@ export default function AddEmployee() {
               </div>
 
               {/* 📊 Table */}
-              <div className="custom-table-area table-responsive">
-                <table className="table  table-hover align-middle ">
-                  <thead>
-                    <tr>
-                      <th>Employee Name</th>
-                      <th>Employee ID</th>
-                      <th>Department</th>
-                      <th>Designation</th>
-                      <th>Type</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedEmployees.map((emp) => (
-                      <tr key={emp._id}>
-                        <td>
-                          <div className="d-flex align-items-center gap-2">
-                            {emp.personal?.avatar ? (
-                              <img
-                                src={emp.personal.avatar}
-                                alt="avatar"
-                                className="rounded-circle"
-                                width="35"
-                                height="35"
-                              />
-                            ) : (
-                              <div
-                                className="rounded-circle bg-primary d-flex justify-content-center align-items-center text-white"
-                                style={{ width: 35, height: 35 }}
-                              >
-                                {emp.personal?.firstName
-                                  ?.charAt(0)
-                                  .toUpperCase()}
-                              </div>
-                            )}
-                            <span>
-                              {emp.personal?.firstName} {emp.personal?.lastName}
-                            </span>
-                          </div>
-                        </td>
-                        <td>{emp.professional?.employeeId}</td>
-                        <td>{emp.professional?.department || "-"}</td>
-                        <td>{emp.professional?.designation || "-"}</td>
-                        <td>{emp.professional?.employeeType || "-"}</td>
-                        <td>
-                          <span className="emp-badge">
-                            {emp.professional?.status || "-"}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="d-flex gap-2 actions-btn">
-                            <Link
-                              href={`/dashboard/admin/employee-profile/${emp._id}`}
-                              className="btn btn-sm btn-outline-light"
-                            >
-                              <FaEye /> View
-                            </Link>
-                            <button
-                              className="btn btn-sm btn-outline-light"
-                              onClick={() => {
-                                setSelectedEmployee(emp);
-                                setFormData({
-                                  personal: {
-                                    firstName: emp.personal?.firstName || "",
-                                    lastName: emp.personal?.lastName || "",
-                                  },
-                                  professional: {
-                                    employeeId:
-                                      emp.professional?.employeeId || "",
-                                    department:
-                                      emp.professional?.department || "",
-                                    designation:
-                                      emp.professional?.designation || "",
-                                    employeeType:
-                                      emp.professional?.employeeType || "",
-                                    status: emp.professional?.status || "",
-                                  },
-                                });
-                                setShowEditModal(true);
-                              }}
-                            >
-                              <FaEdit /> Edit
-                            </button>
-                            <button
-                              className="btn btn-sm btn-outline-danger"
-                              onClick={() => {
-                                setSelectedEmployee(emp);
-                                setExitStatus("Resigned");
-                                setExitDate(new Date().toISOString().slice(0,10));
-                                setExitReason("");
-                                setShowDeleteModal(true);
-                              }}
-                            >
-                              <FaTrash /> Deactivate
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-
-                  {totalPages > 1 && (
-                    <div className="pagination-area d-flex justify-content-between align-items-center mt-3">
-                      <span className="text-muted small">
-                        Showing {(currentPage - 1) * itemsPerPage + 1}–
-                        {Math.min(currentPage * itemsPerPage, filtered.length)}{" "}
-                        of {filtered.length}
-                      </span>
-
-                      <ul className="pagination mb-0">
-                        {/* Previous */}
-                        <li
-                          className={`page-item ${
-                            currentPage === 1 ? "disabled" : ""
-                          }`}
-                        >
-                          <button
-                            className="page-link"
-                            onClick={() =>
-                              setCurrentPage((p) => Math.max(p - 1, 1))
-                            }
-                          >
-                            Prev
-                          </button>
-                        </li>
-
-                        {/* Page Numbers */}
-                        {[...Array(totalPages)].map((_, i) => (
-                          <li
-                            key={i}
-                            className={`page-item ${
-                              currentPage === i + 1 ? "active" : ""
-                            }`}
-                          >
-                            <button
-                              className="page-link"
-                              onClick={() => setCurrentPage(i + 1)}
-                            >
-                              {i + 1}
-                            </button>
-                          </li>
+              <div style={{
+                background:"#fff", borderRadius:16, border:"1px solid #F0F0F8",
+                boxShadow:"0 2px 10px rgba(15,23,42,.05)", overflow:"hidden",
+              }}>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                    <thead>
+                      <tr style={{ background:"#F8FAFC", borderBottom:"1px solid #F0F0F8" }}>
+                        {["Employee Name","Employee ID","Department","Designation","Type","Status","Action"].map((h) => (
+                          <th key={h} style={{
+                            textAlign: h === "Action" ? "right" : "left", padding:"12px 18px",
+                            fontSize:11, fontWeight:800, color:"#64748B", textTransform:"uppercase", letterSpacing:"0.04em",
+                            whiteSpace:"nowrap",
+                          }}>{h}</th>
                         ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedEmployees.map((emp) => {
+                        const badge = badgeStyle(emp.professional?.status);
+                        return (
+                        <tr key={emp._id} style={{ borderBottom:"1px solid #F4F4FD" }}>
+                          <td style={{ padding:"12px 18px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                              {emp.personal?.avatar ? (
+                                <img
+                                  src={emp.personal.avatar}
+                                  alt=""
+                                  width="35"
+                                  height="35"
+                                  style={{ borderRadius:"50%", objectFit:"cover", flexShrink:0 }}
+                                  onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                                />
+                              ) : null}
+                              <div
+                                style={{
+                                  width:35, height:35, borderRadius:"50%", background:"#EEF2FF",
+                                  display: emp.personal?.avatar ? "none" : "flex",
+                                  alignItems:"center", justifyContent:"center", color:"#4338CA",
+                                  fontWeight:800, fontSize:13, flexShrink:0,
+                                }}
+                              >
+                                {emp.personal?.firstName?.charAt(0).toUpperCase() || "?"}
+                              </div>
+                              <span style={{ fontSize:13, fontWeight:700, color:"#0F172A" }}>
+                                {emp.personal?.firstName} {emp.personal?.lastName}
+                              </span>
+                            </div>
+                          </td>
+                          <td style={{ padding:"12px 18px", fontSize:13, color:"#475569" }}>{emp.professional?.employeeId}</td>
+                          <td style={{ padding:"12px 18px", fontSize:13, color:"#475569" }}>{emp.professional?.department || "-"}</td>
+                          <td style={{ padding:"12px 18px", fontSize:13, color:"#475569" }}>{emp.professional?.designation || "-"}</td>
+                          <td style={{ padding:"12px 18px", fontSize:13, color:"#475569" }}>{emp.professional?.employeeType || "-"}</td>
+                          <td style={{ padding:"12px 18px" }}>
+                            <span style={{
+                              fontSize:11, fontWeight:700, padding:"4px 11px", borderRadius:20,
+                              background:badge.bg, color:badge.color, whiteSpace:"nowrap",
+                            }}>
+                              {emp.professional?.status || "-"}
+                            </span>
+                          </td>
+                          <td style={{ padding:"12px 18px" }}>
+                            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                              <Link
+                                href={`/dashboard/admin/employee-profile/${emp._id}`}
+                                style={{
+                                  display:"flex", alignItems:"center", gap:5, textDecoration:"none",
+                                  background:"#EEF2FF", color:"#4338CA", border:"1px solid #E0E7FF",
+                                  borderRadius:8, padding:"6px 11px", fontSize:12, fontWeight:700, whiteSpace:"nowrap",
+                                }}
+                              >
+                                <FaEye size={11} /> View
+                              </Link>
+                              <button
+                                style={{
+                                  display:"flex", alignItems:"center", gap:5, cursor:"pointer",
+                                  background:"#FFFBEB", color:"#B45309", border:"1px solid #FDE68A",
+                                  borderRadius:8, padding:"6px 11px", fontSize:12, fontWeight:700, whiteSpace:"nowrap",
+                                }}
+                                onClick={() => {
+                                  setSelectedEmployee(emp);
+                                  setFormData({
+                                    personal: {
+                                      firstName: emp.personal?.firstName || "",
+                                      lastName: emp.personal?.lastName || "",
+                                    },
+                                    professional: {
+                                      employeeId:
+                                        emp.professional?.employeeId || "",
+                                      department:
+                                        emp.professional?.department || "",
+                                      designation:
+                                        emp.professional?.designation || "",
+                                      employeeType:
+                                        emp.professional?.employeeType || "",
+                                      status: emp.professional?.status || "",
+                                    },
+                                  });
+                                  setShowEditModal(true);
+                                }}
+                              >
+                                <FaEdit size={11} /> Edit
+                              </button>
+                              <button
+                                style={{
+                                  display:"flex", alignItems:"center", gap:5, cursor:"pointer",
+                                  background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA",
+                                  borderRadius:8, padding:"6px 11px", fontSize:12, fontWeight:700, whiteSpace:"nowrap",
+                                }}
+                                onClick={() => {
+                                  setSelectedEmployee(emp);
+                                  setExitStatus("Resigned");
+                                  setExitDate(new Date().toISOString().slice(0,10));
+                                  setExitReason("");
+                                  setShowDeleteModal(true);
+                                }}
+                              >
+                                <FaTrash size={11} /> Deactivate
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-                        {/* Next */}
-                        <li
-                          className={`page-item ${
-                            currentPage === totalPages ? "disabled" : ""
-                          }`}
+                {totalPages > 1 && (
+                  <div style={{
+                    display:"flex", justifyContent:"space-between", alignItems:"center",
+                    flexWrap:"wrap", gap:10, padding:"14px 18px", borderTop:"1px solid #F0F0F8",
+                  }}>
+                    <span style={{ fontSize:12, color:"#94A3B8" }}>
+                      Showing {(currentPage - 1) * itemsPerPage + 1}–
+                      {Math.min(currentPage * itemsPerPage, filtered.length)}{" "}
+                      of {filtered.length}
+                    </span>
+
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                        style={{
+                          padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
+                          border:"1px solid #E5E7EB", background:"#fff", color:currentPage===1?"#CBD5E1":"#374151",
+                          cursor:currentPage===1?"default":"pointer",
+                        }}
+                      >
+                        Prev
+                      </button>
+
+                      {[...Array(totalPages)].map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentPage(i + 1)}
+                          style={{
+                            width:32, height:32, borderRadius:8, fontSize:12, fontWeight:700,
+                            border:"1px solid " + (currentPage === i + 1 ? "#6366F1" : "#E5E7EB"),
+                            background: currentPage === i + 1 ? "#6366F1" : "#fff",
+                            color: currentPage === i + 1 ? "#fff" : "#374151",
+                            cursor:"pointer",
+                          }}
                         >
-                          <button
-                            className="page-link"
-                            onClick={() =>
-                              setCurrentPage((p) => Math.min(p + 1, totalPages))
-                            }
-                          >
-                            Next
-                          </button>
-                        </li>
-                      </ul>
+                          {i + 1}
+                        </button>
+                      ))}
+
+                      <button
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                        style={{
+                          padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
+                          border:"1px solid #E5E7EB", background:"#fff",
+                          color:currentPage===totalPages?"#CBD5E1":"#374151",
+                          cursor:currentPage===totalPages?"default":"pointer",
+                        }}
+                      >
+                        Next
+                      </button>
                     </div>
-                  )}
-                </table>
+                  </div>
+                )}
               </div>
             </div>
           </section>

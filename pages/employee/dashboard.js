@@ -9,6 +9,7 @@ import Leftbar from "@/components/employee/Leftbar";
 import LeftbarMobile from "@/components/employee/LeftbarMobile";
 import TimeTracker from "@/components/employee/TimeTracker";
 import BirthdayCelebration from "@/components/BirthdayCelebration";
+import { calcGrade, filterTasksByMonth } from "@/utils/tasks/employeeGrade";
 
 const fmtShort = (d) =>
   new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -50,15 +51,6 @@ function getGrade(present, elapsed) {
   return { letter:"D", pct, color:"#DC2626", bg:"#FEE2E2", label:"Needs Improvement" };
 }
 
-function calcTaskGrade(tasks) {
-  const comp   = tasks.filter(t => t.status === "completed");
-  const onTime = comp.filter(t => !t.dueDate || !isTaskDuePast(t.dueDate)).length;
-  const rate   = comp.length ? Math.round(onTime / comp.length * 100) : 0;
-  const letter = rate >= 90 ? "A" : rate >= 80 ? "A−" : rate >= 70 ? "B+" : rate >= 60 ? "B" : rate >= 50 ? "C" : "D";
-  const color  = rate >= 80 ? "#22C55E" : rate >= 60 ? "#F5A623" : "#EF4444";
-  const bg     = rate >= 80 ? "#DCFCE7" : rate >= 60 ? "#FEF3C7" : "#FEE2E2";
-  return { rate, letter, color, bg, total: comp.length };
-}
 function isTaskDuePast(d) {
   const n = new Date(); n.setHours(0,0,0,0);
   const x = new Date(d); x.setHours(0,0,0,0);
@@ -97,7 +89,6 @@ export default function EmployeeDashboard() {
   const [announcements,      setAnnouncements]      = useState([]);
   const [loadingAnnounce,    setLoadingAnnounce]    = useState(true);
   const [today,              setToday]              = useState("");
-  const [triggeredToday,     setTriggeredToday]     = useState(false);
   const [employeeStatus,     setEmployeeStatus]     = useState({});
   const [summary,            setSummary]            = useState({ total:0, checkedIn:0, yetToCheckIn:0, leaveTaken:0 });
   const [liveReport,         setLiveReport]         = useState(null);
@@ -330,18 +321,6 @@ export default function EmployeeDashboard() {
       setIsBirthdayPerson(true);
     }
   }, [employee]);
-
-  // ── Lunch reminder (backup — primary auto-start is in TimeTracker) ──────────
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = new Date();
-      if (now.getHours() === 13 && now.getMinutes() === 30 && !triggeredToday) {
-        setTriggeredToday(true);
-        setTimeout(() => setTriggeredToday(false), 86400000);
-      }
-    }, 15000);
-    return () => clearInterval(id);
-  }, [triggeredToday]);
 
   const completion = calcCompletion(employee);
   const name       = employee ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim() : "";
@@ -942,22 +921,25 @@ export default function EmployeeDashboard() {
                       {loadingTasks ? (
                         <div className="spinner-border spinner-border-sm text-primary" role="status" />
                       ) : (() => {
-                        const g = calcTaskGrade(tasks);
+                        const now = new Date();
+                        const g = calcGrade(filterTasksByMonth(tasks, now.getMonth(), now.getFullYear()));
+                        const onTimePct = g.completed > 0 ? Math.round((g.aCnt / g.completed) * 100) : 0;
+                        const bg = g.color + "22";
                         return (
                           <>
                             <div style={{
                               width:76, height:76, borderRadius:"50%",
-                              background:g.bg, border:`3px solid ${g.color}`,
+                              background:bg, border:`3px solid ${g.color}`,
                               display:"flex", alignItems:"center", justifyContent:"center",
                               margin:"0 auto 12px", fontSize:32, fontWeight:900, color:g.color,
                             }}>
                               {g.letter}
                             </div>
                             <div style={{ fontSize:15, fontWeight:800, color:"#111827" }}>
-                              {g.rate >= 80 ? "On Track" : g.rate >= 60 ? "Needs Attention" : tasks.length === 0 ? "No Tasks Yet" : "Behind Schedule"}
+                              {onTimePct >= 80 ? "On Track" : onTimePct >= 60 ? "Needs Attention" : g.total === 0 ? "No Tasks Yet" : "Behind Schedule"}
                             </div>
                             <div style={{ fontSize:12, color:"#9CA3AF", marginTop:3 }}>
-                              {g.total > 0 ? `${g.rate}% on-time · ${g.total} completed` : "No completed tasks yet"}
+                              {g.completed > 0 ? `${onTimePct}% on-time · ${g.completed} completed` : "No completed tasks yet"}
                             </div>
                             {/* Mini stat row */}
                             <div style={{ display:"flex", gap:0, marginTop:14, borderRadius:10, overflow:"hidden", border:"1px solid #F0F0F0" }}>
@@ -973,9 +955,9 @@ export default function EmployeeDashboard() {
                               ))}
                             </div>
                             <div style={{ marginTop:10, padding:"7px 10px", borderRadius:8, background:"#F9FAFB", fontSize:11, color:"#6B7280", lineHeight:1.5 }}>
-                              {g.letter==="A" || g.letter==="A−" ? "Excellent! Submitting tasks on time." :
+                              {g.letter==="A+" || g.letter==="A" ? "Excellent! Submitting tasks on time." :
                                g.letter==="B+" || g.letter==="B" ? "Good work! Aim to submit before deadlines." :
-                               tasks.length === 0 ? "No tasks assigned yet." :
+                               g.total === 0 ? "No tasks assigned yet." :
                                "Focus on completing overdue tasks to improve."}
                             </div>
                           </>

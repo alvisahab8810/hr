@@ -181,7 +181,7 @@ export default function AdminReimbursement() {
   });
 
   return (
-    <div className="leaves-management-admin">
+    <div className="rb-page-root">
       <Head>
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
@@ -209,17 +209,44 @@ export default function AdminReimbursement() {
           }
           .rb-tab.active { background:#fff; color:#111827; box-shadow:0 1px 4px rgba(0,0,0,.1); }
 
-          /* ── Stats ── */
-          .rb-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px; }
+          /* ── KPI cards — gradient-wash formula (matches attendance-summary / leaves-management / salary-report) ── */
+          .rb-stats {
+            display:grid; grid-template-columns:repeat(4,1fr);
+            align-items:start; gap:16px; margin-bottom:28px;
+          }
           @media(max-width:900px){ .rb-stats{ grid-template-columns:repeat(2,1fr); } }
           .rb-stat {
-            background:#fff; border:1px solid #F0F0F0; border-radius:14px;
-            padding:18px 20px; display:flex; align-items:center; gap:14px;
+            box-sizing:border-box; height:104px; border-radius:16px;
+            padding:17px 18px 16px; display:flex; flex-direction:column;
+            justify-content:space-between; border:1px solid;
+            box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+            overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
           }
-          .rb-stat-icon { width:46px; height:46px; border-radius:14px;
-            display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
-          .rb-stat-val   { font-size:20px; font-weight:700; color:#111827; line-height:1; margin-bottom:3px; }
-          .rb-stat-label { font-size:11.5px; color:#9CA3AF; font-weight:500; }
+          .rb-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .rb-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .rb-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#EEF2FF; }
+          .rb-stat.indigo::before { background:#4F46E5; }
+          .rb-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FFEDD5; }
+          .rb-stat.orange::before { background:#EA580C; }
+          .rb-stat.green  { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#DCFCE7; }
+          .rb-stat.green::before  { background:#16A34A; }
+          .rb-stat.blue   { background:linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color:#DBEAFE; }
+          .rb-stat.blue::before   { background:#2563EB; }
+          .rb-stat-top   { display:flex; align-items:center; gap:14px; }
+          .rb-stat-icon {
+            width:46px; height:46px; border-radius:13px; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            color:#fff; font-size:19px;
+          }
+          .rb-stat-icon.indigo { background:#4F46E5; box-shadow:0 6px 16px rgba(79,70,229,.18); }
+          .rb-stat-icon.orange { background:#EA580C; box-shadow:0 6px 16px rgba(249,115,22,.18); }
+          .rb-stat-icon.green  { background:#16A34A; box-shadow:0 6px 16px rgba(34,197,94,.18); }
+          .rb-stat-icon.blue   { background:#2563EB; box-shadow:0 6px 16px rgba(37,99,235,.18); }
+          .rb-stat-body  { flex:1; min-width:0; }
+          .rb-stat-val   { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-0.6px; white-space:nowrap; }
+          .rb-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .rb-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .rb-stat-fill  { height:6px; border-radius:6px; transition:width .4s; }
 
           /* ── Employee card grid ── */
           .rb-emp-grid {
@@ -427,7 +454,7 @@ export default function AdminReimbursement() {
           <LeftbarMobile />
           <Dashnav />
 
-          <section className="content home admin-attendance-summary">
+          <section className="content home rb-page">
             <div className="breadcrum-bx">
               <ul className="breadcrumb bg-white">
                 <li className="breadcrumb-item">
@@ -470,21 +497,44 @@ export default function AdminReimbursement() {
                 </div>
               </div>
 
-              {/* ── Stats ── */}
+              {/* ── KPI Cards ── */}
               <div className="rb-stats">
                 {[
-                  { icon:"bi-people-fill",       bg:"#EEF2FF", ic:"#4F46E5", val: grouped.length,         label:"Employees"       },
-                  { icon:"bi-hourglass-split",    bg:"#FEF9C3", ic:"#B45309", val: pendingCnt,             label:"Awaiting Action"  },
-                  { icon:"bi-check-circle-fill",  bg:"#DCFCE7", ic:"#15803D", val:`₹${fmt(approvedAmt)}`, label:"Approved"         },
-                  { icon:"bi-clock-history",      bg:"#EFF6FF", ic:"#1D4ED8", val:`₹${fmt(pendingAmt)}`,  label:"Pending Amount"   },
+                  {
+                    accent:"indigo", icon:"bi-people-fill", val: grouped.length, label:"Employees",
+                    pct: reimbursements.length ? ((reimbursements.length - pendingCnt) / reimbursements.length) * 100 : 0,
+                  },
+                  {
+                    accent:"orange", icon:"bi-hourglass-split", val: pendingCnt, label:"Awaiting Action",
+                    pct: reimbursements.length ? (pendingCnt / reimbursements.length) * 100 : 0,
+                  },
+                  {
+                    accent:"green", icon:"bi-check-circle-fill", val:`₹${fmt(approvedAmt)}`, label:"Approved",
+                    pct: totalAmt ? Math.min(100, (approvedAmt / totalAmt) * 100) : 0,
+                  },
+                  {
+                    accent:"blue", icon:"bi-clock-history", val:`₹${fmt(pendingAmt)}`, label:"Pending Amount",
+                    pct: totalAmt ? Math.min(100, (pendingAmt / totalAmt) * 100) : 0,
+                  },
                 ].map((s,i) => (
-                  <div key={i} className="rb-stat">
-                    <div className="rb-stat-icon" style={{ background:s.bg, color:s.ic }}>
-                      <i className={`bi ${s.icon}`} />
+                  <div key={i} className={`rb-stat ${s.accent}`}>
+                    <div className="rb-stat-top">
+                      <div className={`rb-stat-icon ${s.accent}`}>
+                        <i className={`bi ${s.icon}`} />
+                      </div>
+                      <div className="rb-stat-body">
+                        <div className="rb-stat-val">{s.val}</div>
+                        <div className="rb-stat-label">{s.label}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="rb-stat-val">{s.val}</div>
-                      <div className="rb-stat-label">{s.label}</div>
+                    <div className="rb-stat-track">
+                      <div
+                        className="rb-stat-fill"
+                        style={{
+                          width: `${s.pct}%`,
+                          background: { indigo:"#4F46E5", orange:"#EA580C", green:"#16A34A", blue:"#2563EB" }[s.accent],
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -522,10 +572,21 @@ export default function AdminReimbursement() {
                     return (
                       <div key={group.empId} className="rb-emp-card" onClick={() => setDrawer(group)}>
                         <div className="rb-emp-card-top">
-                          {group.avatar
-                            ? <img src={group.avatar} alt="avatar" className="rb-emp-avatar" style={{ objectFit:"cover", padding:0 }} />
-                            : <div className="rb-emp-avatar" style={{ background:bg, color:fc }}>{getInitials(group.name)}</div>
-                          }
+                          {group.avatar && (
+                            <img
+                              src={group.avatar}
+                              alt=""
+                              className="rb-emp-avatar"
+                              style={{ objectFit:"cover", padding:0 }}
+                              onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                            />
+                          )}
+                          <div
+                            className="rb-emp-avatar"
+                            style={{ background:bg, color:fc, display: group.avatar ? "none" : "flex" }}
+                          >
+                            {getInitials(group.name)}
+                          </div>
                           <div style={{ minWidth:0 }}>
                             <div className="rb-emp-name">{group.name}</div>
                             {group.dept && <div className="rb-emp-dept">{group.dept}</div>}
@@ -580,10 +641,21 @@ export default function AdminReimbursement() {
                       const st = groupStats(drawerGroup.entries);
                       return (
                         <>
-                          {drawerGroup.avatar
-                            ? <img src={drawerGroup.avatar} alt="avatar" className="rb-drawer-avatar" style={{ objectFit:"cover", padding:0 }} />
-                            : <div className="rb-drawer-avatar" style={{ background:bg, color:fc }}>{getInitials(drawerGroup.name)}</div>
-                          }
+                          {drawerGroup.avatar && (
+                            <img
+                              src={drawerGroup.avatar}
+                              alt=""
+                              className="rb-drawer-avatar"
+                              style={{ objectFit:"cover", padding:0 }}
+                              onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                            />
+                          )}
+                          <div
+                            className="rb-drawer-avatar"
+                            style={{ background:bg, color:fc, display: drawerGroup.avatar ? "none" : "flex" }}
+                          >
+                            {getInitials(drawerGroup.name)}
+                          </div>
                           <div style={{ minWidth:0 }}>
                             <div style={{ fontWeight:800, fontSize:16, color:"#111827" }}>{drawerGroup.name}</div>
                             {drawerGroup.dept && (

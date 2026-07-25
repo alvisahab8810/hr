@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { toast } from "react-toastify";
 import { calcEmployeeGrade, gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
+import { filterTasksByMonth, getStageDeadline, isTaskAssignedTo } from "@/utils/tasks/employeeGrade";
+import { calcAttendancePoints, calcOverallScore } from "@/utils/attendance/attendancePoints";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -15,23 +17,44 @@ const AVATAR_COLORS = [
 function avatarColor(name) { return AVATAR_COLORS[(name?.charCodeAt(0) || 0) % AVATAR_COLORS.length]; }
 function getInitials(name) { return name?.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase() || "??"; }
 
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
 function isOverdue(t) {
-  return t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed";
+  const dl = getStageDeadline(t);
+  return dl && dl < new Date() && t.status !== "completed";
 }
 
 export default function TeamPerformancePage() {
   const router = useRouter();
+  const now = new Date();
   const [employees, setEmployees] = useState([]);
   const [stats, setStats]         = useState(null);
   const [tasks, setTasks]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [sortBy, setSortBy]       = useState("completion"); // completion | workload | overdue
+  const [selMonth, setSelMonth]   = useState(now.getMonth());
+  const [selYear,  setSelYear]    = useState(now.getFullYear());
+  const [attDays, setAttDays]           = useState([]);
+  const [elapsedWorkingDays, setElapsedWorkingDays] = useState(0);
+  const [attLoading, setAttLoading]     = useState(true);
+  const [pdGrades, setPdGrades]         = useState({}); // employeeId -> grade
+  const [pdModalEmp, setPdModalEmp]     = useState(null); // employee being edited
+  const [pdScore, setPdScore]           = useState(3);
+  const [pdNote, setPdNote]             = useState("");
+  const [pdSaving, setPdSaving]         = useState(false);
+
+  function shiftMonth(dir) {
+    let m = selMonth + dir, y = selYear;
+    if (m < 0)  { m = 11; y--; }
+    if (m > 11) { m = 0;  y++; }
+    setSelMonth(m); setSelYear(y);
+  }
 
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/assets/employees", { credentials: "include" }).then(r => r.json()),
       fetch("/api/admin/tasks/stats", { credentials: "include" }).then(r => r.json()),
-      fetch("/api/admin/tasks?limit=500", { credentials: "include" }).then(r => r.json()),
+      fetch("/api/admin/tasks?limit=3000", { credentials: "include" }).then(r => r.json()),
     ]).then(([empData, statsData, taskData]) => {
       if (empData.success)   setEmployees(empData.employees || []);
       if (statsData.success) setStats(statsData.stats);
@@ -40,10 +63,90 @@ export default function TeamPerformancePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  /* ── Build per-employee metrics ── */
+  useEffect(() => {
+    const monthStr = `${selYear}-${String(selMonth + 1).padStart(2, "0")}`;
+    setAttLoading(true);
+    fetch(`/api/admin/attendance-summary?month=${monthStr}`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setAttDays(d.days || []);
+          setElapsedWorkingDays(d.elapsedWorkingDays || 0);
+        } else {
+          setAttDays([]); setElapsedWorkingDays(0);
+        }
+      })
+      .catch(() => { setAttDays([]); setElapsedWorkingDays(0); })
+      .finally(() => setAttLoading(false));
+  }, [selMonth, selYear]);
+
+  function loadPdGrades() {
+    fetch(`/api/admin/personal-development/list?month=${selMonth}&year=${selYear}`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          const map = {};
+          (d.grades || []).forEach(g => { map[String(g.employee)] = g; });
+          setPdGrades(map);
+        } else {
+          setPdGrades({});
+        }
+      })
+      .catch(() => setPdGrades({}));
+  }
+
+  useEffect(() => { loadPdGrades(); }, [selMonth, selYear]);
+
+  function openPdModal(emp) {
+    const existing = pdGrades[String(emp._id)];
+    setPdScore(existing ? existing.score : 3);
+    setPdNote(existing ? existing.note : "");
+    setPdModalEmp(emp);
+  }
+
+  function savePdGrade() {
+    if (!pdModalEmp) return;
+    setPdSaving(true);
+    fetch("/api/admin/personal-development/set", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employeeId: pdModalEmp._id, month: selMonth, year: selYear, score: pdScore, note: pdNote }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          toast.success("Personal Development grade saved");
+          setPdModalEmp(null);
+          loadPdGrades();
+        } else {
+          toast.error(d.message || "Failed to save");
+        }
+      })
+      .catch(() => toast.error("Failed to save"))
+      .finally(() => setPdSaving(false));
+  }
+
+  /* ── Group attendance days by employee ── */
+  const attByEmp = useMemo(() => {
+    const map = {};
+    attDays.forEach(d => {
+      if (!map[d.employeeObjId]) map[d.employeeObjId] = { present: 0, onTime: 0, late: 0, workMin: 0 };
+      const bucket = map[d.employeeObjId];
+      bucket.present += 1;
+      if (d.status === "On Time") bucket.onTime += 1;
+      if (d.status === "Late")    bucket.late += 1;
+      const [h, m] = (d.workingHours || "00:00").split(":").map(Number);
+      bucket.workMin += (h || 0) * 60 + (m || 0);
+    });
+    return map;
+  }, [attDays]);
+
+  /* ── Build per-employee metrics, scoped to the selected month ── */
   const empMetrics = useMemo(() => {
     return employees.map(emp => {
-      const myTasks    = tasks.filter(t => String(t.assignedTo?._id || t.assignedTo) === String(emp._id));
+      const allTasks   = tasks.filter(t => isTaskAssignedTo(t, emp._id));
+      const myTasks    = filterTasksByMonth(allTasks, selMonth, selYear);
       const completed  = myTasks.filter(t => t.status === "completed").length;
       const overdue    = myTasks.filter(t => isOverdue(t)).length;
       const inProgress = myTasks.filter(t => t.status === "in_progress").length;
@@ -51,12 +154,25 @@ export default function TeamPerformancePage() {
       const rate       = total > 0 ? Math.round(completed / total * 100) : 0;
       const name       = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim() || "Employee";
 
-      // New punctuality-based grade
+      // Punctuality-based grade — same canonical formula the employee sees on their own Grades tab
       const { avgPoints, grade, gradedCount, onTimeCount, lateCount } = calcEmployeeGrade(myTasks);
 
-      return { emp, name, total, completed, inProgress, overdue, rate, grade, avgPoints, gradedCount, onTimeCount, lateCount };
+      // Attendance summary — separate card, not folded into the task grade
+      const ab = attByEmp[String(emp._id)] || { present: 0, onTime: 0, late: 0, workMin: 0 };
+      const absent = Math.max(0, Math.round(elapsedWorkingDays - ab.present));
+      const att = {
+        present: ab.present, onTime: ab.onTime, late: ab.late, absent,
+        hours: `${String(Math.floor(ab.workMin / 60)).padStart(2, "0")}:${String(ab.workMin % 60).padStart(2, "0")}`,
+      };
+
+      // Attendance points (0-5) and the combined Overall score
+      const attPts = calcAttendancePoints({ late: att.late, absent: att.absent });
+      const pd = pdGrades[String(emp._id)] || null;
+      const overall = calcOverallScore([avgPoints, attPts.score, pd ? pd.score : null]);
+
+      return { emp, name, total, completed, inProgress, overdue, rate, grade, avgPoints, gradedCount, onTimeCount, lateCount, att, attPts, pd, overall };
     });
-  }, [employees, tasks]);
+  }, [employees, tasks, selMonth, selYear, attByEmp, elapsedWorkingDays, pdGrades]);
 
   const sorted = useMemo(() => {
     return [...empMetrics].sort((a, b) => {
@@ -111,6 +227,13 @@ export default function TeamPerformancePage() {
 
             <div className="block-header add-emp-area">
 
+              {/* Month navigator */}
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
+                <button onClick={() => shiftMonth(-1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #E5E7EB", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+                <div style={{ fontWeight:800, fontSize:15, color:"#1E293B", minWidth:140, textAlign:"center" }}>{MONTHS[selMonth]} {selYear}</div>
+                <button onClick={() => shiftMonth(1)} style={{ width:32, height:32, borderRadius:8, border:"1.5px solid #E5E7EB", background:"#fff", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+              </div>
+
               {/* Summary stats */}
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 24 }}>
                 {[
@@ -151,7 +274,7 @@ export default function TeamPerformancePage() {
                 </div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 16 }}>
-                  {sorted.map(({ emp, name, total, completed, inProgress, overdue, rate, grade, avgPoints, gradedCount, onTimeCount, lateCount }, rank) => {
+                  {sorted.map(({ emp, name, total, completed, inProgress, overdue, rate, grade, avgPoints, gradedCount, onTimeCount, lateCount, att, attPts, pd, overall }, rank) => {
                     const [bg, fg] = avatarColor(name);
                     const ptsPct = avgPoints != null ? (avgPoints / 5) * 100 : 0;
                     return (
@@ -168,19 +291,32 @@ export default function TeamPerformancePage() {
                             <div style={{ fontWeight: 800, fontSize: 14, color: "#1E293B" }}>{name}</div>
                             <div style={{ fontSize: 11, color: "#94A3B8" }}>{emp.professional?.designation || emp.professional?.department || "—"}</div>
                           </div>
-                          {/* Grade badge */}
-                          <div style={{ textAlign: "center", padding: "6px 14px", borderRadius: 12, background: grade.bg, border: `2px solid ${grade.color}30` }}>
-                            <div style={{ fontSize: 22, fontWeight: 900, color: grade.color, lineHeight: 1 }}>{grade.label}</div>
-                            <div style={{ fontSize: 9, color: grade.color, fontWeight: 700, marginTop: 2 }}>
-                              {avgPoints != null ? `${avgPoints}/5 pts` : "NO DATA"}
+                          {/* Overall score badge — average of Task Grade + Attendance + Personal Development */}
+                          <div style={{ textAlign: "center", padding: "6px 14px", borderRadius: 12, background: overall.grade.bg, border: `2px solid ${overall.grade.color}30` }}>
+                            <div style={{ fontSize: 9, color: overall.grade.color, fontWeight: 700 }}>OVERALL AVE. SCORE</div>
+                            <div style={{ fontSize: 22, fontWeight: 900, color: overall.grade.color, lineHeight: 1 }}>{overall.score != null ? overall.grade.label : "—"}</div>
+                            <div style={{ fontSize: 9, color: overall.grade.color, fontWeight: 700, marginTop: 2 }}>
+                              {overall.score != null ? `${overall.score}/5 pts` : "NO DATA"}
                             </div>
                           </div>
                         </div>
 
+                        {/* Overall score breakdown — shows exactly which numbers were averaged */}
+                        {overall.score != null && (
+                          <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 12, marginTop: -8 }}>
+                            {[
+                              `Task ${avgPoints ?? 0}`,
+                              `Attendance ${attPts.score}`,
+                              pd ? `Personal Dev ${pd.score}` : null,
+                            ].filter(Boolean).join(" + ")} → avg <strong style={{ color: "#64748B" }}>{overall.score}</strong>
+                            {!pd && " (Personal Dev not set, so not counted)"}
+                          </div>
+                        )}
+
                         {/* Punctuality score bar */}
                         <div style={{ marginBottom: 10 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>Punctuality Score</span>
+                            <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>Punctuality Score (Task points)</span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: grade.color }}>{avgPoints != null ? `${avgPoints} / 5` : "—"}</span>
                           </div>
                           <div className="tp-progress">
@@ -217,6 +353,51 @@ export default function TeamPerformancePage() {
                           </div>
                         </div>
 
+                        {/* Attendance Summary — separate from task grade */}
+                        <div style={{ marginBottom: 10, borderTop: "1px solid #F1F5F9", paddingTop: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, color: "#64748B", fontWeight: 600 }}>Attendance Points {attLoading && "· loading…"}</span>
+                            {!attLoading && (
+                              <span style={{ fontSize: 11, fontWeight: 800, color: attPts.grade.color }}>{attPts.score}/5 · {attPts.grade.label}</span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <span className="tp-badge" style={{ background: "#F0FDF4", color: "#15803D" }}>
+                              <i className="bi bi-calendar-check" style={{ fontSize: 10 }} /> {att.present} present
+                            </span>
+                            <span className="tp-badge" style={{ background: "#FEF3C7", color: "#B45309" }}>
+                              <i className="bi bi-clock-history" style={{ fontSize: 10 }} /> {att.late} late
+                            </span>
+                            <span className="tp-badge" style={{ background: att.absent > 0 ? "#FEE2E2" : "#F8FAFC", color: att.absent > 0 ? "#DC2626" : "#94A3B8" }}>
+                              <i className="bi bi-calendar-x" style={{ fontSize: 10 }} /> {att.absent} absent
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Personal Development — admin-set, separate from task grade & attendance */}
+                        <div style={{ marginBottom: 10, borderTop: "1px solid #F1F5F9", paddingTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600, marginBottom: 4 }}>Personal Development</div>
+                            {pd ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 15, fontWeight: 900, color: "#7C3AED" }}>{pd.score}/5</span>
+                                {pd.note && (
+                                  <span style={{ fontSize: 11, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {pd.note}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 12, color: "#94A3B8" }}>Not set — Overall score is Task + Attendance only for now</span>
+                            )}
+                          </div>
+                          <button
+                            style={{ border: "1.5px solid #DDD6FE", background: "#F5F3FF", color: "#7C3AED", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+                            onClick={() => openPdModal(emp)}>
+                            <i className="bi bi-pencil-square" /> {pd ? "Edit" : "Set"}
+                          </button>
+                        </div>
+
                         {/* Stat badges */}
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <span className="tp-badge" style={{ background: "#EEF2FF", color: "#4F46E5" }}>
@@ -251,6 +432,48 @@ export default function TeamPerformancePage() {
           </section>
         </div>
       </div>
+
+      {/* Personal Development modal */}
+      {pdModalEmp && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => !pdSaving && setPdModalEmp(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: 380, maxWidth: "92vw" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#1E293B", marginBottom: 4 }}>Personal Development</div>
+            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 18 }}>
+              {(pdModalEmp.personal?.firstName || pdModalEmp.firstName || "")} {(pdModalEmp.personal?.lastName || pdModalEmp.lastName || "")} · {MONTHS[selMonth]} {selYear}
+            </div>
+
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".05em" }}>Score (0–5)</label>
+            <input
+              type="number" min={0} max={5} step={0.5} value={pdScore}
+              onChange={e => setPdScore(Math.max(0, Math.min(5, Number(e.target.value))))}
+              style={{ width: "100%", marginTop: 6, marginBottom: 14, padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14 }}
+            />
+
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: ".05em" }}>Note</label>
+            <textarea
+              value={pdNote} onChange={e => setPdNote(e.target.value)} rows={4}
+              placeholder="Comments on attitude, teamwork, punctuality, growth…"
+              style={{ width: "100%", marginTop: 6, marginBottom: 18, padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, resize: "vertical" }}
+            />
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                disabled={pdSaving}
+                onClick={() => setPdModalEmp(null)}
+                style={{ border: "1.5px solid #E5E7EB", background: "#fff", color: "#64748B", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button
+                disabled={pdSaving}
+                onClick={savePdGrade}
+                style={{ border: "none", background: "#7C3AED", color: "#fff", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {pdSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,12 @@ const DEDUCTION_LINES = [
   { key: "other",       label: "Other",         icon: "bi-dash-circle-fill", color: "#6B7280", bg: "#F3F4F6" },
 ];
 
+// Local-component date-string (matches utils/payroll/generateSalaryForMonth.js's toDateStr)
+function toDateStr(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const fmt = (n) => Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 const empName = (e) => e ? `${e.firstName || ""} ${e.lastName || ""}`.trim() || e.email || "—" : "—";
 const getInitials = (name) => name.split(" ").filter(Boolean).map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -47,8 +53,9 @@ function fmtMins(ms) {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-// Compute approximate absent dates: Mon–Sat working days with no attendance record
-function getAbsentDates(attendanceRecords, month, year) {
+// Compute approximate absent dates: Mon–Sat working days with no attendance record,
+// never before the employee's joining date
+function getAbsentDates(attendanceRecords, month, year, joinDateStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -59,6 +66,7 @@ function getAbsentDates(attendanceRecords, month, year) {
     if (dateObj > today) break;
     if (dateObj.getDay() === 0) continue; // Sunday
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (joinDateStr && dateStr < joinDateStr) continue; // before employment started
     if (!presentDates.has(dateStr)) absentDates.push(dateStr);
   }
   return absentDates;
@@ -184,10 +192,14 @@ export default function AdminDeductionWaiver() {
   const withDeductions       = reports.filter(r => (r.deductions?.total || 0) > 0).length;
 
   const STATS = [
-    { label: "Employees",        value: reports.length,                  icon: "bi-people-fill",        color: "#4F46E5", bg: "#EEF2FF", border: "#C7D2FE" },
-    { label: "Total Deductions", value: `₹${fmt(totalDeductionAllEmp)}`, icon: "bi-dash-circle-fill",   color: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
-    { label: "With Deductions",  value: withDeductions,                  icon: "bi-person-exclamation", color: "#D97706", bg: "#FEF3C7", border: "#FDE68A" },
-    { label: "Total Waived",     value: `₹${fmt(totalWaivedAllEmp)}`,    icon: "bi-shield-check-fill",  color: "#15803D", bg: "#DCFCE7", border: "#BBF7D0" },
+    { accent: "indigo", icon: "bi-people-fill",        val: reports.length,                  label: "Employees",
+      pct: 100 },
+    { accent: "red",    icon: "bi-dash-circle-fill",   val: `₹${fmt(totalDeductionAllEmp)}`, label: "Total Deductions",
+      pct: 100 },
+    { accent: "orange", icon: "bi-person-exclamation", val: withDeductions,                  label: "With Deductions",
+      pct: reports.length ? (withDeductions / reports.length) * 100 : 0 },
+    { accent: "green",  icon: "bi-shield-check-fill",  val: `₹${fmt(totalWaivedAllEmp)}`,    label: "Total Waived",
+      pct: totalDeductionAllEmp ? Math.min(100, (totalWaivedAllEmp / totalDeductionAllEmp) * 100) : 0 },
   ];
 
   return (
@@ -219,8 +231,38 @@ export default function AdminDeductionWaiver() {
                          font-size:13px; padding:4px 8px; border-radius:7px; transition:background .12s; }
         .dw-expand-btn:hover { background:#F3F4F6; color:#374151; }
         .dw-empty { text-align:center; padding:52px 20px; color:#9CA3AF; }
-        .dw-stat-card { display:flex; align-items:center; gap:14px; padding:18px 20px;
-                        border-radius:16px; border:1.5px solid; cursor:default; }
+        .dw-stat {
+          box-sizing:border-box; height:104px; border-radius:16px;
+          padding:17px 18px 16px; display:flex; flex-direction:column;
+          justify-content:space-between; border:1px solid;
+          box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+          overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+        }
+        .dw-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+        .dw-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+        .dw-stat.indigo::before { background:#4F46E5; }
+        .dw-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+        .dw-stat.red::before { background:#DC2626; }
+        .dw-stat.red { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FECACA; }
+        .dw-stat.orange::before { background:#EA580C; }
+        .dw-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FED7AA; }
+        .dw-stat.green::before { background:#16A34A; }
+        .dw-stat.green { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#BBF7D0; }
+        .dw-stat-top { display:flex; align-items:center; gap:14px; }
+        .dw-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+        .dw-stat.indigo .dw-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+        .dw-stat.red .dw-stat-icon { background:#DC2626; box-shadow:0 6px 16px #DC262633; }
+        .dw-stat.orange .dw-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+        .dw-stat.green .dw-stat-icon { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+        .dw-stat-body { flex:1; min-width:0; }
+        .dw-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+        .dw-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+        .dw-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+        .dw-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+        .dw-stat.indigo .dw-stat-fill { background:#4F46E5; }
+        .dw-stat.red .dw-stat-fill { background:#DC2626; }
+        .dw-stat.orange .dw-stat-fill { background:#EA580C; }
+        .dw-stat.green .dw-stat-fill { background:#16A34A; }
         .override-btn { background:linear-gradient(135deg,#818CF8,#6366F1); color:#fff; }
         .override-btn:hover:not(:disabled) { background:linear-gradient(135deg,#6366F1,#4F46E5); }
         .dw-detail-list { margin-top:8px; display:flex; flex-direction:column; gap:5px; }
@@ -248,17 +290,20 @@ export default function AdminDeductionWaiver() {
             </div>
 
             {/* ── Stats ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 20 }}>
-              {STATS.map(s => (
-                <div key={s.label} className="dw-stat-card" style={{ background: s.bg, borderColor: s.border }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: "#fff",
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                    boxShadow: "0 1px 4px rgba(0,0,0,.08)" }}>
-                    <i className={`bi ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 20, alignItems: "start" }}>
+              {STATS.map((s, i) => (
+                <div key={i} className={`dw-stat ${s.accent}`}>
+                  <div className="dw-stat-top">
+                    <div className="dw-stat-icon">
+                      <i className={`bi ${s.icon}`} />
+                    </div>
+                    <div className="dw-stat-body">
+                      <div className="dw-stat-val">{s.val}</div>
+                      <div className="dw-stat-label">{s.label}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: "#111827", lineHeight: 1.2 }}>{s.value}</div>
-                    <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2, fontWeight: 500 }}>{s.label}</div>
+                  <div className="dw-stat-track">
+                    <div className="dw-stat-fill" style={{ width: `${s.pct}%` }} />
                   </div>
                 </div>
               ))}
@@ -312,7 +357,10 @@ export default function AdminDeductionWaiver() {
                     return t.getHours() > 10 || (t.getHours() === 10 && t.getMinutes() > 10);
                   });
                   const lunchDays    = attRecords.filter(a => (a.deductions || 0) > 0);
-                  const absentDates  = getAbsentDates(attRecords, month, year);
+                  const joinDateStr  = r.employee?.professional?.dateOfJoining
+                    ? toDateStr(r.employee.professional.dateOfJoining)
+                    : null;
+                  const absentDates  = getAbsentDates(attRecords, month, year, joinDateStr);
                   const halfDayDates = getHalfDayDates(attRecords);
 
                   return (
@@ -321,13 +369,16 @@ export default function AdminDeductionWaiver() {
                       <div style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
                         onClick={() => setExpandedId(isExpanded ? null : r._id)}>
 
-                        {avatar
-                          ? <img src={avatar} alt="avatar" style={{ width:44, height:44, borderRadius:12, objectFit:"cover", flexShrink:0, border:`2px solid ${abg}` }} />
-                          : <div style={{ width:44, height:44, borderRadius:12, background:abg, flexShrink:0,
-                              display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:acol }}>
-                              {inits}
-                            </div>
-                        }
+                        <div style={{ width:44, height:44, borderRadius:12, flexShrink:0, position:"relative" }}>
+                          {avatar && (
+                            <img src={avatar} alt="" style={{ width:44, height:44, borderRadius:12, objectFit:"cover", border:`2px solid ${abg}`, position:"absolute", inset:0 }}
+                              onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />
+                          )}
+                          <div style={{ width:44, height:44, borderRadius:12, background:abg, position:"absolute", inset:0,
+                            display: avatar ? "none" : "flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:acol }}>
+                            {inits}
+                          </div>
+                        </div>
 
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

@@ -7,7 +7,7 @@ import Employee from "@/models/hr/Employee";
 
 async function generateAssetId() {
   const count = await Asset.countDocuments();
-  return `AST-${String(count + 1).padStart(4, "0")}`;
+  return `VAST-${String(count + 1).padStart(3, "0")}`;
 }
 
 export default async function handler(req, res) {

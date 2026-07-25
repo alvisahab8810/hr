@@ -2,10 +2,21 @@ import dbConnect from "@/utils/dbConnect";
 import Employee from "@/models/hr/Employee";
 import Attendance from "@/models/employees/Attendance";
 import LeaveApplication from "@/models/employees/LeaveApplication";
-import SalaryReport from "@/models/hr/SalaryReport";
 import Task from "@/models/tasks/Task";
 import Brand from "@/models/tasks/Brand";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { generateSalaryForMonth } from "@/utils/payroll/generateSalaryForMonth";
+
+// Matches the contentType -> Brand.monthlyDeliverables key mapping used by
+// pages/api/admin/tasks/nomenclature.js, so target/done/pending here agree
+// with how nomenclature (and therefore task month-tagging) is generated.
+const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const DELIV_TYPES = [
+  { type: "reel",     key: "reels",     label: "Reels"     },
+  { type: "story",    key: "stories",   label: "Stories"   },
+  { type: "carousel", key: "carousels", label: "Carousels" },
+  { type: "post",     key: "posts",     label: "Posts"     },
+];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
@@ -27,10 +38,7 @@ export default async function handler(req, res) {
       todayAttendance,
       todayLeaves,
       monthlySalaries,
-      taskByStatus,
-      brandTaskRaw,
-      todayTasksRaw,
-      overdueCount,
+      smBrands,
     ] = await Promise.all([
       Employee.find({ isActive: true }).select("firstName lastName professional").lean(),
 
@@ -47,50 +55,11 @@ export default async function handler(req, res) {
         .sort({ createdAt: -1 })
         .lean(),
 
-      SalaryReport.find({ month: monthIndex, year }).select("netPay basicSalary deductions overtime reimbursement status").lean(),
+      generateSalaryForMonth(monthIndex, year),
 
-      Task.aggregate([
-        { $group: { _id: "$status", count: { $sum: 1 } } },
-      ]),
-
-      Task.aggregate([
-        {
-          $group: {
-            _id:        "$brandId",
-            total:      { $sum: 1 },
-            completed:  { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
-            inProgress: { $sum: { $cond: [{ $eq: ["$status", "in_progress"] }, 1, 0] } },
-            review:     { $sum: { $cond: [{ $eq: ["$status", "review"] }, 1, 0] } },
-            blocked:    { $sum: { $cond: [{ $eq: ["$status", "blocked"] }, 1, 0] } },
-          },
-        },
-        {
-          $lookup: {
-            from:         "brands",
-            localField:   "_id",
-            foreignField: "_id",
-            as:           "brand",
-          },
-        },
-        { $unwind: { path: "$brand", preserveNullAndEmptyArrays: false } },
-        { $sort: { total: -1 } },
-        { $limit: 10 },
-      ]),
-
-      Task.find({
-        dueDate: { $gte: todayStart, $lte: todayEnd },
-        status:  { $ne: "completed" },
-      })
-        .populate("assignedTo", "firstName lastName")
-        .populate("brandId", "name color")
-        .sort({ priority: 1, createdAt: -1 })
-        .limit(15)
+      Brand.find({ isActive: true, services: "socialMedia" })
+        .select("name color monthlyDeliverables")
         .lean(),
-
-      Task.countDocuments({
-        dueDate: { $lt: now },
-        status:  { $nin: ["completed"] },
-      }),
     ]);
 
     // --- Attendance processing ---
@@ -111,12 +80,6 @@ export default async function handler(req, res) {
       dept: e.professional?.department || "",
     }));
 
-    // --- Task stats ---
-    const statusMap = {};
-    taskByStatus.forEach(s => { statusMap[s._id] = s.count; });
-    const totalTasks     = Object.values(statusMap).reduce((a, b) => a + b, 0);
-    const completedTasks = statusMap["completed"] || 0;
-
     // --- Salary totals ---
     const salaryTotal      = monthlySalaries.reduce((sum, s) => sum + (s.netPay           || 0), 0);
     const salaryBasic      = monthlySalaries.reduce((sum, s) => sum + (s.basicSalary      || 0), 0);
@@ -125,34 +88,49 @@ export default async function handler(req, res) {
     const salaryReimb      = monthlySalaries.reduce((sum, s) => sum + (s.reimbursement?.approved || 0), 0);
     const processedCount   = monthlySalaries.filter(s => s.status === "Processed").length;
 
-    // --- Brand tasks ---
-    const brandTasks = brandTaskRaw.map(b => ({
-      name:       b.brand.name,
-      color:      b.brand.color || "#6366F1",
-      total:      b.total,
-      completed:  b.completed,
-      inProgress: b.inProgress,
-      review:     b.review,
-      blocked:    b.blocked,
-      todo:       b.total - b.completed - b.inProgress - b.review - b.blocked,
-    }));
+    // --- Brand monthly deliverables (target vs done vs pending, current month) ---
+    const monthStr  = `${MONTH_SHORT[monthIndex]}'${String(year).slice(-2)}`;
+    const brandIds  = smBrands.map(b => b._id);
 
-    // --- Today's assignments ---
-    const PRIO_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
-    const todayAssignments = todayTasksRaw
-      .sort((a, b) => (PRIO_ORDER[a.priority] ?? 9) - (PRIO_ORDER[b.priority] ?? 9))
-      .map(t => ({
-        title:    t.title,
-        priority: t.priority,
-        status:   t.status,
-        assignee: t.assignedTo
-          ? `${t.assignedTo.firstName} ${t.assignedTo.lastName}`
-          : null,
-        brand: t.brandId
-          ? { name: t.brandId.name, color: t.brandId.color }
-          : null,
-        dueDate: t.dueDate,
-      }));
+    const taskCounts = brandIds.length ? await Task.aggregate([
+      {
+        $match: {
+          brandId:     { $in: brandIds },
+          contentType: { $in: DELIV_TYPES.map(d => d.type) },
+          nomenclature: { $regex: `${monthStr}$` },
+        },
+      },
+      {
+        $group: {
+          _id:   { brandId: "$brandId", contentType: "$contentType" },
+          total: { $sum: 1 },
+          done:  { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+        },
+      },
+    ]) : [];
+
+    const countMap = {};
+    taskCounts.forEach(c => {
+      countMap[`${c._id.brandId}_${c._id.contentType}`] = { total: c.total, done: c.done };
+    });
+
+    const brandDeliverables = smBrands.map(b => {
+      const deliverables = DELIV_TYPES.map(d => {
+        const target  = b.monthlyDeliverables?.[d.key] || 0;
+        const done    = countMap[`${b._id}_${d.type}`]?.done || 0;
+        const pending = Math.max(target - done, 0);
+        return { type: d.type, label: d.label, target, done, pending };
+      });
+      return {
+        id:    String(b._id),
+        name:  b.name,
+        color: b.color || "#6366F1",
+        deliverables,
+        totalTarget:  deliverables.reduce((a, x) => a + x.target,  0),
+        totalDone:    deliverables.reduce((a, x) => a + x.done,    0),
+        totalPending: deliverables.reduce((a, x) => a + x.pending, 0),
+      };
+    });
 
     return res.json({
       success: true,
@@ -187,20 +165,7 @@ export default async function handler(req, res) {
           month:          monthIndex,
           year,
         },
-        taskStats: {
-          total:          totalTasks,
-          overdue:        overdueCount,
-          completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
-          byStatus: {
-            todo:        statusMap["todo"]        || 0,
-            in_progress: statusMap["in_progress"] || 0,
-            review:      statusMap["review"]      || 0,
-            completed:   statusMap["completed"]   || 0,
-            blocked:     statusMap["blocked"]     || 0,
-          },
-        },
-        brandTasks,
-        todayAssignments,
+        brandDeliverables,
       },
     });
   } catch (err) {

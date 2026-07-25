@@ -317,16 +317,42 @@ export default function AdminOvertime() {
           .ot-tab.active { background:#fff; color:#111827; box-shadow:0 1px 4px rgba(0,0,0,.1); }
 
           /* ── Stats ── */
-          .ot-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px; }
+          .ot-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px; align-items:start; }
           @media(max-width:900px){ .ot-stats{ grid-template-columns:repeat(2,1fr); } }
           .ot-stat {
-            background:#fff; border:1px solid #F0F0F0; border-radius:14px;
-            padding:18px 20px; display:flex; align-items:center; gap:14px;
+            box-sizing:border-box; height:104px;
+            border-radius:16px; padding:17px 18px 16px;
+            display:flex; flex-direction:column; justify-content:space-between;
+            border:1px solid; box-shadow:0 3px 12px rgba(15,23,42,.06);
+            position:relative; overflow:hidden;
+            transition:transform .2s ease, box-shadow .2s ease;
           }
-          .ot-stat-icon { width:46px; height:46px; border-radius:14px;
-            display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
-          .ot-stat-val   { font-size:20px; font-weight:700; color:#111827; line-height:1; margin-bottom:3px; }
-          .ot-stat-label { font-size:11.5px; color:#9CA3AF; font-weight:500; }
+          .ot-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .ot-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .ot-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#EEF2FF; }
+          .ot-stat.indigo::before { background:#4F46E5; }
+          .ot-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FFEDD5; }
+          .ot-stat.orange::before { background:#EA580C; }
+          .ot-stat.green  { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#DCFCE7; }
+          .ot-stat.green::before { background:#16A34A; }
+          .ot-stat.blue   { background:linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color:#DBEAFE; }
+          .ot-stat.blue::before { background:#2563EB; }
+          .ot-stat-top { display:flex; align-items:center; gap:14px; }
+          .ot-stat-icon { width:46px; height:46px; border-radius:13px;
+            display:flex; align-items:center; justify-content:center; font-size:19px; color:#fff; flex-shrink:0; }
+          .ot-stat.indigo .ot-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+          .ot-stat.orange .ot-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+          .ot-stat.green  .ot-stat-icon { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+          .ot-stat.blue   .ot-stat-icon { background:#2563EB; box-shadow:0 6px 16px #2563EB33; }
+          .ot-stat-body  { flex:1; min-width:0; }
+          .ot-stat-val   { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+          .ot-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .ot-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .ot-stat-fill  { height:6px; border-radius:6px; transition:width .4s; }
+          .ot-stat.indigo .ot-stat-fill { background:#4F46E5; }
+          .ot-stat.orange .ot-stat-fill { background:#EA580C; }
+          .ot-stat.green  .ot-stat-fill { background:#16A34A; }
+          .ot-stat.blue   .ot-stat-fill { background:#2563EB; }
 
           /* ── Employee grid ── */
           .ot-emp-grid {
@@ -606,18 +632,27 @@ export default function AdminOvertime() {
             {/* ── Stats ── */}
             <div className="ot-stats">
               {[
-                { icon:"bi-people-fill",       bg:"#EEF2FF", ic:"#4F46E5", val: grouped.length,            label:"Employees" },
-                { icon:"bi-hourglass-split",    bg:"#FEF9C3", ic:"#B45309", val: pendingCnt,                label:"Pending Requests" },
-                { icon:"bi-check-circle-fill",  bg:"#DCFCE7", ic:"#15803D", val: approvedCnt,              label:"Approved" },
-                { icon:"bi-stopwatch-fill",     bg:"#F3E8FF", ic:"#7C3AED", val: minsToLabel(totalMins),   label:"Total Approved Hrs" },
+                { accent:"indigo", icon:"bi-people-fill",      val: grouped.length,          label:"Employees",
+                  pct: overtimeList.length ? ((overtimeList.length - pendingCnt) / overtimeList.length) * 100 : 0 },
+                { accent:"orange", icon:"bi-hourglass-split",   val: pendingCnt,              label:"Pending Requests",
+                  pct: overtimeList.length ? (pendingCnt / overtimeList.length) * 100 : 0 },
+                { accent:"green",  icon:"bi-check-circle-fill", val: approvedCnt,             label:"Approved",
+                  pct: overtimeList.length ? (approvedCnt / overtimeList.length) * 100 : 0 },
+                { accent:"blue",   icon:"bi-stopwatch-fill",    val: minsToLabel(totalMins),  label:"Total Approved Hrs",
+                  pct: 100 },
               ].map((s, i) => (
-                <div key={i} className="ot-stat">
-                  <div className="ot-stat-icon" style={{ background:s.bg, color:s.ic }}>
-                    <i className={`bi ${s.icon}`} />
+                <div key={i} className={`ot-stat ${s.accent}`}>
+                  <div className="ot-stat-top">
+                    <div className="ot-stat-icon">
+                      <i className={`bi ${s.icon}`} />
+                    </div>
+                    <div className="ot-stat-body">
+                      <div className="ot-stat-val">{s.val}</div>
+                      <div className="ot-stat-label">{s.label}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="ot-stat-val">{s.val}</div>
-                    <div className="ot-stat-label">{s.label}</div>
+                  <div className="ot-stat-track">
+                    <div className="ot-stat-fill" style={{ width:`${s.pct}%` }} />
                   </div>
                 </div>
               ))}
@@ -681,10 +716,18 @@ export default function AdminOvertime() {
                       })()}
 
                       <div className="ot-emp-card-top">
-                        {group.avatar
-                          ? <img src={group.avatar} alt="avatar" className="ot-emp-avatar" style={{ objectFit:"cover", padding:0 }} />
-                          : <div className="ot-emp-avatar" style={{ background:bg, color:fc }}>{getInitials(group.name)}</div>
-                        }
+                        {group.avatar && (
+                          <img
+                            src={group.avatar}
+                            alt=""
+                            className="ot-emp-avatar"
+                            style={{ objectFit:"cover", padding:0 }}
+                            onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                          />
+                        )}
+                        <div className="ot-emp-avatar" style={{ background:bg, color:fc, display: group.avatar ? "none" : "flex" }}>
+                          {getInitials(group.name)}
+                        </div>
                         <div style={{ minWidth:0 }}>
                           <div className="ot-emp-name">{group.name}</div>
                           {group.dept && <div className="ot-emp-dept">{group.dept}</div>}
@@ -740,10 +783,18 @@ export default function AdminOvertime() {
                     const st = groupStats(drawerGroup.entries);
                     return (
                       <>
-                        {drawerGroup.avatar
-                          ? <img src={drawerGroup.avatar} alt="avatar" className="ot-drawer-avatar" style={{ objectFit:"cover", padding:0 }} />
-                          : <div className="ot-drawer-avatar" style={{ background:bg, color:fc }}>{getInitials(drawerGroup.name)}</div>
-                        }
+                        {drawerGroup.avatar && (
+                          <img
+                            src={drawerGroup.avatar}
+                            alt=""
+                            className="ot-drawer-avatar"
+                            style={{ objectFit:"cover", padding:0 }}
+                            onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
+                          />
+                        )}
+                        <div className="ot-drawer-avatar" style={{ background:bg, color:fc, display: drawerGroup.avatar ? "none" : "flex" }}>
+                          {getInitials(drawerGroup.name)}
+                        </div>
                         <div style={{ minWidth:0 }}>
                           <div style={{ fontWeight:800, fontSize:16, color:"#111827" }}>{drawerGroup.name}</div>
                           {drawerGroup.dept && <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{drawerGroup.dept}</div>}

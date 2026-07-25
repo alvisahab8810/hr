@@ -46,6 +46,10 @@ export default function SalaryReport() {
   const [generating, setGenerating] = useState(false);
   const [search,     setSearch]     = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [showAmounts, setShowAmounts] = useState(false);
+
+  // Masked money display — "₹ ••••" until the eye toggle is switched on.
+  const M = (n, prefix = "") => (showAmounts ? `${prefix}₹${fmt(n)}` : "₹ ••••");
 
   const autoRefresh = useCallback(async () => {
     setLoading(true);
@@ -153,7 +157,7 @@ export default function SalaryReport() {
   const processedCount  = filtered.filter((s) => s.status === "Processed").length;
 
   return (
-    <div className="leaves-management-admin">
+    <div className="sr-page-root">
       <Head>
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
@@ -195,25 +199,55 @@ export default function SalaryReport() {
           .sr-btn-export  { background:#F0FDF4; color:#15803D; border:1.5px solid #BBF7D0; }
           .sr-btn-export:hover { background:#DCFCE7; }
 
-          /* Stats strip */
-          .sr-stats {
+          /* KPI cards — gradient-wash formula (matches attendance-summary / leaves-management) */
+          .sr-kpi-grid {
             display:grid; grid-template-columns:repeat(5,1fr);
-            gap:14px; margin-bottom:24px;
+            align-items:start; gap:16px; margin-bottom:24px;
           }
-          @media(max-width:900px){ .sr-stats{grid-template-columns:repeat(3,1fr);} }
-          @media(max-width:600px){ .sr-stats{grid-template-columns:repeat(2,1fr);} }
-          .sr-stat {
-            background:#fff; border:1px solid #F0F0F0; border-radius:14px;
-            padding:16px 18px; transition:box-shadow .2s;
+          @media(max-width:1100px){ .sr-kpi-grid{grid-template-columns:repeat(3,1fr);} }
+          @media(max-width:600px){ .sr-kpi-grid{grid-template-columns:repeat(2,1fr);} }
+          .sr-kpi-card {
+            box-sizing:border-box; height:104px; border-radius:16px;
+            padding:17px 18px 16px; display:flex; flex-direction:column;
+            justify-content:space-between; border:1px solid;
+            box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+            overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
           }
-          .sr-stat:hover { box-shadow:0 2px 12px rgba(0,0,0,.06); }
-          .sr-stat-icon {
-            width:36px; height:36px; border-radius:10px;
+          .sr-kpi-card:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .sr-kpi-card::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .sr-kpi-card.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#EEF2FF; }
+          .sr-kpi-card.indigo::before { background:#4F46E5; }
+          .sr-kpi-card.green  { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#DCFCE7; }
+          .sr-kpi-card.green::before  { background:#16A34A; }
+          .sr-kpi-card.blue   { background:linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color:#DBEAFE; }
+          .sr-kpi-card.blue::before   { background:#2563EB; }
+          .sr-kpi-card.red    { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FEE2E2; }
+          .sr-kpi-card.red::before    { background:#DC2626; }
+          .sr-kpi-card.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FFEDD5; }
+          .sr-kpi-card.orange::before { background:#EA580C; }
+          .sr-kpi-top   { display:flex; align-items:center; gap:14px; }
+          .sr-kpi-icon  {
+            width:46px; height:46px; border-radius:13px; flex-shrink:0;
             display:flex; align-items:center; justify-content:center;
-            font-size:15px; margin-bottom:10px;
+            color:#fff; font-size:19px;
           }
-          .sr-stat-val   { font-size:19px; font-weight:700; color:#111827; line-height:1; margin-bottom:3px; }
-          .sr-stat-label { font-size:11px; color:#9CA3AF; font-weight:500; }
+          .sr-kpi-icon.indigo { background:#4F46E5; box-shadow:0 6px 16px rgba(79,70,229,.18); }
+          .sr-kpi-icon.green  { background:#16A34A; box-shadow:0 6px 16px rgba(34,197,94,.18); }
+          .sr-kpi-icon.blue   { background:#2563EB; box-shadow:0 6px 16px rgba(37,99,235,.18); }
+          .sr-kpi-icon.red    { background:#DC2626; box-shadow:0 6px 16px rgba(239,68,68,.18); }
+          .sr-kpi-icon.orange { background:#EA580C; box-shadow:0 6px 16px rgba(249,115,22,.18); }
+          .sr-kpi-body  { flex:1; min-width:0; }
+          .sr-kpi-value { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-0.6px; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+          .sr-kpi-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .sr-kpi-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .sr-kpi-fill  { height:6px; border-radius:6px; transition:width .4s; }
+          .sr-eye-btn {
+            border:none; background:#fff; cursor:pointer; color:#64748B;
+            font-size:11px; width:20px; height:20px; border-radius:6px;
+            display:flex; align-items:center; justify-content:center; flex-shrink:0;
+            box-shadow:0 1px 4px rgba(15,23,42,.12);
+          }
+          .sr-eye-btn:hover { color:#4F46E5; }
 
           /* Section title */
           .sr-section { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
@@ -360,7 +394,7 @@ export default function SalaryReport() {
           <LeftbarMobile />
           <Dashnav />
 
-          <section className="content home admin-attendance-summary">
+          <section className="content home sr-page">
             {/* Breadcrumb */}
             <div className="breadcrum-bx">
               <ul className="breadcrumb bg-white">
@@ -408,21 +442,64 @@ export default function SalaryReport() {
                 </div>
               </div>
 
-              {/* ── Stats ────────────────────────────────────────────────── */}
-              <div className="sr-stats">
+              {/* ── KPI Cards ────────────────────────────────────────────── */}
+              <div className="sr-kpi-grid">
                 {[
-                  { icon:"bi-people-fill",          bg:"#EEF2FF", ic:"#4F46E5", val: filtered.length,          label:"Employees",        sub:null },
-                  { icon:"bi-wallet2",               bg:"#ECFDF5", ic:"#059669", val:`₹${fmt(totalNetPay)}`,   label:"Total Net Pay",    sub:null },
-                  { icon:"bi-cash-stack",            bg:"#F0F9FF", ic:"#0369A1", val:`₹${fmt(totalBasic)}`,    label:"Total Basic",      sub:null },
-                  { icon:"bi-arrow-down-circle-fill",bg:"#FFF1F2", ic:"#E11D48", val:`₹${fmt(totalDeductions)}`,label:"Total Deductions",sub:null },
-                  { icon:"bi-clock-history",         bg:"#FFFBEB", ic:"#D97706", val:`₹${fmt(totalOT)}`,       label:"Total Overtime",   sub:null },
+                  {
+                    accent:"indigo", icon:"bi-people-fill", val: filtered.length, label:"Employees",
+                    money:false, primary:false,
+                    pct: filtered.length ? (processedCount / filtered.length) * 100 : 0,
+                  },
+                  {
+                    accent:"green", icon:"bi-wallet2", val: totalNetPay, label:"Total Net Pay",
+                    money:true, primary:true, pct: 100,
+                  },
+                  {
+                    accent:"blue", icon:"bi-cash-stack", val: totalBasic, label:"Total Basic",
+                    money:true, primary:false,
+                    pct: totalNetPay ? Math.min(100, (totalBasic / totalNetPay) * 100) : 0,
+                  },
+                  {
+                    accent:"red", icon:"bi-arrow-down-circle-fill", val: totalDeductions, label:"Total Deductions",
+                    money:true, primary:false,
+                    pct: totalBasic ? Math.min(100, (totalDeductions / totalBasic) * 100) : 0,
+                  },
+                  {
+                    accent:"orange", icon:"bi-clock-history", val: totalOT, label:"Total Overtime",
+                    money:true, primary:false,
+                    pct: totalNetPay ? Math.min(100, (totalOT / totalNetPay) * 100) : 0,
+                  },
                 ].map((s, i) => (
-                  <div key={i} className="sr-stat">
-                    <div className="sr-stat-icon" style={{ background:s.bg, color:s.ic }}>
-                      <i className={`bi ${s.icon}`}></i>
+                  <div key={i} className={`sr-kpi-card ${s.accent}`}>
+                    <div className="sr-kpi-top">
+                      <div className={`sr-kpi-icon ${s.accent}`}>
+                        <i className={`bi ${s.icon}`}></i>
+                      </div>
+                      <div className="sr-kpi-body">
+                        <div className="sr-kpi-value">
+                          {s.money ? M(s.val) : s.val}
+                          {s.primary && (
+                            <button
+                              className="sr-eye-btn"
+                              onClick={() => setShowAmounts((v) => !v)}
+                              title={showAmounts ? "Hide amounts" : "Show amounts"}
+                            >
+                              <i className={`bi bi-eye${showAmounts ? "-slash" : ""}`}></i>
+                            </button>
+                          )}
+                        </div>
+                        <div className="sr-kpi-label">{s.label}</div>
+                      </div>
                     </div>
-                    <div className="sr-stat-val">{s.val}</div>
-                    <div className="sr-stat-label">{s.label}</div>
+                    <div className="sr-kpi-track">
+                      <div
+                        className="sr-kpi-fill"
+                        style={{
+                          width: `${s.pct}%`,
+                          background: { indigo:"#4F46E5", green:"#16A34A", blue:"#2563EB", red:"#DC2626", orange:"#EA580C" }[s.accent],
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -531,10 +608,10 @@ export default function SalaryReport() {
 
                               {/* Basic */}
                               <td className="r">
-                                <span style={{ fontWeight:600, color:"#374151" }}>₹{fmt(s.basicSalary)}</span>
+                                <span style={{ fontWeight:600, color:"#374151" }}>{M(s.basicSalary)}</span>
                                 {s.isPartialMonth && s.earnedSalary && (
                                   <div style={{ fontSize:11, color:"#2563EB", fontWeight:500 }}>
-                                    ₹{fmt(s.earnedSalary)} earned
+                                    {M(s.earnedSalary)} earned
                                   </div>
                                 )}
                               </td>
@@ -551,14 +628,14 @@ export default function SalaryReport() {
                               {/* Deductions */}
                               <td className="r">
                                 {d.total > 0
-                                  ? <span className="amt-red">− ₹{fmt(d.total)}</span>
+                                  ? <span className="amt-red">{M(d.total, "− ")}</span>
                                   : <span className="amt-muted">—</span>}
                               </td>
 
                               {/* OT */}
                               <td className="r">
                                 {ot.amount > 0
-                                  ? <><span className="amt-blue">+ ₹{fmt(ot.amount)}</span>
+                                  ? <><span className="amt-blue">{M(ot.amount, "+ ")}</span>
                                       <div style={{ fontSize:11, color:"#9CA3AF" }}>{ot.hours}h</div></>
                                   : <span className="amt-muted">—</span>}
                               </td>
@@ -566,15 +643,15 @@ export default function SalaryReport() {
                               {/* Reim */}
                               <td className="r">
                                 {reim.approved > 0
-                                  ? <span className="amt-green">+ ₹{fmt(reim.approved)}</span>
+                                  ? <span className="amt-green">{M(reim.approved, "+ ")}</span>
                                   : reim.pending > 0
-                                  ? <span className="amt-orange">₹{fmt(reim.pending)}<br/><span style={{fontSize:10}}>pending</span></span>
+                                  ? <span className="amt-orange">{M(reim.pending)}<br/><span style={{fontSize:10}}>pending</span></span>
                                   : <span className="amt-muted">—</span>}
                               </td>
 
                               {/* Net Pay */}
                               <td className="r">
-                                <span className="net-pay-cell">₹{fmt(s.netPay)}</span>
+                                <span className="net-pay-cell">{M(s.netPay)}</span>
                               </td>
 
                               {/* Action */}
@@ -626,11 +703,11 @@ export default function SalaryReport() {
                                         <i className="bi bi-arrow-down-circle"></i> Deductions
                                       </div>
                                       {[
-                                        ["Absent",        `₹${fmt(d.absent)}`,       d.absent      > 0 ? "red"    : "muted"],
-                                        ["Half Day",      `₹${fmt(d.halfDay)}`,      d.halfDay     > 0 ? "red"    : "muted"],
-                                        ["Late Penalty",  `₹${fmt(d.late)}`,         d.late        > 0 ? "red"    : "muted"],
-                                        ["Unpaid Leave",  `₹${fmt(d.unpaidLeave)}`,  d.unpaidLeave > 0 ? "red"    : "muted"],
-                                        ["Lunch Penalty", `₹${fmt(d.lunch)}`,        d.lunch       > 0 ? "orange" : "muted"],
+                                        ["Absent",        M(d.absent),       d.absent      > 0 ? "red"    : "muted"],
+                                        ["Half Day",      M(d.halfDay),      d.halfDay     > 0 ? "red"    : "muted"],
+                                        ["Late Penalty",  M(d.late),         d.late        > 0 ? "red"    : "muted"],
+                                        ["Unpaid Leave",  M(d.unpaidLeave),  d.unpaidLeave > 0 ? "red"    : "muted"],
+                                        ["Lunch Penalty", M(d.lunch),        d.lunch       > 0 ? "orange" : "muted"],
                                       ].map(([l, v, cls]) => (
                                         <div key={l} className="expand-row-item">
                                           <span className="lbl">{l}</span>
@@ -639,7 +716,7 @@ export default function SalaryReport() {
                                       ))}
                                       <div className="expand-row-item" style={{ borderTop:"1.5px solid #FEE2E2", marginTop:4, paddingTop:6 }}>
                                         <span style={{ fontWeight:700, color:"#374151" }}>Total</span>
-                                        <span className={`val ${d.total > 0 ? "red" : "muted"}`}>₹{fmt(d.total)}</span>
+                                        <span className={`val ${d.total > 0 ? "red" : "muted"}`}>{M(d.total)}</span>
                                       </div>
                                     </div>
 
@@ -650,7 +727,7 @@ export default function SalaryReport() {
                                       </div>
                                       {[
                                         ["Hours",  `${ot.hours  || 0}h`,    ot.hours  > 0 ? "blue" : "muted"],
-                                        ["Amount", `₹${fmt(ot.amount)}`,    ot.amount > 0 ? "blue" : "muted"],
+                                        ["Amount", M(ot.amount),            ot.amount > 0 ? "blue" : "muted"],
                                       ].map(([l, v, cls]) => (
                                         <div key={l} className="expand-row-item">
                                           <span className="lbl">{l}</span>
@@ -661,8 +738,8 @@ export default function SalaryReport() {
                                         <i className="bi bi-receipt"></i> Reimbursement
                                       </div>
                                       {[
-                                        ["Approved", `₹${fmt(reim.approved)}`, reim.approved > 0 ? "green"  : "muted"],
-                                        ["Pending",  `₹${fmt(reim.pending)}`,  reim.pending  > 0 ? "orange" : "muted"],
+                                        ["Approved", M(reim.approved), reim.approved > 0 ? "green"  : "muted"],
+                                        ["Pending",  M(reim.pending),  reim.pending  > 0 ? "orange" : "muted"],
                                       ].map(([l, v, cls]) => (
                                         <div key={l} className="expand-row-item">
                                           <span className="lbl">{l}</span>
@@ -677,13 +754,13 @@ export default function SalaryReport() {
                                         <i className="bi bi-wallet2"></i> Pay Summary
                                       </div>
                                       {[
-                                        ["Basic Salary",   `₹${fmt(s.basicSalary)}`,  ""],
+                                        ["Basic Salary",   M(s.basicSalary),  ""],
                                         ...(s.isPartialMonth && s.earnedSalary
-                                          ? [["Earned (pro-rated)", `₹${fmt(s.earnedSalary)}`, "blue"]]
+                                          ? [["Earned (pro-rated)", M(s.earnedSalary), "blue"]]
                                           : []),
-                                        ["Deductions",     `− ₹${fmt(d.total)}`,      d.total    > 0 ? "red"   : "muted"],
-                                        ["Overtime",       `+ ₹${fmt(ot.amount)}`,    ot.amount  > 0 ? "blue"  : "muted"],
-                                        ["Reimbursement",  `+ ₹${fmt(reim.approved)}`,reim.approved > 0 ? "green": "muted"],
+                                        ["Deductions",     M(d.total, "− "),      d.total    > 0 ? "red"   : "muted"],
+                                        ["Overtime",       M(ot.amount, "+ "),    ot.amount  > 0 ? "blue"  : "muted"],
+                                        ["Reimbursement",  M(reim.approved, "+ "),reim.approved > 0 ? "green": "muted"],
                                       ].map(([l, v, cls]) => (
                                         <div key={l} className="expand-row-item">
                                           <span className="lbl">{l}</span>
@@ -693,7 +770,7 @@ export default function SalaryReport() {
                                       <hr className="pay-divider" />
                                       <div className="pay-total-row">
                                         <span className="pay-total-label">Net Pay</span>
-                                        <span className="pay-total-val">₹{fmt(s.netPay)}</span>
+                                        <span className="pay-total-val">{M(s.netPay)}</span>
                                       </div>
                                       {s.isPartialMonth && (
                                         <div style={{ marginTop:8, fontSize:11, color:"#4F46E5", textAlign:"center", background:"#fff", borderRadius:6, padding:"4px 8px" }}>
@@ -721,18 +798,18 @@ export default function SalaryReport() {
                           Totals ({filtered.length} employees)
                         </td>
                         <td className="r" style={{ padding:"12px 16px", fontWeight:700, color:"#374151" }}>
-                          ₹{fmt(totalBasic)}
+                          {M(totalBasic)}
                         </td>
                         <td></td>
                         <td className="r" style={{ padding:"12px 16px" }}>
-                          <span className="amt-red" style={{ fontSize:13 }}>− ₹{fmt(totalDeductions)}</span>
+                          <span className="amt-red" style={{ fontSize:13 }}>{M(totalDeductions, "− ")}</span>
                         </td>
                         <td className="r" style={{ padding:"12px 16px" }}>
-                          <span className="amt-blue" style={{ fontSize:13 }}>₹{fmt(totalOT)}</span>
+                          <span className="amt-blue" style={{ fontSize:13 }}>{M(totalOT)}</span>
                         </td>
                         <td></td>
                         <td className="r" style={{ padding:"12px 16px" }}>
-                          <span style={{ fontWeight:800, fontSize:15, color:"#111827" }}>₹{fmt(totalNetPay)}</span>
+                          <span style={{ fontWeight:800, fontSize:15, color:"#111827" }}>{M(totalNetPay)}</span>
                         </td>
                         <td colSpan="2"></td>
                       </tr>

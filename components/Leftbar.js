@@ -362,17 +362,12 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { confirmLogout } from "./Logout";
 
 export default function Leftbar({ role = "admin" }) {
   const router = useRouter();
   const pathname = usePathname(); // ✅ get current route
   const isAdmin = role === "admin";
-
-  /* ------------- handle logout ------------- */
-  const handleLogout = async () => {
-    const res = await fetch("/api/admin/logout", { method: "GET" });
-    if (res.ok) router.push("/dashboard/login");
-  };
 
   // Initialise openMenu from current URL so first render already has TMS open —
   // avoids a state-update/re-render race with scroll restoration.
@@ -884,16 +879,28 @@ export default function Leftbar({ role = "admin" }) {
 
         </ul>
       </div>
-       <div className="admin-profile-area">
-        <Link href="#">
-          <div className="profile-bx-area">
-             
-          </div>
-        </Link>
-      </div>
     </aside>
 
-   
+    <div className="admin-profile-area mobile-none" style={{
+        position: "fixed", bottom: 0, left: 0, width: 250,
+        background: "#fff", borderTop: "1px solid #F1F5F9",
+        padding: "10px 10px 12px", zIndex: 11,
+      }}>
+      <button
+        onClick={() => confirmLogout(router)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, width: "100%",
+          padding: "10px 12px", borderRadius: 10, border: "none", cursor: "pointer",
+          background: "#FEF2F2", color: "#DC2626", fontWeight: 700, fontSize: 13,
+          transition: "background .15s",
+        }}
+        onMouseEnter={e => e.currentTarget.style.background = "#FEE2E2"}
+        onMouseLeave={e => e.currentTarget.style.background = "#FEF2F2"}
+      >
+        <i className="bi bi-box-arrow-right" style={{ fontSize: 16 }} />
+        Log out
+      </button>
+    </div>
     </div>
   );
 }

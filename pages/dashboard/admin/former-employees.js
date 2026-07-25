@@ -30,6 +30,8 @@ export default function FormerEmployees() {
   const [selected, setSelected]   = useState(null);  // drawer
   const [reactivating, setReactivating] = useState(null);
   const [confirmReactivate, setConfirmReactivate] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     fetch("/api/admin/employees/former")
@@ -72,6 +74,23 @@ export default function FormerEmployees() {
     }
   };
 
+  const handleDelete = async (emp) => {
+    setDeleting(emp._id);
+    try {
+      const res  = await fetch(`/api/admin/employees/${emp._id}`, { method:"DELETE" });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+      setEmployees(prev => prev.filter(e => e._id !== emp._id));
+      if (selected?._id === emp._id) setSelected(null);
+      toast.success(`${empName(emp)} permanently deleted`);
+    } catch (err) {
+      toast.error(err.message || "Failed to delete");
+    } finally {
+      setDeleting(null);
+      setConfirmDelete(null);
+    }
+  };
+
   // stats
   const byStatus = useMemo(() => {
     const map = {};
@@ -90,6 +109,38 @@ export default function FormerEmployees() {
           @keyframes slideIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
           @keyframes spin { to { transform:rotate(360deg); } }
           .fe-row:hover { background:#F9FAFB; cursor:pointer; }
+          .fe-stat {
+            box-sizing:border-box; height:104px; border-radius:16px;
+            padding:17px 18px 16px; display:flex; flex-direction:column;
+            justify-content:space-between; border:1px solid;
+            box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+            overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+          }
+          .fe-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .fe-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .fe-stat.indigo::before { background:#4F46E5; }
+          .fe-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+          .fe-stat.orange::before { background:#EA580C; }
+          .fe-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FED7AA; }
+          .fe-stat.red::before { background:#DC2626; }
+          .fe-stat.red { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FECACA; }
+          .fe-stat.blue::before { background:#2563EB; }
+          .fe-stat.blue { background:linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color:#BFDBFE; }
+          .fe-stat-top { display:flex; align-items:center; gap:14px; }
+          .fe-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+          .fe-stat.indigo .fe-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+          .fe-stat.orange .fe-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+          .fe-stat.red .fe-stat-icon    { background:#DC2626; box-shadow:0 6px 16px #DC262633; }
+          .fe-stat.blue .fe-stat-icon   { background:#2563EB; box-shadow:0 6px 16px #2563EB33; }
+          .fe-stat-body { flex:1; min-width:0; }
+          .fe-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+          .fe-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .fe-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .fe-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+          .fe-stat.indigo .fe-stat-fill { background:#4F46E5; }
+          .fe-stat.orange .fe-stat-fill { background:#EA580C; }
+          .fe-stat.red .fe-stat-fill    { background:#DC2626; }
+          .fe-stat.blue .fe-stat-fill   { background:#2563EB; }
         `}</style>
       </Head>
 
@@ -110,7 +161,7 @@ export default function FormerEmployees() {
             </ul>
           </div>
 
-          <div className="block-header" style={{ padding:"0 20px 40px", minHeight:"90vh" }}>
+          <div className="block-header" style={{ padding:"24px 20px 40px", minHeight:"90vh" }}>
 
             {/* Page header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
@@ -128,20 +179,29 @@ export default function FormerEmployees() {
             </div>
 
             {/* Stats row */}
-            <div style={{ display:"flex", gap:12, marginBottom:22, flexWrap:"wrap" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:12, marginBottom:22, alignItems:"start" }}>
               {[
-                { label:"Total Former", value:employees.length, bg:"#F3F4F6", color:"#374151", icon:"bi-person-x-fill" },
-                { label:"Resigned",     value:byStatus.Resigned||0, bg:"#FEF3C7", color:"#B45309", icon:"bi-door-open-fill" },
-                { label:"Fired",        value:byStatus.Fired||0,    bg:"#FEE2E2", color:"#DC2626", icon:"bi-x-circle-fill" },
-                { label:"Retired",      value:byStatus.Retired||0,  bg:"#EEF2FF", color:"#4F46E5", icon:"bi-award-fill"   },
-              ].map(s => (
-                <div key={s.label} style={{ background:"#fff", borderRadius:14, padding:"16px 18px", display:"flex", alignItems:"center", gap:12, boxShadow:"0 1px 6px rgba(0,0,0,0.07)", minWidth:140 }}>
-                  <div style={{ width:40, height:40, borderRadius:10, background:s.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <i className={`bi ${s.icon}`} style={{ fontSize:18, color:s.color }} />
+                { accent:"indigo", icon:"bi-person-x-fill",     val:employees.length,       label:"Total Former",
+                  pct: 100 },
+                { accent:"orange", icon:"bi-door-open-fill",    val:byStatus.Resigned || 0, label:"Resigned",
+                  pct: employees.length ? ((byStatus.Resigned || 0) / employees.length) * 100 : 0 },
+                { accent:"red",    icon:"bi-x-circle-fill",     val:byStatus.Fired || 0,    label:"Fired",
+                  pct: employees.length ? ((byStatus.Fired || 0) / employees.length) * 100 : 0 },
+                { accent:"blue",   icon:"bi-award-fill",        val:byStatus.Retired || 0,  label:"Retired",
+                  pct: employees.length ? ((byStatus.Retired || 0) / employees.length) * 100 : 0 },
+              ].map((s, i) => (
+                <div key={i} className={`fe-stat ${s.accent}`}>
+                  <div className="fe-stat-top">
+                    <div className="fe-stat-icon">
+                      <i className={`bi ${s.icon}`} />
+                    </div>
+                    <div className="fe-stat-body">
+                      <div className="fe-stat-val">{s.val}</div>
+                      <div className="fe-stat-label">{s.label}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize:22, fontWeight:800, color:"#111827" }}>{s.value}</div>
-                    <div style={{ fontSize:11, color:"#9CA3AF" }}>{s.label}</div>
+                  <div className="fe-stat-track">
+                    <div className="fe-stat-fill" style={{ width:`${s.pct}%` }} />
                   </div>
                 </div>
               ))}
@@ -205,10 +265,14 @@ export default function FormerEmployees() {
                             style={{ borderBottom:"1px solid #F3F4F6" }}>
                             <td style={{ padding:"12px 14px" }}>
                               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                {avatar
-                                  ? <img src={avatar} alt="avatar" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", flexShrink:0, border:"1.5px solid #E5E7EB" }} />
-                                  : <div style={{ width:36, height:36, borderRadius:"50%", background:"linear-gradient(135deg,#E5E7EB,#D1D5DB)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:800, color:"#6B7280", flexShrink:0 }}>{initials}</div>
-                                }
+                                <div style={{ width:36, height:36, borderRadius:"50%", flexShrink:0, position:"relative" }}>
+                                  {avatar && (
+                                    <img src={avatar} alt="" style={{ width:36, height:36, borderRadius:"50%", objectFit:"cover", border:"1.5px solid #E5E7EB", position:"absolute", inset:0 }}
+                                      onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />
+                                  )}
+                                  <div style={{ width:36, height:36, borderRadius:"50%", background:"linear-gradient(135deg,#E5E7EB,#D1D5DB)", position:"absolute", inset:0,
+                                    display: avatar ? "none" : "flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:800, color:"#6B7280" }}>{initials}</div>
+                                </div>
                                 <div>
                                   <div style={{ fontWeight:700, color:"#374151" }}>{name}</div>
                                   <div style={{ fontSize:11, color:"#9CA3AF" }}>{emp.professional?.officialEmail || emp.personal?.email || emp.email?.replace(/_deactivated_\d+@deactivated\.invalid$/, "") || "—"}</div>
@@ -242,6 +306,10 @@ export default function FormerEmployees() {
                                   style={{ background:"#D1FAE5", color:"#065F46", border:"1.5px solid #A7F3D0", borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
                                   <i className="bi bi-arrow-counterclockwise" /> Reactivate
                                 </button>
+                                <button onClick={e => { e.stopPropagation(); setConfirmDelete(emp); }}
+                                  style={{ background:"#FEE2E2", color:"#DC2626", border:"1.5px solid #FECACA", borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                                  <i className="bi bi-trash3-fill" /> Delete
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -269,12 +337,16 @@ export default function FormerEmployees() {
                     <div style={{ background:"linear-gradient(135deg,#374151,#6B7280)", padding:"20px 22px" }}>
                       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
                         <div>
-                          {selected.personal?.avatar
-                            ? <img src={selected.personal.avatar} alt="avatar" style={{ width:52, height:52, borderRadius:"50%", objectFit:"cover", marginBottom:10, border:"3px solid rgba(255,255,255,0.3)" }} />
-                            : <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:"#fff", marginBottom:10 }}>
-                                {empName(selected).split(" ").filter(Boolean).map(n=>n[0]).join("").slice(0,2).toUpperCase()}
-                              </div>
-                          }
+                          <div style={{ width:52, height:52, borderRadius:"50%", marginBottom:10, position:"relative" }}>
+                            {selected.personal?.avatar && (
+                              <img src={selected.personal.avatar} alt="" style={{ width:52, height:52, borderRadius:"50%", objectFit:"cover", border:"3px solid rgba(255,255,255,0.3)", position:"absolute", inset:0 }}
+                                onError={(e) => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }} />
+                            )}
+                            <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(255,255,255,0.15)", position:"absolute", inset:0,
+                              display: selected.personal?.avatar ? "none" : "flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:"#fff" }}>
+                              {empName(selected).split(" ").filter(Boolean).map(n=>n[0]).join("").slice(0,2).toUpperCase()}
+                            </div>
+                          </div>
                           <h3 style={{ color:"#fff", fontWeight:800, fontSize:17, margin:0 }}>{empName(selected)}</h3>
                           <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:3 }}>
                             {selected.professional?.designation || ""}{selected.professional?.department ? ` · ${selected.professional.department}` : ""}
@@ -292,10 +364,14 @@ export default function FormerEmployees() {
                     </div>
 
                     {/* Actions */}
-                    <div style={{ padding:"14px 22px", borderBottom:"1px solid #F3F4F6" }}>
+                    <div style={{ padding:"14px 22px", borderBottom:"1px solid #F3F4F6", display:"flex", gap:8, flexWrap:"wrap" }}>
                       <button onClick={() => setConfirmReactivate(selected)}
                         style={{ display:"flex", alignItems:"center", gap:6, background:"#D1FAE5", color:"#065F46", border:"1.5px solid #A7F3D0", borderRadius:9, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         <i className="bi bi-arrow-counterclockwise" /> Reactivate Employee
+                      </button>
+                      <button onClick={() => setConfirmDelete(selected)}
+                        style={{ display:"flex", alignItems:"center", gap:6, background:"#FEE2E2", color:"#DC2626", border:"1.5px solid #FECACA", borderRadius:9, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        <i className="bi bi-trash3-fill" /> Delete Permanently
                       </button>
                     </div>
 
@@ -359,6 +435,32 @@ export default function FormerEmployees() {
               <button onClick={() => handleReactivate(confirmReactivate)} disabled={reactivating === confirmReactivate._id}
                 style={{ background:"#059669", color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                 {reactivating === confirmReactivate._id ? "Reactivating…" : <><i className="bi bi-arrow-counterclockwise" style={{ marginRight:5 }} />Confirm Reactivate</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {confirmDelete && (
+        <div style={{ position:"fixed", inset:0, zIndex:1060, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div onClick={() => setConfirmDelete(null)} style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.4)" }} />
+          <div style={{ position:"relative", background:"#fff", borderRadius:20, width:"100%", maxWidth:400, boxShadow:"0 20px 60px rgba(0,0,0,0.25)", padding:"26px" }}>
+            <div style={{ width:50, height:50, borderRadius:13, background:"#FEE2E2", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:14 }}>
+              <i className="bi bi-trash3-fill" style={{ fontSize:22, color:"#DC2626" }} />
+            </div>
+            <h3 style={{ fontSize:16, fontWeight:800, color:"#111827", marginBottom:6 }}>Delete Employee Permanently?</h3>
+            <p style={{ fontSize:13, color:"#6B7280", marginBottom:20 }}>
+              <strong>{empName(confirmDelete)}</strong>'s record will be permanently removed. This action cannot be undone.
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={() => setConfirmDelete(null)}
+                style={{ background:"#F3F4F6", border:"none", borderRadius:9, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={() => handleDelete(confirmDelete)} disabled={deleting === confirmDelete._id}
+                style={{ background:"#DC2626", color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                {deleting === confirmDelete._id ? "Deleting…" : <><i className="bi bi-trash3-fill" style={{ marginRight:5 }} />Confirm Delete</>}
               </button>
             </div>
           </div>

@@ -49,6 +49,43 @@ const PAGE_CSS = `
 .cred-label    { font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px; }
 .cred-value    { font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px; }
 .copy-btn      { padding:3px 9px;border:1.5px solid #E2E8F0;border-radius:5px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:#5A57FB;font-family:inherit;flex-shrink:0; }
+
+.cl-stat {
+  box-sizing:border-box; height:104px; border-radius:16px;
+  padding:17px 18px 16px; display:flex; flex-direction:column;
+  justify-content:space-between; border:1px solid;
+  box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+  overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+}
+.cl-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+.cl-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+.cl-stat-top { display:flex; align-items:center; gap:14px; }
+.cl-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+.cl-stat-body { flex:1; min-width:0; }
+.cl-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+.cl-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+.cl-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+.cl-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+
+.cl-stat.indigo::before { background:#4F46E5; }
+.cl-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+.cl-stat.indigo .cl-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+.cl-stat.indigo .cl-stat-fill { background:#4F46E5; }
+
+.cl-stat.green::before { background:#16A34A; }
+.cl-stat.green { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#BBF7D0; }
+.cl-stat.green .cl-stat-icon { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+.cl-stat.green .cl-stat-fill { background:#16A34A; }
+
+.cl-stat.red::before { background:#DC2626; }
+.cl-stat.red { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FECACA; }
+.cl-stat.red .cl-stat-icon { background:#DC2626; box-shadow:0 6px 16px #DC262633; }
+.cl-stat.red .cl-stat-fill { background:#DC2626; }
+
+.cl-stat.orange::before { background:#EA580C; }
+.cl-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FED7AA; }
+.cl-stat.orange .cl-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+.cl-stat.orange .cl-stat-fill { background:#EA580C; }
 `;
 
 /* ─── Invite Modal ───────────────────────────────────────────────────────── */
@@ -437,20 +474,23 @@ export default function AdminClientsPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display: "flex", gap: 14, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 24, alignItems: "start" }}>
           {[
-            { label: "Total Clients",  val: stats.total,     icon: "bi-people-fill",   bg: "#EEF2FF", color: "#4F46E5" },
-            { label: "Active",         val: stats.active,    icon: "bi-check-circle",   bg: "#DCFCE7", color: "#15803D" },
-            { label: "Inactive",       val: stats.inactive,  icon: "bi-slash-circle",   bg: "#FEE2E2", color: "#DC2626" },
-            { label: "With Brand",     val: stats.withBrand, icon: "bi-link-45deg",     bg: "#FEF3C7", color: "#B45309" },
-          ].map(s => (
-            <div key={s.label} style={{ background: "#fff", border: "1.5px solid #E2E8F0", borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, flex: 1 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 10, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <i className={`bi ${s.icon}`} style={{ color: s.color, fontSize: 18 }} />
+            { accent: "indigo", icon: "bi-people-fill",   val: stats.total,     label: "Total Clients", pct: 100 },
+            { accent: "green",  icon: "bi-check-circle",  val: stats.active,    label: "Active",        pct: stats.total ? (stats.active / stats.total) * 100 : 0 },
+            { accent: "red",    icon: "bi-slash-circle",  val: stats.inactive,  label: "Inactive",      pct: stats.total ? (stats.inactive / stats.total) * 100 : 0 },
+            { accent: "orange", icon: "bi-link-45deg",    val: stats.withBrand, label: "With Brand",    pct: stats.total ? (stats.withBrand / stats.total) * 100 : 0 },
+          ].map((s, i) => (
+            <div key={i} className={`cl-stat ${s.accent}`}>
+              <div className="cl-stat-top">
+                <div className="cl-stat-icon"><i className={`bi ${s.icon}`} /></div>
+                <div className="cl-stat-body">
+                  <div className="cl-stat-val">{s.val}</div>
+                  <div className="cl-stat-label">{s.label}</div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>{s.val}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>{s.label}</div>
+              <div className="cl-stat-track">
+                <div className="cl-stat-fill" style={{ width: `${s.pct}%` }} />
               </div>
             </div>
           ))}

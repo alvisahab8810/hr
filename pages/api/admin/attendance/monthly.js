@@ -148,6 +148,7 @@ export default async function handler(req, res) {
     const rows = employees.map((emp) => ({
       employeeId: emp._id,
       name: `${emp.firstName} ${emp.lastName}`.trim(),
+      avatar: emp.personal?.avatar || "",
       designation: emp.professional?.designation || "--",
       type: emp.professional?.employeeType || "Office",
       days: attendanceMap[emp._id.toString()] || {},

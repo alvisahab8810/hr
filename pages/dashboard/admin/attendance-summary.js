@@ -73,6 +73,13 @@ export default function AttendanceDashboard() {
   const monthIndex = Number(date.slice(5, 7)) - 1;
   const monthDays  = getMonthDays(date);
 
+  // Top filter only picks a month — resolves to today's real date when the
+  // current month is picked, otherwise the 1st of the selected month.
+  function handleMonthChange(monthStr) {
+    const todayStr = getTodayDateString();
+    setDate(monthStr === todayStr.slice(0, 7) ? todayStr : `${monthStr}-01`);
+  }
+
   const [todayEmployees,    setTodayEmployees]    = useState([]);
   const [loadingTodayTable, setLoadingTodayTable] = useState(false);
   const [todaySummary,      setTodaySummary]      = useState(null);
@@ -167,18 +174,20 @@ export default function AttendanceDashboard() {
           ════════════════════════════════════════════ */
           .attendance-topbar {
             display: flex; justify-content: space-between; align-items: center;
-            flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+            flex-wrap: wrap; gap: 12px; margin-bottom: 22px;
+            background: #fff; border-radius: 16px; padding: 12px 16px;
+            border: 1px solid #F0F0F8; box-shadow: 0 2px 10px rgba(15,23,42,.05);
           }
           .attendance-toggle {
             display: flex; background: #F3F4F6; border-radius: 10px; padding: 3px; gap: 3px;
           }
           .attendance-toggle button {
             border: none; background: transparent; padding: 7px 22px;
-            border-radius: 8px; font-size: 13px; font-weight: 600;
+            border-radius: 8px; font-size: 13px; font-weight: 700;
             color: #6B7280; cursor: pointer; transition: all 0.2s;
           }
           .attendance-toggle button.active {
-            background: #fff; color: #111827; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            background: #4F46E5; color: #fff; box-shadow: 0 4px 12px rgba(79,70,229,.25);
           }
           .attendance-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -186,63 +195,82 @@ export default function AttendanceDashboard() {
             display: flex; align-items: center; gap: 8px;
             border: 1.5px solid #E5E7EB; border-radius: 10px;
             padding: 8px 14px; cursor: pointer; position: relative;
-            font-size: 13px; font-weight: 500; color: #374151;
-            background: #fff; transition: border-color 0.2s;
+            font-size: 13px; font-weight: 600; color: #374151;
+            background: #fff; transition: border-color 0.2s, box-shadow 0.2s;
           }
-          .date-box:hover { border-color: #4F46E5; }
+          .date-box:hover { border-color: #4F46E5; box-shadow: 0 2px 8px rgba(79,70,229,.12); }
 
           .filter-btn, .export-btn {
             display: flex; align-items: center; gap: 6px;
             padding: 8px 16px; border-radius: 10px;
-            font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+            font-size: 13px; font-weight: 700; cursor: pointer; border: none;
+            transition: transform 0.15s, box-shadow 0.15s;
           }
           .filter-btn  { background: #F3F4F6; color: #374151; }
           .filter-btn:hover  { background: #E5E7EB; }
-          .export-btn  { background: #EEF2FF; color: #4F46E5; }
-          .export-btn:hover  { background: #E0E7FF; }
+          .export-btn  { background: linear-gradient(135deg,#4F46E5,#6366F1); color: #fff; box-shadow: 0 4px 12px rgba(79,70,229,.25); }
+          .export-btn:hover  { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(79,70,229,.32); }
 
           /* ════════════════════════════════════════════
-             SUMMARY CARDS
+             SUMMARY CARDS — gradient-wash KPI style
           ════════════════════════════════════════════ */
           .today-attendance-cards {
             display: grid; grid-template-columns: repeat(4, 1fr);
+            align-items: start;
             gap: 16px; margin-bottom: 24px;
           }
           @media (max-width: 900px) { .today-attendance-cards { grid-template-columns: repeat(2,1fr); } }
+          .kpi-card { transition: transform .2s ease, box-shadow .2s ease; }
+          .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }
           .attendance-card {
-            background: #fff; border-radius: 14px; padding: 18px 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            border: 1px solid #F0F0F0; transition: box-shadow 0.2s;
+            box-sizing: border-box; height: 104px;
+            border-radius: 16px; padding: 17px 18px 16px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            border: 1px solid; box-shadow: 0 3px 12px rgba(15,23,42,.06);
+            position: relative; overflow: hidden;
           }
-          .attendance-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
-          .card-left { display: flex; align-items: center; gap: 12px; }
+          .attendance-card::before {
+            content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+          }
+          .attendance-card.green  { background: linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color: #DCFCE7; }
+          .attendance-card.green::before  { background: #16A34A; }
+          .attendance-card.red    { background: linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color: #FEE2E2; }
+          .attendance-card.red::before    { background: #DC2626; }
+          .attendance-card.orange { background: linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color: #FFEDD5; }
+          .attendance-card.orange::before { background: #EA580C; }
+          .attendance-card.blue   { background: linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color: #DBEAFE; }
+          .attendance-card.blue::before   { background: #2563EB; }
+
           .icon-circle {
-            width: 44px; height: 44px; border-radius: 12px;
+            width: 46px; height: 46px; border-radius: 13px;
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            color: #fff; font-size: 19px;
           }
-          .icon-circle.green  { background: #DCFCE7; }
-          .icon-circle.red    { background: #FEE2E2; }
-          .icon-circle.orange { background: #FEF3C7; }
-          .icon-circle.blue   { background: #DBEAFE; }
-          .icon-circle img    { width: 22px; height: 22px; }
-          .card-left h6 { font-size: 12px; color: #6B7280; font-weight: 500; margin: 0 0 3px; }
-          .card-left p  { font-size: 11px; color: #9CA3AF; margin: 0; }
-          .card-count   { font-size: 28px; font-weight: 700; color: #111827; line-height: 1; }
-          .highlight-percentages { color: #16A34A; font-weight: 600; }
-          .late-arrivals         { color: #D97706; font-weight: 600; }
-          .approval-pending      { color: #DC2626 !important; font-size: 11px; font-weight: 500; }
-          .admin-main-heading    { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 16px; }
+          .icon-circle.green  { background: #16A34A; box-shadow: 0 6px 16px rgba(34,197,94,.18); }
+          .icon-circle.red    { background: #DC2626; box-shadow: 0 6px 16px rgba(239,68,68,.18); }
+          .icon-circle.orange { background: #EA580C; box-shadow: 0 6px 16px rgba(249,115,22,.18); }
+          .icon-circle.blue   { background: #2563EB; box-shadow: 0 6px 16px rgba(37,99,235,.18); }
+          .card-top     { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+          .card-body    { flex: 1; min-width: 0; padding: 0; }
+          .card-value   { font-size: 26px; font-weight: 900; color: #0F172A; line-height: 1.05; letter-spacing: -0.8px; white-space: nowrap; }
+          .card-label   { font-size: 12px; color: #475569; font-weight: 700; margin-top: 3px; white-space: nowrap; }
+          .card-progress-track { height: 6px; background: #F1F5F9; border-radius: 6px; }
+          .card-progress-fill  { height: 6px; border-radius: 6px; transition: width .4s; }
+          .admin-main-heading    { font-size: 16px; font-weight: 800; color: #111827; margin-bottom: 16px; letter-spacing: -0.2px; }
 
           /* ════════════════════════════════════════════
              TODAY TABLE
           ════════════════════════════════════════════ */
-          .att-table-wrap { border-radius: 12px; overflow: hidden; border: 1px solid #F0F0F0; }
+          .att-table-wrap {
+            border-radius: 16px; overflow: hidden; border: 1px solid #F0F0F8;
+            box-shadow: 0 2px 10px rgba(15,23,42,.05); background: #fff;
+          }
           .att-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-          .att-table thead tr { background: #FAFAFA; border-bottom: 1.5px solid #EFEFEF; }
+          .att-table thead tr { background: #F8FAFC; border-bottom: 1.5px solid #EFEFEF; }
           .att-table thead th {
-            padding: 13px 16px; font-weight: 600; color: #6B7280;
-            text-align: center; white-space: nowrap; font-size: 12px;
-            text-transform: uppercase; letter-spacing: 0.4px;
+            padding: 13px 16px; font-weight: 800; color: #64748B;
+            text-align: center; white-space: nowrap; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.5px;
           }
           .att-table thead th:first-child { text-align: left; padding-left: 20px; }
           .att-table tbody tr { border-bottom: 1px solid #F5F5F5; transition: background 0.15s; cursor: pointer; }
@@ -286,31 +314,34 @@ export default function AttendanceDashboard() {
              MONTHLY CALENDAR TABLE
              KEY FIX: solid white background on sticky cols
           ════════════════════════════════════════════ */
-          .calendar-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid #F0F0F0; }
+          .calendar-wrapper {
+            overflow-x: auto; border-radius: 16px; border: 1px solid #F0F0F8;
+            box-shadow: 0 2px 10px rgba(15,23,42,.05); background: #fff;
+          }
           .calendar-table   { border-collapse: collapse; font-size: 12px; min-width: 100%; }
-          .calendar-table thead tr { background: #FAFAFA; }
+          .calendar-table thead tr { background: #F8FAFC; }
           .calendar-table thead th {
             padding: 10px 6px; text-align: center; font-size: 11px;
-            font-weight: 600; color: #6B7280;
+            font-weight: 700; color: #64748B;
             border-bottom: 1.5px solid #EFEFEF; white-space: nowrap;
           }
 
           /* ── STICKY COLS — solid bg, no transparency ── */
           .cal-sticky-1 {
             position: sticky; left: 0; z-index: 3;
-            background: #FAFAFA !important;
+            background: #F8FAFC !important;
             border-right: 1px solid #E5E7EB;
             min-width: 180px; text-align: left !important;
           }
           .cal-sticky-2 {
             position: sticky; left: 180px; z-index: 3;
-            background: #FAFAFA !important;
+            background: #F8FAFC !important;
             border-right: 1px solid #E5E7EB;
             min-width: 160px;
           }
           .cal-sticky-3 {
             position: sticky; left: 340px; z-index: 3;
-            background: #FAFAFA !important;
+            background: #F8FAFC !important;
             border-right: 1px solid #E5E7EB;
             min-width: 80px;
           }
@@ -383,31 +414,33 @@ export default function AttendanceDashboard() {
           /* ════════════════════════════════════════════
              FILTER PANEL (SIDE DRAWER)
           ════════════════════════════════════════════ */
-          .admin-filter-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 998; }
-          .admin-filter-overlay.open { display: block; }
-          .admin-filter-panel {
-            position: fixed; top: 0; right: -360px; width: 340px; height: 100vh;
+          .att-filter-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 998; }
+          .att-filter-overlay.open { display: block; }
+          .att-filter-panel {
+            position: fixed; top: 0; right: -360px; left: auto; width: 340px; max-height: none; height: 100vh;
             background: #fff; z-index: 999; box-shadow: -4px 0 24px rgba(0,0,0,0.1);
-            transition: right 0.3s ease; display: flex; flex-direction: column;
+            transition: right 0.3s ease; transform: none; display: flex; flex-direction: column;
+            border-radius: 0;
           }
-          .admin-filter-panel.open { right: 0; }
-          .admin-filter-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #F0F0F0; }
-          .admin-filter-header h6 { font-weight: 700; font-size: 15px; color: #111827; margin: 0; }
-          .admin-filter-header .close-btn { background: #F3F4F6; border: none; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: #6B7280; }
-          .admin-filter-body { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
-          .filter-group { display: flex; flex-direction: column; gap: 6px; }
-          .filter-group label { font-size: 12px; font-weight: 600; color: #374151; }
-          .filter-group select, .filter-group input[type="date"] {
+          .att-filter-panel.open { right: 0; transform: none; }
+          .att-filter-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid #F0F0F0; }
+          .att-filter-header h6 { font-weight: 700; font-size: 15px; color: #111827; margin: 0; text-transform: none; }
+          .att-filter-header .att-close-btn { background: #F3F4F6; border: none; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: #6B7280; }
+          .att-filter-body { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+          .att-filter-group { display: flex; flex-direction: column; gap: 6px; }
+          .att-filter-group label { font-size: 12px; font-weight: 600; color: #374151; text-transform: none; }
+          .att-filter-group select, .att-filter-group input[type="date"] {
             padding: 9px 12px; border-radius: 9px; border: 1.5px solid #E5E7EB;
             font-size: 13px; color: #374151; background: #fff; outline: none;
+            width: 100%; appearance: auto;
           }
-          .filter-group select:focus,
-          .filter-group input[type="date"]:focus { border-color: #4F46E5; }
-          .admin-filter-footer { padding: 20px 24px; border-top: 1px solid #F0F0F0; display: flex; gap: 10px; }
-          .apply-btn { flex: 1; background: #4F46E5; color: #fff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
-          .apply-btn:hover { background: #4338CA; }
-          .reset-btn { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
-          .reset-btn:hover { background: #E5E7EB; }
+          .att-filter-group select:focus,
+          .att-filter-group input[type="date"]:focus { border-color: #4F46E5; }
+          .att-filter-footer { padding: 20px 24px; border-top: 1px solid #F0F0F0; display: flex; gap: 10px; }
+          .att-apply-btn { flex: 1; background: #4F46E5; color: #fff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+          .att-apply-btn:hover { background: #4338CA; }
+          .att-reset-btn { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+          .att-reset-btn:hover { background: #E5E7EB; }
 
           /* ════════════════════════════════════════════
              EXPORT MODAL
@@ -474,7 +507,7 @@ export default function AttendanceDashboard() {
             </div>
 
             <div className="block-header add-emp-area">
-              <div className="admin-attendance-summary">
+              <div className="att-summary-page">
 
                 {/* ── Topbar ── */}
                 <div className="attendance-topbar">
@@ -484,13 +517,13 @@ export default function AttendanceDashboard() {
                   </div>
 
                   <div className="attendance-actions">
-                    {/* Date picker */}
+                    {/* Month picker */}
                     <div className="date-box" onClick={() => dateInputRef.current?.showPicker()}>
-                      <input ref={dateInputRef} type="date" value={date}
-                        onChange={(e) => setDate(e.target.value)}
+                      <input ref={dateInputRef} type="month" value={date.slice(0, 7)}
+                        onChange={(e) => handleMonthChange(e.target.value)}
                         style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
                       <i className="bi bi-calendar" style={{ color: "#4F46E5" }}></i>
-                      <span>{new Date(date + "T00:00:00").toLocaleDateString("en-US", { day: "2-digit", month: "long", year: "numeric" })}</span>
+                      <span>{new Date(date + "T00:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
                       <i className="bi bi-chevron-down" style={{ fontSize: 11, color: "#9CA3AF" }}></i>
                     </div>
 
@@ -512,51 +545,25 @@ export default function AttendanceDashboard() {
 
                 {/* ── Summary cards ── */}
                 <div className="today-attendance-cards">
-                  <div className="attendance-card">
-                    <div className="card-left">
-                      <div className="icon-circle green"><img src="/icons/admin/icon1.svg" alt="" /></div>
-                      <div>
-                        <h6>Total Present Today</h6>
-                        <p><span className="highlight-percentages">{todaySummary?.presentPercentage ?? 0}%</span> of total</p>
+                  {[
+                    { key: "green",  icon: "bi-check-circle-fill", label: "Total Present Today", value: todaySummary?.present ?? 0, pct: todaySummary?.presentPercentage ?? 0, color: "#16A34A" },
+                    { key: "red",    icon: "bi-x-circle-fill",     label: "Total Absent Today",   value: todaySummary?.absent  ?? 0, pct: (todaySummary?.present ?? 0) + (todaySummary?.absent ?? 0) ? Math.round(((todaySummary?.absent ?? 0) / ((todaySummary?.present ?? 0) + (todaySummary?.absent ?? 0))) * 100) : 0, color: "#DC2626" },
+                    { key: "orange", icon: "bi-clock-history",     label: "Late Arrivals Today",   value: todaySummary?.late    ?? 0, pct: todaySummary?.latePercentage ?? 0, color: "#EA580C" },
+                    { key: "blue",   icon: "bi-calendar-event-fill", label: "Holidays This Month", value: todaySummary?.holidays ?? 0, pct: monthDays.length ? Math.round(((todaySummary?.holidays ?? 0) / monthDays.length) * 100) : 0, color: "#2563EB" },
+                  ].map((c) => (
+                    <div key={c.key} className={`attendance-card ${c.key} kpi-card`}>
+                      <div className="card-top">
+                        <div className={`icon-circle ${c.key}`}><i className={`bi ${c.icon}`}></i></div>
+                        <div className="card-body">
+                          <div className="card-value">{loadingTodaySummary ? "--" : c.value}</div>
+                          <div className="card-label">{c.label}</div>
+                        </div>
+                      </div>
+                      <div className="card-progress-track">
+                        <div className="card-progress-fill" style={{ width: `${loadingTodaySummary ? 0 : c.pct}%`, background: c.color }} />
                       </div>
                     </div>
-                    <div className="card-count">{loadingTodaySummary ? "--" : (todaySummary?.present ?? 0)}</div>
-                  </div>
-
-                  <div className="attendance-card">
-                    <div className="card-left">
-                      <div className="icon-circle red"><img src="/icons/admin/icon2.svg" alt="" /></div>
-                      <div>
-                        <h6>Total Absent Today</h6>
-                        <p className="approval-pending">1 leave approval pending</p>
-                      </div>
-                    </div>
-                    <div className="card-count">
-                      <span className="approval-pending">{loadingTodaySummary ? "--" : (todaySummary?.absent ?? 0)}</span>
-                    </div>
-                  </div>
-
-                  <div className="attendance-card">
-                    <div className="card-left">
-                      <div className="icon-circle orange"><img src="/icons/admin/icon3.svg" alt="" /></div>
-                      <div>
-                        <h6>Late Arrivals Today</h6>
-                        <p><span className="late-arrivals">{todaySummary?.latePercentage ?? 0}%</span> of total</p>
-                      </div>
-                    </div>
-                    <div className="card-count">{loadingTodaySummary ? "--" : (todaySummary?.late ?? 0)}</div>
-                  </div>
-
-                  <div className="attendance-card">
-                    <div className="card-left">
-                      <div className="icon-circle blue"><img src="/icons/admin/icon4.svg" alt="" /></div>
-                      <div>
-                        <h6>Holidays This Month</h6>
-                        <p>{todaySummary?.holidayLabel ?? "--"}</p>
-                      </div>
-                    </div>
-                    <div className="card-count">{loadingTodaySummary ? "--" : (todaySummary?.holidays ?? 0)}</div>
-                  </div>
+                  ))}
                 </div>
 
                 {/* ══════════════ TODAY VIEW ══════════════ */}
@@ -796,20 +803,20 @@ export default function AttendanceDashboard() {
           </section>
 
           {/* ── Filter overlay + panel ── */}
-          <div className={`admin-filter-overlay ${showFilter ? "open" : ""}`} onClick={() => setShowFilter(false)}></div>
-          <div className={`admin-filter-panel ${showFilter ? "open" : ""}`}>
-            <div className="admin-filter-header">
+          <div className={`att-filter-overlay ${showFilter ? "open" : ""}`} onClick={() => setShowFilter(false)}></div>
+          <div className={`att-filter-panel ${showFilter ? "open" : ""}`}>
+            <div className="att-filter-header">
               <h6>Filter Employees</h6>
-              <button className="close-btn" onClick={() => setShowFilter(false)}>✕</button>
+              <button className="att-close-btn" onClick={() => setShowFilter(false)}>✕</button>
             </div>
-            <div className="admin-filter-body">
+            <div className="att-filter-body">
               {[
                 { label: "Department",        key: "department",   opts: ["HR","IT","Marketing","Design","Operations"] },
                 { label: "Designation",       key: "designation",  opts: ["Developer","Designer","Manager","Intern"] },
                 { label: "Employee Type",     key: "employeeType", opts: ["Office","Remote","Hybrid"] },
                 { label: "Employment Status", key: "status",       opts: ["Permanent","Probation","Contract","Intern"] },
               ].map((f) => (
-                <div key={f.key} className="filter-group">
+                <div key={f.key} className="att-filter-group">
                   <label>{f.label}</label>
                   <select value={filters[f.key]} onChange={(e) => setFilters({ ...filters, [f.key]: e.target.value })}>
                     <option value="">All {f.label}s</option>
@@ -817,7 +824,7 @@ export default function AttendanceDashboard() {
                   </select>
                 </div>
               ))}
-              <div className="filter-group">
+              <div className="att-filter-group">
                 <label>Attendance Status</label>
                 <select onChange={(e) => setFilters({ ...filters, attendanceStatus: e.target.value })}>
                   <option value="">All</option>
@@ -829,13 +836,13 @@ export default function AttendanceDashboard() {
                 </select>
               </div>
             </div>
-            <div className="admin-filter-footer">
-              <button className="apply-btn" onClick={() => {
+            <div className="att-filter-footer">
+              <button className="att-apply-btn" onClick={() => {
                 setShowFilter(false);
                 if (view === "today") fetchTodayAttendance();
                 if (view === "month") fetchMonthlyAttendance();
               }}>Apply Filters</button>
-              <button className="reset-btn" onClick={() => setFilters({ department:"", designation:"", employeeType:"", status:"" })}>
+              <button className="att-reset-btn" onClick={() => setFilters({ department:"", designation:"", employeeType:"", status:"" })}>
                 Reset
               </button>
             </div>

@@ -75,6 +75,20 @@ function countElapsedWorkingDays(allDates, holidayDates, cutoff) {
   return c || 1;
 }
 
+// Count working days within [fromStr, toStr] inclusive — used to prorate a
+// joining-month employee's earned salary from their actual dateOfJoining.
+function countWorkingDaysInRange(allDates, holidayDates, fromStr, toStr) {
+  let count = 0;
+  for (const dk of allDates) {
+    if (dk < fromStr || dk > toStr) continue;
+    if (isSundayStr(dk))            continue;
+    if (holidayDates.has(dk))       continue;
+    if (isThirdSaturdayStr(dk))     { count += 0.5; continue; }
+    count++;
+  }
+  return count;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
 
@@ -105,6 +119,19 @@ export default async function handler(req, res) {
 
     const empId = employee._id;
 
+    // ── Joining-date boundary ────────────────────────────────────────────
+    // dateOfJoining is the authoritative start of employment — no salary/
+    // attendance before it.
+    const joinDateStr = employee.professional?.dateOfJoining
+      ? toDateStr(employee.professional.dateOfJoining)
+      : null;
+
+    if (joinDateStr && joinDateStr > dateTo) {
+      return res.json({ success: true, report: null, reason: "not_joined_yet" });
+    }
+
+    const effectiveStart = joinDateStr && joinDateStr > dateFrom ? joinDateStr : dateFrom;
+
     // ── Public holidays ──────────────────────────────────────────────────────
     const holidays = await Holiday.find({
       isActive: true, type: "public",
@@ -126,9 +153,10 @@ export default async function handler(req, res) {
 
     // ── Per-day rate & earned salary ─────────────────────────────────────────
     const perDaySalary = basicSalary / 30;
-    const earnedSalary = isCurrentMonth
-      ? Number((basicSalary * (elapsedWorkingDays / totalWorkingDays)).toFixed(2))
-      : basicSalary;
+    // Prorated from this employee's own effectiveStart (their join date if
+    // they joined mid-month, else the 1st) — not the 1st for everyone.
+    const employeeElapsedWorkingDays = countWorkingDaysInRange(allDates, holidayDates, effectiveStart, cutoffStr);
+    const earnedSalary = Number((basicSalary * (employeeElapsedWorkingDays / totalWorkingDays)).toFixed(2));
 
     // ── Attendance ───────────────────────────────────────────────────────────
     const attRecords = await Attendance.find({
@@ -183,6 +211,7 @@ export default async function handler(req, res) {
 
     for (const dk of allDates) {
       if (dk > cutoffStr) break;
+      if (dk < effectiveStart) continue; // not employed yet
       if (isSundayStr(dk)) continue;
 
       if (holidayDates.has(dk)) { presentDays++; continue; }

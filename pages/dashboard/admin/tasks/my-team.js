@@ -6,6 +6,9 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { isTaskAssignedTo, filterTasksByMonth } from "@/utils/tasks/employeeGrade";
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const STATUS_META = {
   todo:        { label: "To Do",       color: "#64748B", bg: "#F1F5F9", dot: "#CBD5E1" },
@@ -41,11 +44,22 @@ export default function MyTeamPage() {
   const [tasks,     setTasks]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [selected,  setSelected]  = useState(null); // employee id
+  const [selMonth,  setSelMonth]  = useState(today.getMonth());
+  const [selYear,   setSelYear]   = useState(today.getFullYear());
+
+  const isCurrentMonth = selMonth === today.getMonth() && selYear === today.getFullYear();
+
+  function shiftMonth(dir) {
+    let m = selMonth + dir, y = selYear;
+    if (m < 0)  { m = 11; y--; }
+    if (m > 11) { m = 0;  y++; }
+    setSelMonth(m); setSelYear(y);
+  }
 
   useEffect(() => {
     Promise.all([
       fetch("/api/admin/assets/employees", { credentials: "include" }).then(r => r.json()),
-      fetch("/api/admin/tasks?limit=500", { credentials: "include" }).then(r => r.json()),
+      fetch("/api/admin/tasks?limit=3000", { credentials: "include" }).then(r => r.json()),
     ]).then(([empData, taskData]) => {
       if (empData.success)  setEmployees(empData.employees || []);
       if (taskData.success) setTasks(taskData.tasks || []);
@@ -53,23 +67,22 @@ export default function MyTeamPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  /* ── Group tasks per employee ── */
-  const empTasks = (empId) => tasks.filter(t => {
-    const id = t.assignedTo?._id || t.assignedTo;
-    return String(id) === String(empId);
-  });
+  /* ── Group tasks per employee, scoped to the selected month ── */
+  const empTasks = (empId) => filterTasksByMonth(tasks.filter(t => isTaskAssignedTo(t, empId)), selMonth, selYear);
 
   const todayTasks = (empId) => empTasks(empId).filter(t => {
     if (!t.dueDate) return false;
     return new Date(t.dueDate).toDateString() === today.toDateString();
   });
 
+  const monthTaskCount = employees.reduce((sum, e) => sum + empTasks(e._id).length, 0);
+
   const displayEmployees = employees.filter(e => !selected || e._id === selected);
 
   return (
     <div className="leaves-management-admin">
       <Head>
-        <title>Today · My Team — Task Management</title>
+        <title>My Team — Task Management</title>
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
@@ -99,7 +112,7 @@ export default function MyTeamPage() {
                 <li className="breadcrumb-item">
                   <Link href="/dashboard/admin/tasks"><img src="/icons/home.svg" alt="" /> Task Management</Link>
                 </li>
-                <li className="breadcrumb-item active">Today · My Team</li>
+                <li className="breadcrumb-item active">My Team</li>
               </ul>
             </div>
 
@@ -108,18 +121,26 @@ export default function MyTeamPage() {
               {/* Header */}
               <div className="attendance-topbar leave-management-topbar" style={{ marginBottom: 20 }}>
                 <div>
-                  <h5 className="admin-main-heading">Today · My Team</h5>
+                  <h5 className="admin-main-heading">My Team</h5>
                   <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
-                    {today.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · {tasks.filter(t => todayTasks(t.assignedTo?._id || t.assignedTo).length > 0 || false).length > 0 ? "" : ""}{tasks.length} tasks across {employees.length} employees
+                    {isCurrentMonth ? today.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) + " · " : ""}
+                    {monthTaskCount} tasks across {employees.length} employees
                   </p>
                 </div>
-                <select className="mt-select" value={selected || ""} onChange={e => setSelected(e.target.value || null)}>
-                  <option value="">All Employees</option>
-                  {employees.map(emp => {
-                    const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
-                    return <option key={emp._id} value={emp._id}>{n}</option>;
-                  })}
-                </select>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => shiftMonth(-1)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #E5E7EB", background: "#fff", cursor: "pointer", fontSize: 13 }}>‹</button>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: "#1E293B", minWidth: 120, textAlign: "center" }}>{MONTHS[selMonth]} {selYear}</div>
+                    <button onClick={() => shiftMonth(1)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #E5E7EB", background: "#fff", cursor: "pointer", fontSize: 13 }}>›</button>
+                  </div>
+                  <select className="mt-select" value={selected || ""} onChange={e => setSelected(e.target.value || null)}>
+                    <option value="">All Employees</option>
+                    {employees.map(emp => {
+                      const n = `${emp.personal?.firstName || emp.firstName || ""} ${emp.personal?.lastName || emp.lastName || ""}`.trim();
+                      return <option key={emp._id} value={emp._id}>{n}</option>;
+                    })}
+                  </select>
+                </div>
               </div>
 
               {loading ? (

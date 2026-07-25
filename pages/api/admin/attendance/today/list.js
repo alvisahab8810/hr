@@ -231,6 +231,7 @@ export default async function handler(req, res) {
       return {
          employeeId: emp._id,   // ✅ REQUIRED
         name: `${emp.firstName} ${emp.lastName}`.trim(),
+        avatar: emp.personal?.avatar || "",
         designation: emp.professional?.designation || "--",
         type: emp.professional?.employeeType || "Office",
 

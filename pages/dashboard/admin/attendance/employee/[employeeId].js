@@ -35,6 +35,12 @@ function isSundayKey(dateKey) {
   return new Date(dateKey + "T00:00:00").getDay() === 0;
 }
 
+// Local-component date-string (matches utils/payroll/generateSalaryForMonth.js's toDateStr)
+function toDateStr(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function getDayMeta(dateKey) {
   const d = new Date(dateKey + "T00:00:00");
   return {
@@ -180,7 +186,11 @@ export default function EmployeeAttendance() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [exporting,    setExporting]    = useState(false);
 
-  const monthDays = getMonthDays(month);
+  // Dates before the employee's joining date never existed for them —
+  // exclude entirely from display, summary counts, and CSV export.
+  const joinDateStr = data?.employee?.dateOfJoining ? toDateStr(data.employee.dateOfJoining) : null;
+  const allMonthDays = getMonthDays(month);
+  const monthDays = joinDateStr ? allMonthDays.filter((dk) => dk >= joinDateStr) : allMonthDays;
   const summary   = data?.days ? buildSummary(data.days, monthDays) : null;
 
   useEffect(() => {

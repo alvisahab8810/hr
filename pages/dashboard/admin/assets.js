@@ -2,6 +2,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
@@ -60,20 +61,6 @@ function Pill({ label, meta }) {
     <span style={{ background:m.bg, color:m.color, borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:700, whiteSpace:"nowrap" }}>
       {label}
     </span>
-  );
-}
-
-function StatCard({ icon, label, value, color, bg }) {
-  return (
-    <div style={{ background:"#fff", borderRadius:16, padding:"18px 20px", display:"flex", alignItems:"center", gap:14, boxShadow:"0 1px 6px rgba(0,0,0,0.07)" }}>
-      <div style={{ width:46, height:46, borderRadius:12, background:bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-        <i className={`bi ${icon}`} style={{ fontSize:20, color }} />
-      </div>
-      <div>
-        <div style={{ fontSize:24, fontWeight:800, color:"#111827" }}>{value ?? "—"}</div>
-        <div style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>{label}</div>
-      </div>
-    </div>
   );
 }
 
@@ -362,6 +349,53 @@ export default function AssetsAdmin() {
           .ams-btn-green:hover  { background:#059669; color:#fff; }
           .ams-emp-card { background:#fff; border-radius:14px; padding:16px 18px; border:1.5px solid #F3F4F6; cursor:pointer; transition:all .15s; }
           .ams-emp-card:hover { border-color:#C7D2FE; box-shadow:0 2px 12px rgba(79,70,229,.08); }
+
+          .ams-stat {
+            box-sizing:border-box; height:104px; border-radius:16px;
+            padding:17px 18px 16px; display:flex; flex-direction:column;
+            justify-content:space-between; border:1px solid;
+            box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+            overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+          }
+          .ams-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+          .ams-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+          .ams-stat-top { display:flex; align-items:center; gap:14px; }
+          .ams-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+          .ams-stat-body { flex:1; min-width:0; }
+          .ams-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+          .ams-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+          .ams-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+          .ams-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+
+          .ams-stat.indigo::before { background:#4F46E5; }
+          .ams-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+          .ams-stat.indigo .ams-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+          .ams-stat.indigo .ams-stat-fill { background:#4F46E5; }
+
+          .ams-stat.blue::before { background:#2563EB; }
+          .ams-stat.blue { background:linear-gradient(160deg,#fff 55%,#DBEAFE 165%); border-color:#BFDBFE; }
+          .ams-stat.blue .ams-stat-icon { background:#2563EB; box-shadow:0 6px 16px #2563EB33; }
+          .ams-stat.blue .ams-stat-fill { background:#2563EB; }
+
+          .ams-stat.green::before { background:#16A34A; }
+          .ams-stat.green { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#BBF7D0; }
+          .ams-stat.green .ams-stat-icon { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+          .ams-stat.green .ams-stat-fill { background:#16A34A; }
+
+          .ams-stat.red::before { background:#DC2626; }
+          .ams-stat.red { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FECACA; }
+          .ams-stat.red .ams-stat-icon { background:#DC2626; box-shadow:0 6px 16px #DC262633; }
+          .ams-stat.red .ams-stat-fill { background:#DC2626; }
+
+          .ams-stat.purple::before { background:#7C3AED; }
+          .ams-stat.purple { background:linear-gradient(160deg,#fff 55%,#EDE9FE 165%); border-color:#DDD6FE; }
+          .ams-stat.purple .ams-stat-icon { background:#7C3AED; box-shadow:0 6px 16px #7C3AED33; }
+          .ams-stat.purple .ams-stat-fill { background:#7C3AED; }
+
+          .ams-stat.gray::before { background:#6B7280; }
+          .ams-stat.gray { background:linear-gradient(160deg,#fff 55%,#F3F4F6 165%); border-color:#E5E7EB; }
+          .ams-stat.gray .ams-stat-icon { background:#6B7280; box-shadow:0 6px 16px #6B728033; }
+          .ams-stat.gray .ams-stat-fill { background:#6B7280; }
         `}</style>
       </Head>
 
@@ -399,7 +433,7 @@ export default function AssetsAdmin() {
             </ul>
           </div>
 
-          <div className="block-header" style={{ padding:"0 20px 40px", minHeight:"90vh" }}>
+          <div className="block-header" style={{ padding:"24px 20px 40px", minHeight:"90vh" }}>
 
             {/* Page header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
@@ -414,13 +448,28 @@ export default function AssetsAdmin() {
 
             {/* Stats */}
             {stats && (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:14, marginBottom:22 }}>
-                <StatCard icon="bi-box-seam-fill"         label="Total Assets"   value={stats.total}      color="#4F46E5" bg="#EEF2FF" />
-                <StatCard icon="bi-person-check-fill"     label="Assigned"       value={stats.assigned}   color="#1D4ED8" bg="#DBEAFE" />
-                <StatCard icon="bi-check-circle-fill"     label="Available"      value={stats.available}  color="#059669" bg="#D1FAE5" />
-                <StatCard icon="bi-exclamation-triangle-fill" label="Damaged"    value={stats.damaged}    color="#DC2626" bg="#FEE2E2" />
-                <StatCard icon="bi-tools"                 label="Under Repair"   value={stats.underRepair}color="#7C3AED" bg="#EDE9FE" />
-                <StatCard icon="bi-archive-fill"          label="Retired"        value={stats.retired}    color="#6B7280" bg="#F3F4F6" />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:12, marginBottom:22, alignItems:"start" }}>
+                {[
+                  { accent:"indigo", icon:"bi-box-seam-fill",             val:stats.total,      label:"Total Assets", pct:100 },
+                  { accent:"blue",   icon:"bi-person-check-fill",         val:stats.assigned,   label:"Assigned",     pct: stats.total ? (stats.assigned / stats.total) * 100 : 0 },
+                  { accent:"green",  icon:"bi-check-circle-fill",         val:stats.available,  label:"Available",    pct: stats.total ? (stats.available / stats.total) * 100 : 0 },
+                  { accent:"red",    icon:"bi-exclamation-triangle-fill", val:stats.damaged,    label:"Damaged",      pct: stats.total ? (stats.damaged / stats.total) * 100 : 0 },
+                  { accent:"purple", icon:"bi-tools",                     val:stats.underRepair,label:"Under Repair", pct: stats.total ? (stats.underRepair / stats.total) * 100 : 0 },
+                  { accent:"gray",   icon:"bi-archive-fill",              val:stats.retired,    label:"Retired",      pct: stats.total ? (stats.retired / stats.total) * 100 : 0 },
+                ].map((s, i) => (
+                  <div key={i} className={`ams-stat ${s.accent}`}>
+                    <div className="ams-stat-top">
+                      <div className="ams-stat-icon"><i className={`bi ${s.icon}`} /></div>
+                      <div className="ams-stat-body">
+                        <div className="ams-stat-val">{s.val ?? "—"}</div>
+                        <div className="ams-stat-label">{s.label}</div>
+                      </div>
+                    </div>
+                    <div className="ams-stat-track">
+                      <div className="ams-stat-fill" style={{ width:`${s.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -539,7 +588,7 @@ export default function AssetsAdmin() {
                 </div>
 
                 {/* ── SIDE DRAWER ─────────────────────────────────────── */}
-                {liveDrawer && (
+                {liveDrawer && typeof document !== "undefined" && createPortal(
                   <>
                     <div onClick={() => setDrawer(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.18)", zIndex:1040 }} />
                     <div className="ams-drawer" style={{
@@ -640,7 +689,8 @@ export default function AssetsAdmin() {
                         )}
                       </div>
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
             )}

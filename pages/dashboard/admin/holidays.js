@@ -188,6 +188,40 @@ export default function HolidaysAdmin() {
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+        <style>{`
+        .hol-stat {
+          box-sizing:border-box; height:104px; border-radius:16px;
+          padding:17px 18px 16px; display:flex; flex-direction:column;
+          justify-content:space-between; border:1px solid;
+          box-shadow:0 3px 12px rgba(15,23,42,.06); position:relative;
+          overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+        }
+        .hol-stat:hover { transform:translateY(-3px); box-shadow:0 12px 28px rgba(15,23,42,.12); }
+        .hol-stat::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+        .hol-stat.indigo::before { background:#4F46E5; }
+        .hol-stat.indigo { background:linear-gradient(160deg,#fff 55%,#EEF2FF 165%); border-color:#C7D2FE; }
+        .hol-stat.green::before { background:#16A34A; }
+        .hol-stat.green { background:linear-gradient(160deg,#fff 55%,#DCFCE7 165%); border-color:#BBF7D0; }
+        .hol-stat.red::before { background:#DC2626; }
+        .hol-stat.red { background:linear-gradient(160deg,#fff 55%,#FEE2E2 165%); border-color:#FECACA; }
+        .hol-stat.orange::before { background:#EA580C; }
+        .hol-stat.orange { background:linear-gradient(160deg,#fff 55%,#FFEDD5 165%); border-color:#FED7AA; }
+        .hol-stat-top { display:flex; align-items:center; gap:14px; }
+        .hol-stat-icon { width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:19px; flex-shrink:0; }
+        .hol-stat.indigo .hol-stat-icon { background:#4F46E5; box-shadow:0 6px 16px #4F46E533; }
+        .hol-stat.green .hol-stat-icon  { background:#16A34A; box-shadow:0 6px 16px #16A34A33; }
+        .hol-stat.red .hol-stat-icon    { background:#DC2626; box-shadow:0 6px 16px #DC262633; }
+        .hol-stat.orange .hol-stat-icon { background:#EA580C; box-shadow:0 6px 16px #EA580C33; }
+        .hol-stat-body { flex:1; min-width:0; }
+        .hol-stat-val { font-size:22px; font-weight:900; color:#0F172A; line-height:1.05; letter-spacing:-.6px; white-space:nowrap; }
+        .hol-stat-label { font-size:12px; color:#475569; font-weight:700; margin-top:3px; white-space:nowrap; }
+        .hol-stat-track { height:6px; background:#F1F5F9; border-radius:6px; }
+        .hol-stat-fill { height:6px; border-radius:6px; transition:width .4s; }
+        .hol-stat.indigo .hol-stat-fill { background:#4F46E5; }
+        .hol-stat.green .hol-stat-fill  { background:#16A34A; }
+        .hol-stat.red .hol-stat-fill    { background:#DC2626; }
+        .hol-stat.orange .hol-stat-fill { background:#EA580C; }
+      `}</style>
       </Head>
 
       <div className="main-nav">
@@ -258,23 +292,29 @@ export default function HolidaysAdmin() {
             </div>
 
             {/* ── Stats ──────────────────────────────────────────────────── */}
-            <div className="row g-3 mb-4">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12, marginBottom: 20, alignItems: "start" }}>
               {[
-                { label: "Total",       value: total,     icon: "bi-calendar3",      bg: "#EEF2FF", color: "#4F46E5" },
-                { label: "Upcoming",    value: upcoming,  icon: "bi-calendar-check", bg: "#DCFCE7", color: "#16A34A" },
-                { label: "Passed",      value: passed,    icon: "bi-calendar-x",     bg: "#FEE2E2", color: "#DC2626" },
-                { label: "This Month",  value: thisMonth, icon: "bi-calendar-event", bg: "#FEF3C7", color: "#D97706" },
+                { accent: "indigo", icon: "bi-calendar3",      val: total,     label: "Total",
+                  pct: 100 },
+                { accent: "green",  icon: "bi-calendar-check", val: upcoming,  label: "Upcoming",
+                  pct: total ? (upcoming / total) * 100 : 0 },
+                { accent: "red",    icon: "bi-calendar-x",     val: passed,    label: "Passed",
+                  pct: total ? (passed / total) * 100 : 0 },
+                { accent: "orange", icon: "bi-calendar-event", val: thisMonth, label: "This Month",
+                  pct: total ? (thisMonth / total) * 100 : 0 },
               ].map((s, i) => (
-                <div className="col-6 col-md-3" key={i}>
-                  <div className="items-home card border-0 p-3 d-flex flex-row align-items-center gap-3">
-                    <div style={{ width: 44, height: 44, borderRadius: 12, background: s.bg, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className={`bi ${s.icon}`} style={{ fontSize: 18, color: s.color }}></i>
+                <div key={i} className={`hol-stat ${s.accent}`}>
+                  <div className="hol-stat-top">
+                    <div className="hol-stat-icon">
+                      <i className={`bi ${s.icon}`} />
                     </div>
-                    <div>
-                      <div className="fw-bold text-dark" style={{ fontSize: 22, lineHeight: 1 }}>{s.value}</div>
-                      <div className="text-muted" style={{ fontSize: 12, marginTop: 2 }}>{s.label}</div>
+                    <div className="hol-stat-body">
+                      <div className="hol-stat-val">{s.val}</div>
+                      <div className="hol-stat-label">{s.label}</div>
                     </div>
+                  </div>
+                  <div className="hol-stat-track">
+                    <div className="hol-stat-fill" style={{ width: `${s.pct}%` }} />
                   </div>
                 </div>
               ))}
