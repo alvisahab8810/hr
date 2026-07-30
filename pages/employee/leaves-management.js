@@ -28,6 +28,16 @@ export default function LeaveManagement() {
   const [loadingBalance, setLoadingBalance] = useState(true);
 
   const [leaveHistory, setLeaveHistory] = useState([]);
+
+  // Financial year: April 1 – March 31
+  const nowDate = new Date();
+  const fyYear  = nowDate.getMonth() >= 3 ? nowDate.getFullYear() : nowDate.getFullYear() - 1;
+  const fyStart = new Date(fyYear, 3, 1);
+  const fyEnd   = new Date(fyYear + 1, 2, 31, 23, 59, 59);
+
+  // Filters for Previous Leaves
+  const [filterType,   setFilterType]   = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
   const [loadingLeaves, setLoadingLeaves] = useState(true);
 
   // const [showRetractModal, setShowRetractModal] = useState(false);
@@ -478,7 +488,37 @@ export default function LeaveManagement() {
 
                     {/* Previous Leaves */}
                     <div className="vl-card">
-                      <div className="vl-card-title">Previous Leaves</div>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+                        <div className="vl-card-title" style={{ margin:0 }}>
+                          Leave History
+                          <span style={{ marginLeft:8, fontSize:11, fontWeight:600, color:"#6366F1", background:"#EEF2FF", padding:"2px 8px", borderRadius:20 }}>
+                            Apr {fyYear} – Mar {fyYear + 1}
+                          </span>
+                        </div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          <select
+                            value={filterType}
+                            onChange={e => setFilterType(e.target.value)}
+                            style={{ border:"1.5px solid #E5E7EB", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#374151", background:"#fff", cursor:"pointer" }}
+                          >
+                            <option value="All">All Types</option>
+                            <option value="Casual Leave">Casual Leave</option>
+                            <option value="Sick Leave">Sick Leave</option>
+                            <option value="Earned Leave">Earned Leave</option>
+                            <option value="Half Day">Half Day</option>
+                          </select>
+                          <select
+                            value={filterStatus}
+                            onChange={e => setFilterStatus(e.target.value)}
+                            style={{ border:"1.5px solid #E5E7EB", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#374151", background:"#fff", cursor:"pointer" }}
+                          >
+                            <option value="All">All Status</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Retracted">Retracted</option>
+                          </select>
+                        </div>
+                      </div>
 
                       {/* <div className="vl-leave-item">
                         <div>
@@ -504,52 +544,60 @@ export default function LeaveManagement() {
                         <div className="vl-badge declined">Declined</div>
                       </div> */}
 
-                      {leaveHistory
-                        .filter((l) =>
-                          ["Approved", "Rejected", "Retracted"].includes(
-                            l.status
-                          )
-                        )
-                        .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
-                        .map((leave) => (
-                          <div className="vl-leave-item" key={leave._id}>
-                            <div>
-                              <div className="vl-leave-name">
-                                {new Date(leave.startDate).toDateString()}
-                              </div>
-                              <div className="vl-leave-date">
-                                {leave.leaveType}
-                              </div>
+                      {(() => {
+                        const fyLeaves = leaveHistory
+                          .filter(l => {
+                            const sd = new Date(l.startDate);
+                            return sd >= fyStart && sd <= fyEnd;
+                          })
+                          .filter(l => ["Approved", "Rejected", "Retracted"].includes(l.status))
+                          .filter(l => filterType   === "All" || l.leaveType === filterType)
+                          .filter(l => filterStatus === "All" || l.status    === filterStatus)
+                          .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
 
-                              {leave.adminRemark && (
-                                <div className="vl-admin-remark">
-                                  <strong>Admin Remark:</strong>{" "}
-                                  {leave.adminRemark}
+                        if (loadingLeaves) return <p style={{ textAlign:"center", color:"#9CA3AF", fontSize:13, padding:"20px 0" }}>Loading...</p>;
+
+                        if (fyLeaves.length === 0) {
+                          return (
+                            <div style={{ textAlign:"center", padding:"28px 0", color:"#9CA3AF", fontSize:13 }}>
+                              No leaves found for this period
+                            </div>
+                          );
+                        }
+
+                        return fyLeaves.map(leave => {
+                          const isMultiDay = leave.totalDays > 1;
+                          const dateLabel  = isMultiDay
+                            ? `${new Date(leave.startDate).toDateString()} – ${new Date(leave.endDate).toDateString()}`
+                            : new Date(leave.startDate).toDateString();
+                          return (
+                            <div className="vl-leave-item" key={leave._id}>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div className="vl-leave-name">{dateLabel}</div>
+                                <div className="vl-leave-date" style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                                  {leave.leaveType}
+                                  <span style={{ fontSize:11, fontWeight:700, color:"#6366F1", background:"#EEF2FF", padding:"1px 7px", borderRadius:20 }}>
+                                    {leave.totalDays} {leave.totalDays === 1 ? "day" : "days"}
+                                  </span>
                                 </div>
-                              )}
-                            </div>
-
-                            {/* <div
-                              className={`vl-badge ${leave.status.toLowerCase()}`}
-                            >
-                              {leave.status}
-                            </div> */}
-
-                            <div className="vl-status-stack">
-                              <div
-                                className={`vl-badge ${leave.status.toLowerCase()}`}
-                              >
-                                {leave.status}
+                                {leave.adminRemark && (
+                                  <div className="vl-admin-remark">
+                                    <strong>Admin Remark:</strong> {leave.adminRemark}
+                                  </div>
+                                )}
                               </div>
-
-                              {leave.isSandwich && (
-                                <span className="vl-sandwich-badge">
-                                  Sandwich Leave
-                                </span>
-                              )}
+                              <div className="vl-status-stack">
+                                <div className={`vl-badge ${leave.status.toLowerCase()}`}>
+                                  {leave.status}
+                                </div>
+                                {leave.policyFlags?.sandwichLeave && (
+                                  <span className="vl-sandwich-badge">Sandwich</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
 
