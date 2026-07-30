@@ -379,8 +379,12 @@ export async function generateSalaryForMonth(month, year) {
       if (!ot.startTime || !ot.endTime) return;
       const [sh, sm] = ot.startTime.split(":").map(Number);
       const [eh, em] = ot.endTime.split(":").map(Number);
-      const diff = (eh * 60 + em) - (sh * 60 + sm);
-      if (diff > 0) totalOTMinutes += diff;
+      let diff = (eh * 60 + em) - (sh * 60 + sm);
+      if (diff <= 0) diff += 1440; // overnight shift
+      const extMins = (ot.extensions || [])
+        .filter(e => e.status === "Approved")
+        .reduce((s, e) => s + (e.extraMins || 0), 0);
+      totalOTMinutes += diff + extMins;
     });
 
     const otHours    = Number((totalOTMinutes / 60).toFixed(2));

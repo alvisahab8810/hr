@@ -130,7 +130,9 @@ const calcMins = (start, end) => {
   if (!start || !end) return 0;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
-  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+  let diff = (eh * 60 + em) - (sh * 60 + sm);
+  if (diff <= 0) diff += 1440; // overnight shift: add 24h
+  return diff;
 };
 
 const minsToLabel = (mins) => {

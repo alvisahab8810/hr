@@ -325,6 +325,8 @@ export default function LeaveManagement() {
           .lv-approve-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(34,197,94,.32); }
           .lv-reject-btn { background: #DC2626; color: #fff; box-shadow: 0 3px 10px rgba(239,68,68,.25); }
           .lv-reject-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(239,68,68,.32); }
+          .lv-revoke-btn { background: #7C3AED; color: #fff; box-shadow: 0 3px 10px rgba(124,58,237,.25); }
+          .lv-revoke-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(124,58,237,.32); }
 
           /* ════════════════════════════════════════════
              FILTER PANEL (SIDE DRAWER)
@@ -704,6 +706,36 @@ export default function LeaveManagement() {
                                 }}
                               >
                                 View Document
+                              </button>
+                            )}
+
+                            {/* REVOKE for Approved leaves */}
+                            {leave.status === "Approved" && (
+                              <button
+                                className="lv-revoke-btn lv-view-btn"
+                                style={{ background: "#7C3AED", color: "#fff" }}
+                                onClick={async () => {
+                                  if (!window.confirm(`${leave.employee?.firstName} ${leave.employee?.lastName} ka ${leave.leaveType} (${leave.totalDays} day) revoke karna chahte ho? Balance restore ho jayega aur leave delete ho jayegi.`)) return;
+                                  try {
+                                    const r = await fetch("/api/admin/leave/revoke", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      credentials: "include",
+                                      body: JSON.stringify({ leaveId: leave._id }),
+                                    });
+                                    const d = await r.json();
+                                    if (d.success) {
+                                      toast.success("Leave revoked & balance restored");
+                                      setLeaves(prev => prev.filter(l => l._id !== leave._id));
+                                    } else {
+                                      toast.error(d.message || "Revoke failed");
+                                    }
+                                  } catch {
+                                    toast.error("Server error");
+                                  }
+                                }}
+                              >
+                                <i className="bi bi-trash me-1" />Revoke
                               </button>
                             )}
 
