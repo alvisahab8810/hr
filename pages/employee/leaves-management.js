@@ -510,7 +510,7 @@ export default function LeaveManagement() {
                             l.status
                           )
                         )
-                        .slice(0, 5)
+                        .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
                         .map((leave) => (
                           <div className="vl-leave-item" key={leave._id}>
                             <div>
@@ -757,9 +757,7 @@ export default function LeaveManagement() {
                         <div className="vl-ytd-box used">
                           <div className="vl-ytd-number">
                             {leaveBalance
-                              ? leaveBalance.casual.used +
-                                leaveBalance.sick.used +
-                                leaveBalance.earned.used
+                              ? leaveBalance.casual.used + leaveBalance.sick.used
                               : "--"}
                           </div>
                           <div className="vl-ytd-label">Total Used</div>
@@ -769,8 +767,7 @@ export default function LeaveManagement() {
                           <div className="vl-ytd-number">
                             {leaveBalance
                               ? (leaveBalance.casual.total - leaveBalance.casual.used) +
-                                (leaveBalance.sick.total - leaveBalance.sick.used) +
-                                (leaveBalance.earned.total - leaveBalance.earned.used)
+                                (leaveBalance.sick.total - leaveBalance.sick.used)
                               : "--"}
                           </div>
                           <div className="vl-ytd-label">Total Available</div>

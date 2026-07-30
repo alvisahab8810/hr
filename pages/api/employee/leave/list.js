@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const leaves = await LeaveApplication.find({
       employee: employee._id,
     })
-      .sort({ createdAt: -1 })
+      .sort({ startDate: -1 })
       .lean();
 
     return res.json({
