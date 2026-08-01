@@ -113,6 +113,7 @@ const TaskSchema = new mongoose.Schema(
     submittedAt:      { type: Date, default: null },
     postedAt:         { type: Date, default: null },
     scheduledFor:     { type: Date, default: null },
+    lastApprovalReminderAt: { type: Date, default: null }, // last time client was emailed to approve this pending item
 
     /* ── Dev / project task fields ── */
     workReport:       { type: String, default: "" },
