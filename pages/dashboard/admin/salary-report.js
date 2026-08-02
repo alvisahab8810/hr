@@ -684,7 +684,6 @@ export default function SalaryReport() {
                                         <i className="bi bi-calendar-check"></i> Attendance
                                       </div>
                                       {[
-                                        ["Working Days",  s.workingDays  ?? "—",  ""],
                                         ["Present Days",  s.presentDays  ?? "—",  s.presentDays > 0 ? "green" : ""],
                                         ["Absent Days",   s.absentDays   ?? "—",  s.absentDays  > 0 ? "red"   : "muted"],
                                         ["Late Count",    s.lateCount    ?? "—",  s.lateCount   > 2 ? "red"   : s.lateCount > 0 ? "orange" : "muted"],
@@ -775,7 +774,7 @@ export default function SalaryReport() {
                                       {s.isPartialMonth ? (
                                         <div style={{ marginTop:8, fontSize:11, color:"#4F46E5", textAlign:"center", background:"#fff", borderRadius:6, padding:"4px 8px" }}>
                                           <i className="bi bi-info-circle me-1"></i>
-                                          Partial month — {s.elapsedWorkingDays}/{s.workingDays} days
+                                          Partial month — {Math.min(new Date().getDate(), 30)}/30 days
                                         </div>
                                       ) : (s.earnedSalary != null && s.earnedSalary !== s.basicSalary && (
                                         <div style={{ marginTop:8, fontSize:11, color:"#4F46E5", textAlign:"center", background:"#fff", borderRadius:6, padding:"4px 8px" }}>
