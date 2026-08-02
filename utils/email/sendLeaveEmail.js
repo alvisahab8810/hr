@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { renderActionEmailHtml } from "@/utils/email/actionEmailTemplate";
 
 const transporter = nodemailer.createTransport({
   host: "smtp.hostinger.com",
@@ -19,6 +20,9 @@ export async function sendLeaveAppliedEmail({
   endDate,
   totalDays,
   reason,
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }) {
   // 📩 Employee confirmation
   await transporter.sendMail({
@@ -44,6 +48,23 @@ export async function sendLeaveAppliedEmail({
   });
 
   // 📩 HR notification
+  const html = renderActionEmailHtml({
+    typeLabel: "Leave application",
+    subjectEmoji: "📅",
+    headlineName: employeeName,
+    headlineSuffix: "applied for leave",
+    infoRows: [
+      { label: "Employee", value: employeeName },
+      { label: "Leave Type", value: leaveType },
+      { label: "Dates", value: `${startDate} to ${endDate}` },
+      { label: "Total Days", value: totalDays },
+      { label: "Reason", value: reason, full: true },
+    ],
+    approveUrl,
+    rejectUrl,
+    dashboardUrl,
+  });
+
   await transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
     to: [
@@ -52,22 +73,7 @@ export async function sendLeaveAppliedEmail({
       "ishan@viralon.in",
       "riya@viralon.in",
     ],
-    subject: "New Leave Application Received",
-    html: `
-      <p>A new leave application has been submitted.</p>
-
-      <p>
-        <b>Employee:</b> ${employeeName}<br/>
-        <b>Leave Type:</b> ${leaveType}<br/>
-        <b>Dates:</b> ${startDate} to ${endDate}<br/>
-        <b>Total Days:</b> ${totalDays}<br/>
-        <b>Reason:</b> ${reason}
-      </p>
-
-      <p>Please review it in the Admin Panel.</p>
-
-      <br/>
-      <p>– Viralon HRMS</p>
-    `,
+    subject: `📅 New Leave Application — ${employeeName}`,
+    html,
   });
 }

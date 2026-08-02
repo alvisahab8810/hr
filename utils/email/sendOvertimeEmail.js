@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { renderActionEmailHtml } from "@/utils/email/actionEmailTemplate";
 
 const transporter = nodemailer.createTransport({
   host: "smtp.hostinger.com",
@@ -72,41 +73,42 @@ export async function sendOvertimeAppliedAdminEmail({
   reason,
   tasks,
   otApprover, // 👈 ADD
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }) {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  const diffMins = (eh * 60 + em) - (sh * 60 + sm);
+  const actualMins = diffMins === 0 ? 0 : diffMins > 0 ? diffMins : diffMins + 24 * 60;
+  const duration = `${Math.floor(actualMins / 60)}h ${actualMins % 60}m`;
+
+  const html = renderActionEmailHtml({
+    typeLabel: "Overtime request",
+    subjectEmoji: "🕒",
+    headlineName: employeeName,
+    headlineSuffix: "requested overtime approval",
+    infoRows: [
+      { label: "Employee", value: employeeName },
+      { label: "Email", value: employeeEmail },
+      { label: "Project", value: project },
+      { label: "Date", value: new Date(date).toDateString() },
+      { label: "Type", value: otType },
+      { label: "Time", value: `${startTime} – ${endTime} (${duration})` },
+      { label: "Tasks", value: tasks, full: true },
+      { label: "Reason", value: reason, full: true },
+      { label: "OT access given by", value: otApprover, full: true },
+    ],
+    approveUrl,
+    rejectUrl,
+    dashboardUrl,
+  });
+
   return transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
     to: MANAGEMENT_EMAILS,
-    subject: "📢 New Overtime Request Submitted",
-    html: `
-      <h3>New Overtime Request</h3>
-
-      <p>
-        <b>Employee:</b> ${employeeName}<br/>
-        <b>Email:</b> ${employeeEmail}
-      </p>
-
-      <p>
-        <b>Project:</b> ${project}<br/>
-        <b>Date:</b> ${new Date(date).toDateString()}<br/>
-        <b>OT Type:</b> ${otType}<br/>
-        <b>Time:</b> ${startTime} – ${endTime}
-      </p>
-
-      <p><b>Tasks:</b> ${tasks}</p>
-      <p><b>Reason:</b> ${reason}</p>
-
-
-        <p>
-        <b>OT Access Given By:</b> ${otApprover}
-      </p>
-
-      
-    
-
-      <p>Status: <b>Pending Approval</b></p>
-
-      <p>– Viralon HRMS</p>
-    `,
+    subject: `🕒 New Overtime Request — ${employeeName}${project ? ` (${project})` : ""}`,
+    html,
   });
 }
 

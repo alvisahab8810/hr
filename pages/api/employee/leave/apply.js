@@ -182,9 +182,12 @@ import dbConnect from "@/utils/dbConnect";
 import LeaveApplication from "@/models/employees/LeaveApplication";
 import LeaveBalance from "@/models/employees/LeaveBalance";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
+import { signActionToken } from "@/utils/email/actionToken";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
 
 /* ================= FILE UPLOAD SETUP ================= */
 
@@ -420,6 +423,21 @@ router.post(async (req, res) => {
 
     /* ================= SEND EMAIL (NON-BLOCKING) ================= */
 try {
+  let approveUrl, rejectUrl, dashboardUrl;
+  if (leave.status === "Pending") {
+    const { token: actionToken, expiry: actionTokenExpiry } = signActionToken({
+      type: "leave",
+      id: leave._id,
+    });
+    leave.emailActionToken = actionToken;
+    leave.emailActionTokenExpiry = actionTokenExpiry;
+    await leave.save();
+
+    approveUrl = `${BASE_URL}/action/leave?id=${leave._id}&token=${actionToken}&action=approve`;
+    rejectUrl = `${BASE_URL}/action/leave?id=${leave._id}&token=${actionToken}&action=reject`;
+    dashboardUrl = `${BASE_URL}/dashboard/admin/leaves-management`;
+  }
+
   sendLeaveAppliedEmail({
   employeeEmail: employee.email,
   employeeName: `${employee.firstName} ${employee.lastName}`,
@@ -428,6 +446,9 @@ try {
   endDate,
   totalDays,
   reason,
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }).catch((emailErr) => {
   console.error("Leave email failed:", emailErr);
 });

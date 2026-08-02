@@ -80,6 +80,16 @@ const LeaveApplicationSchema = new mongoose.Schema(
     approvedAt: Date,
     rejectedAt: Date,
     retractedAt: Date,
+
+    emailActionToken: {
+      type: String,
+      default: null,
+    },
+
+    emailActionTokenExpiry: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

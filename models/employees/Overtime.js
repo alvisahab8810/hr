@@ -87,6 +87,16 @@ const overtimeSchema = new mongoose.Schema(
       default: "",
     },
 
+    emailActionToken: {
+      type: String,
+      default: null,
+    },
+
+    emailActionTokenExpiry: {
+      type: Date,
+      default: null,
+    },
+
     extensions: [
       {
         extraMins:   { type: Number, required: true, min: 15 },

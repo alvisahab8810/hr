@@ -6,6 +6,9 @@ import {
 import dbConnect from "@/utils/dbConnect";
 import Overtime from "@/models/employees/Overtime";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
+import { signActionToken } from "@/utils/email/actionToken";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -104,6 +107,19 @@ export default async function handler(req, res) {
       status: "Pending",
     });
 
+    // Mint a one-time-use link for the admin email's Approve/Reject CTAs
+    const { token: actionToken, expiry: actionTokenExpiry } = signActionToken({
+      type: "overtime",
+      id: overtime._id,
+    });
+    overtime.emailActionToken = actionToken;
+    overtime.emailActionTokenExpiry = actionTokenExpiry;
+    await overtime.save();
+
+    const approveUrl = `${BASE_URL}/action/overtime?id=${overtime._id}&token=${actionToken}&action=approve`;
+    const rejectUrl = `${BASE_URL}/action/overtime?id=${overtime._id}&token=${actionToken}&action=reject`;
+    const dashboardUrl = `${BASE_URL}/dashboard/admin/overtime`;
+
     // ================= SEND EMAILS (NON-BLOCKING) =================
 const employeeName = employee.firstName
   ? `${employee.firstName} ${employee.lastName || ""}`
@@ -139,7 +155,9 @@ sendOvertimeAppliedAdminEmail({
   reason,
   tasks,
   otApprover, // 👈 ADD THIS
-
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }).catch((err) =>
   console.error("Admin OT email failed:", err)
 );

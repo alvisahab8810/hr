@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { renderActionEmailHtml } from "@/utils/email/actionEmailTemplate";
 
 const transporter = nodemailer.createTransport({
   host: "smtp.hostinger.com",
@@ -19,6 +20,9 @@ export async function sendReimbursementSubmittedEmail({
   amount,
   paymentDate,
   description,
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }) {
   const adminEmails = [
     "hr@viralon.in",
@@ -48,21 +52,28 @@ export async function sendReimbursementSubmittedEmail({
   });
 
   /* ---- Admin notification ---- */
+  const html = renderActionEmailHtml({
+    typeLabel: "Reimbursement request",
+    subjectEmoji: "🧾",
+    headlineName: employeeName,
+    headlineSuffix: "submitted a reimbursement request",
+    infoRows: [
+      { label: "Employee", value: employeeName },
+      { label: "Category", value: category },
+      { label: "Amount", value: `₹${amount}` },
+      { label: "Payment Date", value: new Date(paymentDate).toDateString() },
+      { label: "Description", value: description, full: true },
+    ],
+    approveUrl,
+    rejectUrl,
+    dashboardUrl,
+  });
+
   await transporter.sendMail({
     from: `"Viralon HR" <info@viralon.in>`,
     to: adminEmails.join(","),
-    subject: "🧾 New Reimbursement Request Submitted",
-    html: `
-      <p>A new reimbursement request has been submitted.</p>
-
-      <p><b>Employee:</b> ${employeeName}</p>
-      <p><b>Category:</b> ${category}</p>
-      <p><b>Amount:</b> ₹${amount}</p>
-      <p><b>Date:</b> ${new Date(paymentDate).toDateString()}</p>
-
-      <p>Please review it in the admin panel.</p>
-      <p>– Viralon HRMS</p>
-    `,
+    subject: `🧾 New Reimbursement Request — ${employeeName}`,
+    html,
   });
 }
 

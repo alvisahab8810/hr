@@ -3,9 +3,12 @@ import { sendReimbursementSubmittedEmail } from "@/utils/email/sendReimbursement
 import dbConnect from "@/utils/dbConnect";
 import Reimbursement from "@/models/employees/Reimbursement";
 import { getEmployeeFromReq } from "@/utils/employees/getEmployeeFromReq";
+import { signActionToken } from "@/utils/email/actionToken";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
 
 export const config = {
   api: {
@@ -57,8 +60,22 @@ export default async function handler(req, res) {
       attachments: files,
     });
 
-    
+
     /* ================= SEND EMAIL (BACKGROUND) ================= */
+const { token: actionToken, expiry: actionTokenExpiry } = signActionToken({
+  type: "reimbursement",
+  id: reimbursement._id,
+});
+reimbursement.emailActionToken = actionToken;
+reimbursement.emailActionTokenExpiry = actionTokenExpiry;
+reimbursement.save().catch((err) => {
+  console.error("Reimbursement token save failed:", err);
+});
+
+const approveUrl = `${BASE_URL}/action/reimbursement?id=${reimbursement._id}&token=${actionToken}&action=approve`;
+const rejectUrl = `${BASE_URL}/action/reimbursement?id=${reimbursement._id}&token=${actionToken}&action=reject`;
+const dashboardUrl = `${BASE_URL}/dashboard/admin/reimbursement`;
+
 sendReimbursementSubmittedEmail({
   employeeEmail: employee.email,
   employeeName: `${employee.personal?.firstName || ""} ${employee.personal?.lastName || ""}`,
@@ -66,6 +83,9 @@ sendReimbursementSubmittedEmail({
   amount,
   paymentDate,
   description,
+  approveUrl,
+  rejectUrl,
+  dashboardUrl,
 }).catch((err) => {
   console.error("Reimbursement submit email failed:", err);
 });
