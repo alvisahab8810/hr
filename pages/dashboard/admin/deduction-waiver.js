@@ -442,6 +442,10 @@ export default function AdminDeductionWaiver() {
                             const originalAbsentTotal = amount + existingWaived;
                             const perAbsent = absentDates.length > 0 ? Math.round(originalAbsentTotal / absentDates.length) : 0;
                             const coveredAbsentCount = perAbsent > 0 ? Math.min(Math.floor(existingWaived / perAbsent), absentDates.length) : 0;
+                            // Waiving the last remaining instance uses the exact remaining amount
+                            // (not the rounded per-day share) so N instance-waives always sum to
+                            // the true total instead of falling short by a rupee or two.
+                            const isLastAbsentInstance = coveredAbsentCount === absentDates.length - 1;
 
                             const instArgs = { empId, empName: name, key: line.key, label: line.label, existingWaived, totalRemaining: amount };
 
@@ -484,7 +488,7 @@ export default function AdminDeductionWaiver() {
                                               <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
                                             ) : (
                                               <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
-                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: perAbsent })}>
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: isLastAbsentInstance ? amount : perAbsent })}>
                                                 {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
                                               </button>
                                             )}
@@ -504,6 +508,7 @@ export default function AdminDeductionWaiver() {
                                         const originalHdTotal = (deductions.halfDay || 0) + hdWaived;
                                         const perHalfDay = halfDayDates.length > 0 ? Math.round(originalHdTotal / halfDayDates.length) : 0;
                                         const coveredHdCount = perHalfDay > 0 ? Math.min(Math.floor(hdWaived / perHalfDay), halfDayDates.length) : 0;
+                                        const isLastHdInstance = coveredHdCount === halfDayDates.length - 1;
                                         const isCovered = i < coveredHdCount;
                                         const instProcKey = `inst_${empId}_halfDay_${d}`;
                                         return (
@@ -516,7 +521,7 @@ export default function AdminDeductionWaiver() {
                                               <span style={{ color: "#15803D", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><i className="bi bi-check-circle-fill" style={{ fontSize: 11 }} /> Waived</span>
                                             ) : (
                                               <button className="dw-btn override-btn" disabled={!!processing} style={{ padding: "3px 9px", fontSize: 11 }}
-                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: perHalfDay })}>
+                                                onClick={() => handleInstanceWaive({ ...instArgs, instanceAmount: isLastHdInstance ? amount : perHalfDay })}>
                                                 {processing === instProcKey ? <span className="spinner-border spinner-border-sm" style={{ width: 10, height: 10 }} /> : <><i className="bi bi-shield-check" style={{ fontSize: 10 }} /> Waive</>}
                                               </button>
                                             )}

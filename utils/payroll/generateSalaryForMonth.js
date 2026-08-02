@@ -104,22 +104,6 @@ export function countElapsedWorkingDays(allDates, holidayDates, todayStr) {
   return count || 1;
 }
 
-// Count working days within [fromStr, toStr] inclusive (excluding Sundays +
-// public holidays, 3rd Saturday = 0.5) — the numerator for earnedSalary
-// proration: how many days this employee actually had payable attendance
-// for, from their effectiveStart (join date, if mid-month) to cutoffStr.
-export function countWorkingDaysInRange(allDates, holidayDates, fromStr, toStr) {
-  let count = 0;
-  for (const dk of allDates) {
-    if (dk < fromStr || dk > toStr) continue;
-    if (isSundayStr(dk))            continue;
-    if (holidayDates.has(dk))       continue;
-    if (isThirdSaturdayStr(dk))     { count += 0.5; continue; }
-    count++;
-  }
-  return count;
-}
-
 // Recomputes and upserts SalaryReport rows for every active employee for
 // the given (0-indexed) month/year. Returns the saved documents.
 export async function generateSalaryForMonth(month, year) {
@@ -199,15 +183,25 @@ export async function generateSalaryForMonth(month, year) {
     // Earned salary — fixed 30-day-month basis, matching perDaySalary above:
     //  - Full month, no join/exit boundary → full basicSalary, regardless of
     //    how many actual days that particular month has (28-31).
-    //  - Otherwise (joined mid-month, or report generated mid-month for the
-    //    current month) → perDaySalary(basic/30) × working days actually
-    //    covered from effectiveStart to cutoffStr (Sundays excluded — same
-    //    day-counting convention as attendance/deductions use).
+    //  - Joined mid-month → paid for (30 − join-day-of-month) days, e.g.
+    //    joined on the 6th → 30−6 = 24 days' pay; joined on the 19th →
+    //    30−19 = 11 days' pay. Always relative to a fixed 30-day month, not
+    //    the real number of days in this particular month.
+    //  - Already employed, current month still in progress (live estimate)
+    //    → paid for calendar days elapsed so far this month, capped to 30.
     const isFullMonthNoBoundary = effectiveStart === dateFrom && cutoffStr === dateTo;
-    const employeeElapsedWorkingDays = countWorkingDaysInRange(allDates, holidayDates, effectiveStart, cutoffStr);
-    const earnedSalary = isFullMonthNoBoundary
-      ? basicSalary
-      : Number((perDaySalary * employeeElapsedWorkingDays).toFixed(2));
+    let earnedSalary;
+    if (isFullMonthNoBoundary) {
+      earnedSalary = basicSalary;
+    } else if (effectiveStart !== dateFrom) {
+      const joinDay      = Number(effectiveStart.slice(-2));
+      const daysPayable  = Math.max(0, 30 - joinDay);
+      earnedSalary = Number((perDaySalary * daysPayable).toFixed(2));
+    } else {
+      const cutoffDay    = Number(cutoffStr.slice(-2));
+      const daysPayable  = Math.min(cutoffDay, 30);
+      earnedSalary = Number((perDaySalary * daysPayable).toFixed(2));
+    }
 
     // ── Attendance records ───────────────────────────────────────────────
     const attRecords = await Attendance.find({
@@ -277,9 +271,10 @@ export async function generateSalaryForMonth(month, year) {
         continue;
       }
 
-      // 3rd Saturday = paid half-day off — always presentDays += 0.5, never deducted
+      // 3rd Saturday — company pays a full day for it, despite being a
+      // half-working-day, so it counts as a full present day, never deducted.
       if (isThirdSaturdayStr(dk)) {
-        presentDays += 0.5;
+        presentDays += 1;
         continue;
       }
 
