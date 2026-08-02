@@ -75,8 +75,9 @@ function countElapsedWorkingDays(allDates, holidayDates, cutoff) {
   return c || 1;
 }
 
-// Count working days within [fromStr, toStr] inclusive — used to prorate a
-// joining-month employee's earned salary from their actual dateOfJoining.
+// Count working days within [fromStr, toStr] inclusive (excluding Sundays +
+// public holidays, 3rd Saturday = 0.5) — numerator for earnedSalary
+// proration: payable working days from effectiveStart to cutoffStr.
 function countWorkingDaysInRange(allDates, holidayDates, fromStr, toStr) {
   let count = 0;
   for (const dk of allDates) {
@@ -151,12 +152,18 @@ export default async function handler(req, res) {
     const totalWorkingDays   = countWorkingDays(allDates, holidayDates);
     const elapsedWorkingDays = countElapsedWorkingDays(allDates, holidayDates, cutoffStr);
 
-    // ── Per-day rate & earned salary ─────────────────────────────────────────
+    // ── Per-day rate & earned salary — fixed 30-day-month basis ─────────────
     const perDaySalary = basicSalary / 30;
-    // Prorated from this employee's own effectiveStart (their join date if
-    // they joined mid-month, else the 1st) — not the 1st for everyone.
+    // Full month, no join/exit boundary → full basicSalary regardless of the
+    // actual days in that particular month. Otherwise (joined mid-month, or
+    // live-calculated mid-month for the current month) → perDaySalary ×
+    // working days covered from effectiveStart to cutoffStr (Sundays
+    // excluded — same day-counting convention as attendance/deductions use).
+    const isFullMonthNoBoundary = effectiveStart === dateFrom && cutoffStr === dateTo;
     const employeeElapsedWorkingDays = countWorkingDaysInRange(allDates, holidayDates, effectiveStart, cutoffStr);
-    const earnedSalary = Number((basicSalary * (employeeElapsedWorkingDays / totalWorkingDays)).toFixed(2));
+    const earnedSalary = isFullMonthNoBoundary
+      ? basicSalary
+      : Number((perDaySalary * employeeElapsedWorkingDays).toFixed(2));
 
     // ── Attendance ───────────────────────────────────────────────────────────
     const attRecords = await Attendance.find({
@@ -308,7 +315,7 @@ export default async function handler(req, res) {
     });
 
     const otHours    = Number((totalOTMinutes / 60).toFixed(2));
-    const hourlyRate = basicSalary / (totalWorkingDays * WORKING_HOURS_PER_DAY);
+    const hourlyRate = basicSalary / (30 * WORKING_HOURS_PER_DAY); // fixed 30-day-month basis
     const otAmount   = Number((otHours * hourlyRate * OT_MULTIPLIER).toFixed(2));
 
     // ── Net pay ──────────────────────────────────────────────────────────────

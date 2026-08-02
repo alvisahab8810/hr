@@ -104,9 +104,10 @@ export function countElapsedWorkingDays(allDates, holidayDates, todayStr) {
   return count || 1;
 }
 
-// Count working days within [fromStr, toStr] inclusive — used to prorate a
-// joining-month employee's earned salary from their actual dateOfJoining
-// instead of the 1st of the month.
+// Count working days within [fromStr, toStr] inclusive (excluding Sundays +
+// public holidays, 3rd Saturday = 0.5) — the numerator for earnedSalary
+// proration: how many days this employee actually had payable attendance
+// for, from their effectiveStart (join date, if mid-month) to cutoffStr.
 export function countWorkingDaysInRange(allDates, holidayDates, fromStr, toStr) {
   let count = 0;
   for (const dk of allDates) {
@@ -195,12 +196,18 @@ export async function generateSalaryForMonth(month, year) {
     // (only matters if they joined during this exact month).
     const effectiveStart = joinDateStr && joinDateStr > dateFrom ? joinDateStr : dateFrom;
 
-    // Earned salary = basicSalary prorated by this employee's own elapsed
-    // working days (from their effectiveStart, not necessarily the 1st) over
-    // the full month's working days. For employees who joined before this
-    // month, effectiveStart === dateFrom, so this is unchanged from before.
+    // Earned salary — fixed 30-day-month basis, matching perDaySalary above:
+    //  - Full month, no join/exit boundary → full basicSalary, regardless of
+    //    how many actual days that particular month has (28-31).
+    //  - Otherwise (joined mid-month, or report generated mid-month for the
+    //    current month) → perDaySalary(basic/30) × working days actually
+    //    covered from effectiveStart to cutoffStr (Sundays excluded — same
+    //    day-counting convention as attendance/deductions use).
+    const isFullMonthNoBoundary = effectiveStart === dateFrom && cutoffStr === dateTo;
     const employeeElapsedWorkingDays = countWorkingDaysInRange(allDates, holidayDates, effectiveStart, cutoffStr);
-    const earnedSalary = Number((basicSalary * (employeeElapsedWorkingDays / totalWorkingDays)).toFixed(2));
+    const earnedSalary = isFullMonthNoBoundary
+      ? basicSalary
+      : Number((perDaySalary * employeeElapsedWorkingDays).toFixed(2));
 
     // ── Attendance records ───────────────────────────────────────────────
     const attRecords = await Attendance.find({
@@ -388,7 +395,7 @@ export async function generateSalaryForMonth(month, year) {
     });
 
     const otHours    = Number((totalOTMinutes / 60).toFixed(2));
-    const hourlyRate = basicSalary / (totalWorkingDays * WORKING_HOURS_PER_DAY);
+    const hourlyRate = basicSalary / (30 * WORKING_HOURS_PER_DAY); // fixed 30-day-month basis
     const otAmount   = Number((otHours * hourlyRate * OT_MULTIPLIER).toFixed(2));
 
     // ── Net Pay = earned salary − deductions + reimbursements + OT ───────

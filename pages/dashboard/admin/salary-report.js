@@ -755,7 +755,7 @@ export default function SalaryReport() {
                                       </div>
                                       {[
                                         ["Basic Salary",   M(s.basicSalary),  ""],
-                                        ...(s.isPartialMonth && s.earnedSalary
+                                        ...(s.earnedSalary != null && s.earnedSalary !== s.basicSalary
                                           ? [["Earned (pro-rated)", M(s.earnedSalary), "blue"]]
                                           : []),
                                         ["Deductions",     M(d.total, "− "),      d.total    > 0 ? "red"   : "muted"],
@@ -772,12 +772,17 @@ export default function SalaryReport() {
                                         <span className="pay-total-label">Net Pay</span>
                                         <span className="pay-total-val">{M(s.netPay)}</span>
                                       </div>
-                                      {s.isPartialMonth && (
+                                      {s.isPartialMonth ? (
                                         <div style={{ marginTop:8, fontSize:11, color:"#4F46E5", textAlign:"center", background:"#fff", borderRadius:6, padding:"4px 8px" }}>
                                           <i className="bi bi-info-circle me-1"></i>
                                           Partial month — {s.elapsedWorkingDays}/{s.workingDays} days
                                         </div>
-                                      )}
+                                      ) : (s.earnedSalary != null && s.earnedSalary !== s.basicSalary && (
+                                        <div style={{ marginTop:8, fontSize:11, color:"#4F46E5", textAlign:"center", background:"#fff", borderRadius:6, padding:"4px 8px" }}>
+                                          <i className="bi bi-info-circle me-1"></i>
+                                          Pro-rated — joined mid-month
+                                        </div>
+                                      ))}
                                     </div>
 
                                   </div>
