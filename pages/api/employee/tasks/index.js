@@ -35,11 +35,19 @@ const CONTENT_TYPES = ["reel", "post", "carousel", "story"];
 const DELIV_KEY     = { reel: "reels", post: "posts", carousel: "carousels", story: "stories" };
 const CT_LABEL      = { reel: "Reel", post: "Post", carousel: "Carousel", story: "Story" };
 
+// Runs a heavy per-brand/per-content-type loop with many sequential DB round-trips.
+// Throttled below so it doesn't re-run on every single page load/refresh.
+const AUTOGEN_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+let _lastAutoGenAt = 0;
+
 // Auto-create production tasks at S4 for ALL content types for the current month,
 // based on each brand's weeklySchedule + monthlyDeliverables.
 // Idempotent — safe to call on every DM employee request.
 // Tasks go directly to S4 (Posted/Live) — no dependency on other employees' stages.
 async function autoGenerateProductionTasks() {
+  if (Date.now() - _lastAutoGenAt < AUTOGEN_THROTTLE_MS) return;
+  _lastAutoGenAt = Date.now();
+
   const now   = new Date();
   const year  = now.getFullYear();
   const month = now.getMonth();

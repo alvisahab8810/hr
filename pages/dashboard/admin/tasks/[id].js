@@ -163,6 +163,11 @@ export default function TaskDetail() {
   const [savingScript,  setSavingScript]  = useState(false);
 
   async function saveScript() {
+    const hadContent = !!(task?.description?.trim() || task?.caption?.trim());
+    const nowEmpty   = !editScript.trim() && !editCaption.trim();
+    if (hadContent && nowEmpty) {
+      if (!window.confirm("Script aur Caption dono empty hain — pehle se maujood content permanently delete ho jayega. Confirm karein?")) return;
+    }
     setSavingScript(true);
     try {
       const r = await fetch(`/api/admin/tasks/${id}`, {
@@ -215,6 +220,7 @@ export default function TaskDetail() {
         setTask(data.task);
         setComments(data.comments || []);
         setActivity(data.activity || []);
+        return data.task;
       } else toast.error("Failed to load task");
     } catch { toast.error("Network error"); }
     finally { setLoading(false); }
@@ -1077,7 +1083,7 @@ export default function TaskDetail() {
                       <div style={{ fontWeight: 800, fontSize: 13, color: titleColor, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                         <i className={`bi ${titleIcon}`} />
                         {titleText}
-                        <button onClick={() => { setEditScript(task.description || ""); setEditCaption(task.caption || ""); setEditingScript(true); }}
+                        <button onClick={async () => { const fresh = await fetchTask(); const t = fresh || task; setEditScript(t.description || ""); setEditCaption(t.caption || ""); setEditingScript(true); }}
                           style={{ marginLeft: "auto", background: "#EEF2FF", border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: "#4338CA", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                           <i className="bi bi-pencil" /> Edit Script
                         </button>
