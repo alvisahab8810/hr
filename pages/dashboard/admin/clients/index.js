@@ -38,6 +38,11 @@ const PAGE_CSS = `
 .form-input    { width:100%;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;font-family:inherit; }
 .form-input:focus { border-color:#5A57FB; }
 .form-row-2    { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.email-chip-box { display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%;padding:6px 8px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px; }
+.email-chip-box:focus-within { border-color:#5A57FB; }
+.email-chip     { display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;background:#EEF2FF;color:#4338CA;border-radius:16px;font-size:12px;font-weight:600; }
+.email-chip button { border:none;background:none;color:#4338CA;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;font-family:inherit; }
+.email-chip-input { flex:1;min-width:140px;border:none;outline:none;font-size:13px;padding:4px 2px;font-family:inherit; }
 .btn-primary   { padding:9px 20px;background:linear-gradient(135deg,#5A57FB,#4845d4);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit; }
 .btn-primary:disabled { opacity:.6;cursor:not-allowed; }
 .btn-ghost     { padding:9px 20px;background:none;color:#64748b;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit; }
@@ -89,20 +94,50 @@ const PAGE_CSS = `
 `;
 
 /* ─── Invite Modal ───────────────────────────────────────────────────────── */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function InviteModal({ brands, onClose, onSuccess }) {
-  const [form, setForm]   = useState({ name: "", email: "", password: "", brandId: "", sendEmail: true });
+  const [form, setForm]   = useState({ name: "", emails: [], password: "", brandId: "", sendEmail: true });
+  const [emailInput, setEmailInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
   const [error, setError]     = useState("");
 
+  function addEmail(raw) {
+    const val = raw.trim().toLowerCase().replace(/,$/, "");
+    if (!val) return;
+    if (!EMAIL_RE.test(val)) { setError(`"${val}" is not a valid email`); return; }
+    setForm(p => p.emails.includes(val) ? p : { ...p, emails: [...p.emails, val] });
+    setEmailInput("");
+  }
+  function removeEmail(val) {
+    setForm(p => ({ ...p, emails: p.emails.filter(e => e !== val) }));
+  }
+  function handleEmailKeyDown(e) {
+    if (e.key === "Enter" || e.key === "," || e.key === " ") {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === "Backspace" && !emailInput && form.emails.length) {
+      removeEmail(form.emails[form.emails.length - 1]);
+    }
+  }
+
   async function submit() {
     setError("");
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim() || !form.brandId) {
-      setError("All fields are required"); return;
+    let emails = form.emails;
+    const pending = emailInput.trim().toLowerCase().replace(/,$/, "");
+    if (pending) {
+      if (!EMAIL_RE.test(pending)) { setError(`"${pending}" is not a valid email`); return; }
+      emails = emails.includes(pending) ? emails : [...emails, pending];
+      setForm(p => ({ ...p, emails }));
+      setEmailInput("");
+    }
+    if (!form.name.trim() || emails.length === 0 || !form.password.trim() || !form.brandId) {
+      setError("All fields are required — add at least one email"); return;
     }
     setLoading(true);
     try {
-      const r = await fetch("/api/admin/clients/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const r = await fetch("/api/admin/clients/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, emails }) });
       const d = await r.json();
       if (d.success) { setResult(d); onSuccess(d.client); }
       else setError(d.message || "Failed");
@@ -142,9 +177,27 @@ function InviteModal({ brands, onClose, onSuccess }) {
         </div>
         <div className="modal-body">
           {error && <div className="alert-error"><i className="bi bi-exclamation-circle-fill" /> {error}</div>}
-          <div className="form-row-2">
-            <div className="form-field"><label>Client Name *</label><input className="form-input" placeholder="Rohan Mehra" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div className="form-field"><label>Email Address *</label><input className="form-input" type="email" placeholder="rohan@company.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+          <div className="form-field"><label>Client Name *</label><input className="form-input" placeholder="Rohan Mehra" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} /></div>
+          <div className="form-field">
+            <label>Email Address(es) *</label>
+            <div className="email-chip-box">
+              {form.emails.map(em => (
+                <span key={em} className="email-chip">
+                  {em}
+                  <button type="button" onClick={() => removeEmail(em)} aria-label={`Remove ${em}`}>&times;</button>
+                </span>
+              ))}
+              <input
+                className="email-chip-input"
+                type="email"
+                placeholder={form.emails.length ? "Add another…" : "rohan@company.com"}
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                onKeyDown={handleEmailKeyDown}
+                onBlur={() => emailInput.trim() && addEmail(emailInput)}
+              />
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Press Enter or comma to add. The first email is used as the login username; everyone added gets the invite.</div>
           </div>
           <div className="form-field">
             <label>Brand *</label>

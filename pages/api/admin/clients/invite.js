@@ -20,21 +20,32 @@ export default async function handler(req, res) {
   await dbConnect();
 
   try {
-    const { name, email, password, brandId, sendEmail = true } = req.body;
+    const { name, password, brandId, sendEmail = true } = req.body;
+    let { emails, email } = req.body;
+
+    // Accept either the new `emails` array or the legacy single `email` field
+    if (!Array.isArray(emails) || emails.length === 0) {
+      emails = email ? [email] : [];
+    }
+    emails = [...new Set(emails.map(e => (e || "").toLowerCase().trim()).filter(Boolean))];
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmail = emails.find(e => !EMAIL_RE.test(e));
 
     if (!name?.trim())     return res.status(400).json({ success: false, message: "Name is required" });
-    if (!email?.trim())    return res.status(400).json({ success: false, message: "Email is required" });
+    if (emails.length === 0) return res.status(400).json({ success: false, message: "At least one email is required" });
+    if (invalidEmail)      return res.status(400).json({ success: false, message: `"${invalidEmail}" is not a valid email` });
     if (!password?.trim()) return res.status(400).json({ success: false, message: "Password is required" });
     if (!brandId)          return res.status(400).json({ success: false, message: "Brand is required" });
+
+    const primaryEmail = emails[0];
 
     const brand = await Brand.findById(brandId);
     if (!brand) return res.status(404).json({ success: false, message: "Brand not found" });
 
     // Block early if brand is already linked to a different client
     if (brand.clientId) {
-      const emailNorm = email.toLowerCase().trim();
       const existingOwner = await Client.findById(brand.clientId).select("name email").lean();
-      if (existingOwner && existingOwner.email !== emailNorm) {
+      if (existingOwner && existingOwner.email !== primaryEmail) {
         return res.status(409).json({
           success: false,
           message: `Brand "${brand.name}" is already linked to ${existingOwner.name} (${existingOwner.email}). Please remove them first via Edit Client, then invite again.`,
@@ -44,8 +55,8 @@ export default async function handler(req, res) {
 
     const hashed = await bcrypt.hash(password, 10);
 
-    // Upsert client by email
-    let client = await Client.findOne({ email: email.toLowerCase().trim() });
+    // Upsert client by primary (first) email — this remains the single login username
+    let client = await Client.findOne({ email: primaryEmail });
     if (client) {
       client.name        = name.trim();
       client.password    = hashed;
@@ -57,7 +68,7 @@ export default async function handler(req, res) {
       client = await Client.create({
         clientId,
         name:        name.trim(),
-        email:       email.toLowerCase().trim(),
+        email:       primaryEmail,
         password:    hashed,
         passwordSet: true,
         status:      "Active",
@@ -103,7 +114,7 @@ export default async function handler(req, res) {
 
         await transporter.sendMail({
           from:    `"Viralon" <info@viralon.in>`,
-          to:      client.email,
+          to:      emails.join(", "),
           subject: `Your ${brand.name} client portal is ready — Welcome aboard!`,
           html: `<!DOCTYPE html>
 <html lang="en">
@@ -260,7 +271,9 @@ export default async function handler(req, res) {
       loginUrl,
       emailSent,
       message: emailSent
-        ? `Invite sent to ${client.email}`
+        ? emails.length > 1
+          ? `Invite sent to ${emails.length} emails: ${emails.join(", ")}`
+          : `Invite sent to ${emails[0]}`
         : `Client created. Email failed — share login URL manually: ${loginUrl}`,
     });
   } catch (err) {
