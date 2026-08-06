@@ -715,6 +715,10 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
   }, [initialTask?._id]);
 
   function loadTask(t) {
+    // A pending autosave timer from the PREVIOUS task must not fire after we've
+    // switched — it would silently PATCH the old task with stale/mismatched
+    // script+caption state (or overwrite it with this new task's blank fields).
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setTask(t);
     setPillar(t.pillar || "");
     setRefLink(t.referenceLink || "");
@@ -724,6 +728,11 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
     setLastSaved(null);
   }
 
+  // Also clear any pending autosave if the editor unmounts (tab switch/navigation away).
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
   function navTask(dir) {
     const ni = taskIdx + dir;
     if (ni >= 0 && ni < scriptTasks.length) loadTask(scriptTasks[ni]);
@@ -732,6 +741,15 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
   async function saveTask(silent = false) {
     if (!task) return;
     if (task.status === "review" || task.status === "completed") return;
+    // Guard against silently wiping content that was already saved — e.g. a stale
+    // autosave timer firing after switching tasks, or any other race. Autosave just
+    // skips; an explicit manual Save asks for confirmation first.
+    const hadContent = !!(task.description?.trim() || task.caption?.trim());
+    const nowEmpty   = !script.trim() && !caption.trim();
+    if (hadContent && nowEmpty) {
+      if (silent) return;
+      if (!window.confirm("Script aur Caption dono empty hain — pehle se maujood content permanently delete ho jayega. Confirm karein?")) return;
+    }
     setSaving(true);
     try {
       const r = await fetch(`/api/employee/tasks/${task._id}`, {
@@ -810,7 +828,8 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
         setTags(newTags);
         setTagInput("");
         // Save immediately so hashtags persist without needing a manual save
-        if (task && task.status !== "review" && task.status !== "completed") {
+        const hadContentTag1 = !!(task?.description?.trim() || task?.caption?.trim());
+        if (task && task.status !== "review" && task.status !== "completed" && !(hadContentTag1 && !script.trim() && !caption.trim())) {
           fetch(`/api/employee/tasks/${task._id}`, {
             method: "PATCH", headers: authH(),
             body: JSON.stringify({ description: script, caption, referenceLink: refLink, tags: newTags }),
@@ -1210,7 +1229,8 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
                 <span key={tag} onClick={isLocked ? undefined : () => {
                   const newTags = tags.filter(x => x !== tag);
                   setTags(newTags);
-                  if (task && task.status !== "review" && task.status !== "completed") {
+                  const hadContentTag2 = !!(task?.description?.trim() || task?.caption?.trim());
+                  if (task && task.status !== "review" && task.status !== "completed" && !(hadContentTag2 && !script.trim() && !caption.trim())) {
                     fetch(`/api/employee/tasks/${task._id}`, {
                       method: "PATCH", headers: authH(),
                       body: JSON.stringify({ description: script, caption, referenceLink: refLink, tags: newTags }),
