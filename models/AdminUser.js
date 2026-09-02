@@ -14,6 +14,7 @@ const permSchema = {
   tasks:        { type: Boolean, default: false },
   projects:     { type: Boolean, default: false },
   clients:      { type: Boolean, default: false },
+  blogs:        { type: Boolean, default: false },
 };
 
 const AdminUserSchema = new mongoose.Schema(

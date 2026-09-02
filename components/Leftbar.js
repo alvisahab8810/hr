@@ -594,28 +594,32 @@ export default function Leftbar({ role = "admin" }) {
 
       <aside id="leftsidebar" className="sidebar mobile-none" ref={sidebarRef}>
 
-        {/* ── Admin brand badge ── */}
-        <div style={{
-          margin: "20px 10px 4px",
-          padding: "12px 14px",
-          background: "linear-gradient(135deg,#EEF2FF,#E0E7FF)",
-          borderRadius: 12,
-          border: "1px solid rgba(99,102,241,.15)",
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
+        {/* ── Admin brand badge (click → dashboard hub) ── */}
+        <Link href="/dashboard/hub" style={{ textDecoration: "none" }} title="Switch dashboard">
           <div style={{
-            width: 34, height: 34, borderRadius: 9,
-            background: "linear-gradient(135deg,#6366F1,#818CF8)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
+            margin: "20px 10px 4px",
+            padding: "12px 14px",
+            background: "linear-gradient(135deg,#EEF2FF,#E0E7FF)",
+            borderRadius: 12,
+            border: "1px solid rgba(99,102,241,.15)",
+            display: "flex", alignItems: "center", gap: 10,
+            cursor: "pointer",
           }}>
-            <i className="bi bi-shield-fill-check" style={{ fontSize: 15, color: "#fff" }} />
+            <div style={{
+              width: 34, height: 34, borderRadius: 9,
+              background: "linear-gradient(135deg,#6366F1,#818CF8)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              <i className="bi bi-shield-fill-check" style={{ fontSize: 15, color: "#fff" }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.2 }}>Admin Panel</div>
+              <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>Payroll Management</div>
+            </div>
+            <i className="bi bi-grid-fill" style={{ fontSize: 13, color: "#818CF8", flexShrink: 0 }} />
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.2 }}>Admin Panel</div>
-            <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>Payroll Management</div>
-          </div>
-        </div>
+        </Link>
 
         {/* Divider */}
         <div style={{ height: 1, background: "#F1F5F9", margin: "8px 10px" }} />
@@ -875,6 +879,23 @@ export default function Leftbar({ role = "admin" }) {
               </li>
 
             </ul>
+          </li>
+
+          {/* ── Divider before section switch ── */}
+          <li style={{ listStyle: "none" }}>
+            <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
+          </li>
+
+          {/* ── Switch to Website dashboard ── */}
+          <li style={{ listStyle: "none" }}>
+            <Link
+              href="/dashboard/website"
+              className="waves-effect waves-block"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}
+            >
+              <i className="bi bi-globe2" style={{ fontSize: 17, width: 20, textAlign: "center", flexShrink: 0, color: "rgba(0,0,0,0.5)" }} />
+              <span style={{ flex: 1 }}>Switch to Website</span>
+            </Link>
           </li>
 
         </ul>

@@ -21,6 +21,7 @@ const PERMISSIONS = [
   { key: "tasks",        label: "Tasks",         icon: "bi-check2-square"       },
   { key: "projects",     label: "Projects",      icon: "bi-kanban-fill"         },
   { key: "clients",      label: "Clients",       icon: "bi-briefcase-fill"      },
+  { key: "blogs",        label: "Blogs",         icon: "bi-file-earmark-text-fill" },
   { key: "community",   label: "Community",     icon: "bi-chat-dots-fill"      },
 ];
 

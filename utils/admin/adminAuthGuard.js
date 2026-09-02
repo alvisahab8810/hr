@@ -1,6 +1,7 @@
 // Accepts both main-admin (admin_auth=true cookie) and
 // sub-admin/manager (admin_user_token JWT cookie) sessions.
 import jwt from "jsonwebtoken";
+import { readSales, salesMayCall } from "@/utils/salesAuth";
 
 const JWT_SECRET = process.env.JWT_SECRET || "viralon_invite_secret_2024";
 
@@ -20,6 +21,9 @@ export function adminGuard(req, res) {
       // expired or invalid — fall through to 401
     }
   }
+
+  // Salesperson session — only the CRM endpoints, never payroll or the site editors.
+  if (readSales(cookie) && salesMayCall(req.url || "")) return true;
 
   res.status(401).json({ success: false, message: "Unauthorized" });
   return false;

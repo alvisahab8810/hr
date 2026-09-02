@@ -17,40 +17,6 @@ function getGreeting() {
   }
 }
 
-// Brand-colour particle field — fixed pseudo-random layout so it's stable across renders
-const PARTICLE_COLORS = ["#6366F1", "#7C3AED", "#F97316", "#A5B4FC"];
-const PARTICLES = Array.from({ length: 26 }, (_, i) => {
-  const seed = i * 137.5;
-  return {
-    left:     ((seed * 1.7) % 100),
-    top:      ((seed * 2.3) % 100),
-    size:     4 + (i % 5) * 2.2,
-    color:    PARTICLE_COLORS[i % PARTICLE_COLORS.length],
-    duration: 10 + (i % 6) * 3,
-    delay:    -(i % 10) * 1.3,
-    drift:    (i % 2 === 0 ? 1 : -1) * (14 + (i % 4) * 8),
-  };
-});
-
-// Colourful balls that rain down from the top and pile up near the bottom, lane by lane
-const BALL_COLORS = ["#6366F1", "#7C3AED", "#F97316", "#EC4899", "#3B82F6", "#F59E0B", "#10B981"];
-const LANE_COUNT       = 16;
-const STACK_PER_LANE   = 3;
-const BALLS = Array.from({ length: LANE_COUNT * STACK_PER_LANE }, (_, idx) => {
-  const lane  = Math.floor(idx / STACK_PER_LANE);
-  const stack = idx % STACK_PER_LANE;
-  const size  = 9 + ((idx * 37) % 4) * 2.6;
-  const floorVh = 97 - (lane % 4) * 1.4;
-  return {
-    left:     (lane + 0.5) * (100 / LANE_COUNT) + (lane % 2 === 0 ? -1.4 : 1.4),
-    size,
-    color:    BALL_COLORS[idx % BALL_COLORS.length],
-    duration: 6 + ((idx * 53) % 10) * 0.75,
-    delay:    -((idx * 29) % 24) * 0.55,
-    land:     `calc(${floorVh}vh - ${stack * (size + 5)}px - ${size}px)`,
-  };
-});
-
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -87,7 +53,7 @@ export default function LoginPage() {
 
       if (data.success) {
         setStatus("success");
-        setTimeout(() => router.push("/"), 950);
+        setTimeout(() => router.push("/dashboard/hub"), 950);
       } else {
         showError("Incorrect username or password");
       }
@@ -106,35 +72,13 @@ export default function LoginPage() {
           html, body { margin:0; padding:0; }
           body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:#fff; }
 
-          @keyframes vl-particle {
-            0%   { transform: translate(0,0); }
-            50%  { transform: translate(var(--drift), -26px); }
-            100% { transform: translate(0,0); }
-          }
           @keyframes vl-in { 0% { opacity:0; transform:translateY(18px); } 100% { opacity:1; transform:translateY(0); } }
           @keyframes vl-glow { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:.95; transform:scale(1.08); } }
-          @keyframes vl-fall-pile {
-            0%   { transform: translateY(-30px) scale(.4); opacity:0; }
-            10%  { transform: translateY(-10px) scale(1);  opacity:1; }
-            62%  { transform: translateY(var(--land)) scale(1); opacity:1; }
-            82%  { transform: translateY(var(--land)) scale(1); opacity:1; }
-            96%  { transform: translateY(var(--land)) scale(.5); opacity:0; }
-            100% { transform: translateY(-30px) scale(.4); opacity:0; }
-          }
-
           .vl-wrap { min-height:100vh; width:100%; position:relative; overflow:hidden;
             display:flex; align-items:center; justify-content:center; padding:24px 16px; background:#fff; }
 
           .vl-fade-corner { position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none;
             animation: vl-glow 7s ease-in-out infinite; }
-
-          .vl-particle { position:absolute; border-radius:50%; pointer-events:none;
-            animation-name: vl-particle; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
-
-          .vl-ball { position:absolute; top:0; border-radius:50%; pointer-events:none;
-            background-image: radial-gradient(circle at 30% 26%, rgba(255,255,255,.85), rgba(255,255,255,0) 45%);
-            box-shadow: inset -3px -3px 6px rgba(0,0,0,.18), 0 3px 7px rgba(0,0,0,.14);
-            animation-name: vl-fall-pile; animation-timing-function: cubic-bezier(.42,0,.58,1); animation-iteration-count: infinite; }
 
           .vl-dotgrid { position:absolute; inset:0; pointer-events:none; opacity:.5;
             background-image: radial-gradient(#E5E7EB 1px, transparent 1px);
@@ -207,30 +151,6 @@ export default function LoginPage() {
         <div className="vl-fade-corner" style={{ width:440, height:440, bottom:-170, right:-150, background:"radial-gradient(circle, rgba(249,115,22,.11), transparent 70%)", animationDelay:"-2.5s" }} />
         <div className="vl-fade-corner" style={{ width:320, height:320, top:"20%", right:-110, background:"radial-gradient(circle, rgba(124,58,237,.10), transparent 70%)", animationDelay:"-4.5s" }} />
         <div className="vl-fade-corner" style={{ width:280, height:280, bottom:"12%", left:-100, background:"radial-gradient(circle, rgba(165,180,252,.14), transparent 70%)", animationDelay:"-1.2s" }} />
-
-        {/* Floating brand-colour particles */}
-        {PARTICLES.map((p, i) => (
-          <div key={i} className="vl-particle" style={{
-            left: `${p.left}%`, top: `${p.top}%`,
-            width: p.size, height: p.size,
-            background: p.color, opacity: 0.22,
-            animationDuration: `${p.duration}s`,
-            animationDelay: `${p.delay}s`,
-            ["--drift"]: `${p.drift}px`,
-          }} />
-        ))}
-
-        {/* Colourful balls raining down and piling up near the bottom, lane by lane */}
-        {BALLS.map((b, i) => (
-          <div key={`ball-${i}`} className="vl-ball" style={{
-            left: `${b.left}%`,
-            width: b.size, height: b.size,
-            backgroundColor: b.color,
-            animationDuration: `${b.duration}s`,
-            animationDelay: `${b.delay}s`,
-            ["--land"]: b.land,
-          }} />
-        ))}
 
         {/* ── Card ───────────────────────────────────────────────── */}
         <div className={`vl-card${shake ? " vl-shake" : ""}`}>

@@ -12,6 +12,7 @@ const ALL_MODULES = [
   { key: "overtime",      label: "Overtime",         href: "/dashboard/admin/overtime",            icon: "bi-clock-fill" },
   { key: "deductions",    label: "Deductions",       href: "/dashboard/admin/deduction-waiver",    icon: "bi-shield-check" },
   { key: "holidays",      label: "Holidays",         href: "/dashboard/admin/holidays",            icon: "bi-star-fill" },
+  { key: "blogs",         label: "Blogs",            href: "/dashboard/admin/blogs",                icon: "bi-file-earmark-text-fill" },
 ];
 
 export default function AdminUserLeftbar({ user }) {
