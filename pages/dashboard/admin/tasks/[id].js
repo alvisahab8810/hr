@@ -166,7 +166,7 @@ export default function TaskDetail() {
     const hadContent = !!(task?.description?.trim() || task?.caption?.trim());
     const nowEmpty   = !editScript.trim() && !editCaption.trim();
     if (hadContent && nowEmpty) {
-      if (!window.confirm("Script aur Caption dono empty hain — pehle se maujood content permanently delete ho jayega. Confirm karein?")) return;
+      if (!window.confirm("Script and Caption are both empty — the existing content will be permanently deleted. Continue?")) return;
     }
     setSavingScript(true);
     try {
@@ -186,7 +186,7 @@ export default function TaskDetail() {
   }
 
   async function handleRequestReEdit() {
-    if (!window.confirm("S1 stage unlock ho jayega — content writer se script dobara likhwana chahte ho?")) return;
+    if (!window.confirm("This unlocks stage S1 — ask the content writer to rewrite the script?")) return;
     try {
       const updatedStages = (task.stages || []).map((s, i) =>
         i === 0 ? { ...s, done: false, approved: false, rejected: false, doneAt: null } : s

@@ -24,11 +24,26 @@ const SALES_API_OK = [
   "/api/admin/leads",
   "/api/admin/proposals",
   "/api/admin/invoices",
-  "/api/admin/slots",
-  "/api/admin/reports",
   "/api/admin/settings",
+  // Their own numbers on the panel home.
+  "/api/admin/reports",
 ];
 
 export function salesMayCall(url = "") {
   return SALES_API_OK.some((p) => url.startsWith(p));
+}
+
+/* ── Whose leads is this request allowed to see? ──────────────────────────────
+   An admin sees the whole board. A salesperson only sees the leads the admin
+   has assigned to them, and everything that hangs off those leads — proposals,
+   invoices, the profile, the mails. */
+export function salesId(req) {
+  const s = readSales(req?.headers?.cookie || "");
+  return s?.id ? String(s.id) : null;
+}
+
+/* Adds the owner clause to a Query filter when a salesperson is asking. */
+export function scopeLeadFilter(req, filter = {}) {
+  const id = salesId(req);
+  return id ? { ...filter, salespersonId: id } : filter;
 }

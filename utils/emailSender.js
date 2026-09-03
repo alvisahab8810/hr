@@ -1,18 +1,10 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 export async function sendInvoiceEmail({ to, subject, htmlBody, pdfBuffer }) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: "info@viralon.in",
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  const transporter = mailTransport();
 
   await transporter.sendMail({
-    from: `"Viralon Sales" <info@viralon.in>`,
+    from: `"Viralon Sales" <${MAIL_USER}>`,
     to,
     subject,
     html: htmlBody,

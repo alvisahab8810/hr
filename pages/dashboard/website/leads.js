@@ -106,7 +106,7 @@ function Modal({ title, icon, wide, onClose, children, footer }) {
 
 /* ───────────────────────────── add / edit a lead ───────────────────────── */
 
-function LeadForm({ initial, owners, fields, busy, onSave, onCancel }) {
+function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) {
   // The picklists come from Settings; the built-in lists are the fallback.
   const industryList = useList("industries", INDUSTRIES);
   const serviceList  = useList("services", SERVICES);
@@ -188,12 +188,15 @@ function LeadForm({ initial, owners, fields, busy, onSave, onCancel }) {
             {budgetList.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
         </Field>
+        {/* The admin hands the lead out; a salesperson keeps their own. */}
+        {!isSales && (
         <Field label="Owner">
           <select className="lp-in" style={s.input} value={f.salespersonId} onChange={(e) => set("salespersonId", e.target.value)}>
             <option value="">Unassigned</option>
             {owners.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
           </select>
         </Field>
+        )}
         <Field label="Status">
           <select className="lp-in" style={s.input} value={f.status} onChange={(e) => set("status", e.target.value)}>
             {isManualStatus(f.status) ? null : <option value={f.status} hidden>{f.status}</option>}
@@ -661,7 +664,7 @@ function MailModal({ lead, preset, busy, onSend, onClose }) {
               {[
                 ["To", lead.email || "— no email on this lead —", null],
                 ["Cc", cc, setCc],
-                ["From", "info@viralon.in · Team Viralon", null],
+                ["From", "sales@viralon.in · Team Viralon", null],
                 ["Subject", draft.subject, (v) => setDraft((d) => ({ ...d, subject: v }))],
               ].map(([label, val, onChange], i, arr) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 13px",
@@ -855,11 +858,16 @@ export default function LeadsPage() {
   }, [pickerOpen]);
 
   /* ── columns: the fixed set, plus whatever the team added ─────────────── */
+  // Salesperson session? The cookie is readable, so check after mount.
+  const [isSales, setIsSales] = useState(false);
+  useEffect(() => { setIsSales(/(^|; *)sales_perms=/.test(document.cookie)); }, []);
+
   const COLDEFS = useMemo(() => {
-    const base = BASE_COLS.filter((c) => c.k !== "act");
+    // A salesperson is handed their leads; they do not hand them out.
+    const base = BASE_COLS.filter((c) => c.k !== "act" && !(isSales && c.k === "owner"));
     const custom = fields.map((f) => ({ k: `cf:${f.key}`, n: f.label, on: true, w: 150, cf: f }));
     return [...base, ...custom, BASE_COLS.find((c) => c.k === "act")];
-  }, [fields]);
+  }, [fields, isSales]);
 
   const cols = useMemo(() => COLDEFS.filter((c) => c.lock || !off.has(c.k)), [COLDEFS, off]);
 
@@ -1374,9 +1382,8 @@ export default function LeadsPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             {l.held === "held"   ? <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Held</span> : null}
             {l.held === "noshow" ? <span style={{ ...s.tag, background: "#FEE2E2", color: "#B91C1C" }}>No show</span> : null}
-            <span style={{ ...s.tag, background: l.matSent ? "#DCFCE7" : "#FEF3C7", color: l.matSent ? "#15803D" : "#B45309" }}>
-              {l.matSent ? "Material sent" : "Material pending"}
-            </span>
+            {/* Only worth a badge once it has actually gone out. */}
+            {l.matSent ? <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Material sent</span> : null}
             <span style={{ ...s.tag, background: scored ? "#EEF2FF" : "#F1F5F9", color: scored ? "#4338CA" : "#94A3B8" }}>
               {scored ? `${l.score}/10` : "Not scored"}
             </span>
@@ -1422,9 +1429,11 @@ export default function LeadsPage() {
             <button onClick={() => setModal({ type: "edit", lead: l })} style={s.iconBtn} title="Edit lead">
               <i className="bi bi-pencil-fill" style={{ fontSize: 12 }} />
             </button>
-            <button onClick={() => removeLead(l)} style={{ ...s.iconBtn, color: "#DC2626" }} title="Delete lead">
-              <i className="bi bi-trash-fill" style={{ fontSize: 12 }} />
-            </button>
+            {!isSales && (
+              <button onClick={() => removeLead(l)} style={{ ...s.iconBtn, color: "#DC2626" }} title="Delete lead">
+                <i className="bi bi-trash-fill" style={{ fontSize: 12 }} />
+              </button>
+            )}
           </div>
         );
 
@@ -1848,11 +1857,14 @@ export default function LeadsPage() {
                          onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, phone, campaign…" />
                 </div>
 
+                {/* Only the admin sorts the board by owner. */}
+                {!isSales && (
                 <select className="lp-in" style={{ ...s.input, height: 36, width: "auto", minWidth: 130 }}
                         value={fOwner} onChange={(e) => setFOwner(e.target.value)}>
                   <option value="">All owners</option>
                   {owners.map((o) => <option key={o._id} value={o._id}>{o.name}</option>)}
                 </select>
+                )}
 
                 <select className="lp-in" style={{ ...s.input, height: 36, width: "auto", minWidth: 130 }}
                         value={fSource} onChange={(e) => setFSource(e.target.value)}>
@@ -2000,13 +2012,13 @@ export default function LeadsPage() {
       {/* ── modals ── */}
       {modal?.type === "new" && (
         <Modal wide title="New lead" icon="bi-person-plus-fill" onClose={() => setModal(null)}>
-          <LeadForm initial={null} owners={owners} fields={fields} busy={busy}
+          <LeadForm initial={null} owners={owners} fields={fields} busy={busy} isSales={isSales}
                     onSave={saveLead} onCancel={() => setModal(null)} />
         </Modal>
       )}
       {modal?.type === "edit" && (
         <Modal wide title={`Edit ${modal.lead.name || "lead"}`} icon="bi-pencil-fill" onClose={() => setModal(null)}>
-          <LeadForm initial={modal.lead} owners={owners} fields={fields} busy={busy}
+          <LeadForm initial={modal.lead} owners={owners} fields={fields} busy={busy} isSales={isSales}
                     onSave={saveLead} onCancel={() => setModal(null)} />
         </Modal>
       )}

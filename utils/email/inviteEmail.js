@@ -1,13 +1,7 @@
 // utils/email/inviteEmail.js
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-  tls: { rejectUnauthorized: false },
-});
+const transporter = mailTransport();
 
 export async function sendInviteEmail({ to, name, role, setPasswordUrl }) {
   const html = `
@@ -83,7 +77,7 @@ export async function sendInviteEmail({ to, name, role, setPasswordUrl }) {
 </html>`;
 
   await transporter.sendMail({
-    from:    '"Viralon Payroll" <info@viralon.in>',
+    from:    `"Viralon Payroll" <${MAIL_USER}>`,
     to,
     subject: "You are invited to Viralon Payroll Admin Panel",
     html,

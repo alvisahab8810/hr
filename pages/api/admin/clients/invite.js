@@ -1,6 +1,6 @@
 // POST /api/admin/clients/invite
 // Create or update client, link to brand, send invite email
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/utils/dbConnect";
 import Client from "@/models/clients/Client";
@@ -104,16 +104,10 @@ export default async function handler(req, res) {
     let emailSent = false;
     if (sendEmail) {
       try {
-        const transporter = nodemailer.createTransport({
-          host: "smtp.hostinger.com",
-          port: 587,
-          secure: false,
-          auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-          tls: { rejectUnauthorized: false },
-        });
+        const transporter = mailTransport();
 
         await transporter.sendMail({
-          from:    `"Viralon" <info@viralon.in>`,
+          from:    `"Viralon" <${MAIL_USER}>`,
           to:      emails.join(", "),
           subject: `Your ${brand.name} client portal is ready — Welcome aboard!`,
           html: `<!DOCTYPE html>

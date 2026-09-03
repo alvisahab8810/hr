@@ -5,6 +5,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { writeDept } from "../../utils/dept";
 
 function getGreeting() {
   try {
@@ -23,26 +24,60 @@ function getGreeting() {
 
 const CARDS = [
   {
-    key: "payroll",
+    key: "hr",
     href: "/",
-    title: "Payroll Dashboard",
-    desc: "Employees, attendance, salary reports, leaves, tasks & everything HR.",
-    icon: "bi-cash-stack",
+    title: "HR",
+    desc: "Employees, attendance, leaves, salary reports and everything payroll.",
+    icon: "bi-people-fill",
     accent: "#4F46E5",
     accentSoft: "#EEF2FF",
     gradient: "linear-gradient(135deg,#6366F1,#4F46E5)",
-    chips: ["Employees", "Attendance", "Salary", "Tasks"],
+    chips: ["Employees", "Attendance", "Salary", "Leaves"],
   },
   {
-    key: "website",
-    href: "/dashboard/website",
-    title: "Website Dashboard",
-    desc: "Manage viralon.in — blogs, leads, FAQs, quotations & more.",
-    icon: "bi-globe2",
+    key: "ops",
+    href: "/dashboard/admin/tasks",
+    title: "Operations",
+    desc: "The task management system — workspace, calendar, brands and approvals.",
+    icon: "bi-kanban-fill",
+    accent: "#0891B2",
+    accentSoft: "#ECFEFF",
+    gradient: "linear-gradient(135deg,#22D3EE,#0891B2)",
+    chips: ["Tasks", "Calendar", "Brands", "Approvals"],
+  },
+  {
+    key: "sales",
+    href: "/dashboard/website/leads",
+    title: "Sales",
+    desc: "Leads, proposals, invoices and lead profiles for the sales team.",
+    icon: "bi-graph-up-arrow",
+    accent: "#15803D",
+    accentSoft: "#F0FDF4",
+    gradient: "linear-gradient(135deg,#22C55E,#15803D)",
+    chips: ["Leads", "Proposals", "Invoices", "Profiles"],
+  },
+  {
+    key: "marketing",
+    href: "/dashboard/admin/blogs",
+    title: "Marketing",
+    desc: "Blogs, SEO pages, incoming leads and the sales reports.",
+    icon: "bi-megaphone-fill",
     accent: "#EA580C",
     accentSoft: "#FFF7ED",
     gradient: "linear-gradient(135deg,#F97316,#EA580C)",
-    chips: ["Blogs", "Leads", "FAQs", "Quotation"],
+    chips: ["Blogs", "SEO Pages", "Leads", "Reports"],
+  },
+  {
+    key: "finance",
+    href: "",
+    soon: true,
+    title: "Finance",
+    desc: "Coming soon — this section is still being planned.",
+    icon: "bi-cash-coin",
+    accent: "#7C3AED",
+    accentSoft: "#F5F3FF",
+    gradient: "linear-gradient(135deg,#A78BFA,#7C3AED)",
+    chips: ["Coming soon"],
   },
 ];
 
@@ -50,6 +85,13 @@ export default function DashboardHub() {
   const router = useRouter();
   const [greeting, setGreeting] = useState("day");
   const [hovered, setHovered] = useState(null);
+
+  // Remember the department so both sidebars can show only that team's menus.
+  const open = (c) => {
+    if (c.soon || !c.href) return;
+    writeDept(c.key);
+    router.push(c.href);
+  };
 
   useEffect(() => { setGreeting(getGreeting()); }, []);
 
@@ -61,6 +103,9 @@ export default function DashboardHub() {
         <style>{`
           html, body { margin:0; padding:0; }
           body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:#fff; }
+          @media (max-width: 1180px) { .hub-grid { grid-template-columns: repeat(3, minmax(0,1fr)) !important; } }
+          @media (max-width: 760px)  { .hub-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; } }
+          @media (max-width: 520px)  { .hub-grid { grid-template-columns: 1fr !important; } }
           @keyframes hub-in { 0% { opacity:0; transform:translateY(16px); } 100% { opacity:1; transform:translateY(0); } }
           @keyframes hub-glow { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:.9; transform:scale(1.07); } }
           .hub-dotgrid { position:absolute; inset:0; pointer-events:none; opacity:.5;
@@ -93,11 +138,11 @@ export default function DashboardHub() {
           </p>
         </div>
 
-        {/* The 2 boxes */}
-        <div style={{
+        {/* One box per department */}
+        <div className="hub-grid" style={{
           position: "relative", zIndex: 2,
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 380px))",
-          gap: 24, width: "100%", maxWidth: 820, justifyContent: "center",
+          display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gap: 16, width: "100%", maxWidth: 1320, justifyContent: "center",
           animation: "hub-in .6s cubic-bezier(.16,1,.3,1)",
         }}>
           {CARDS.map((c) => {
@@ -105,19 +150,20 @@ export default function DashboardHub() {
             return (
               <div
                 key={c.key}
-                onClick={() => router.push(c.href)}
+                onClick={() => open(c)}
                 onMouseEnter={() => setHovered(c.key)}
                 onMouseLeave={() => setHovered(null)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(c.href); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(c); }}
                 style={{
-                  cursor: "pointer",
+                  cursor: c.soon ? "not-allowed" : "pointer",
+                  opacity: c.soon ? 0.6 : 1,
                   background: "rgba(255,255,255,.8)",
                   backdropFilter: "blur(14px)",
                   border: `1.5px solid ${isHover ? c.accent : "#E5E7EB"}`,
                   borderRadius: 20,
-                  padding: "30px 28px 26px",
+                  padding: "24px 20px 20px",
                   transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
                   transform: isHover ? "translateY(-5px)" : "none",
                   boxShadow: isHover
@@ -126,28 +172,28 @@ export default function DashboardHub() {
                 }}
               >
                 <div style={{
-                  width: 56, height: 56, borderRadius: 15,
+                  width: 48, height: 48, borderRadius: 13,
                   background: c.gradient,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   marginBottom: 18,
                   boxShadow: `0 8px 20px ${c.accent}45`,
                 }}>
-                  <i className={`bi ${c.icon}`} style={{ fontSize: 25, color: "#fff" }} />
+                  <i className={`bi ${c.icon}`} style={{ fontSize: 22, color: "#fff" }} />
                 </div>
 
-                <h2 style={{ margin: "0 0 8px", fontSize: 19, fontWeight: 800, color: "#111827" }}>
+                <h2 style={{ margin: "0 0 7px", fontSize: 17, fontWeight: 800, color: "#111827" }}>
                   {c.title}
                 </h2>
-                <p style={{ margin: "0 0 16px", fontSize: 13.5, color: "#6B7280", lineHeight: 1.55 }}>
+                <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#6B7280", lineHeight: 1.5 }}>
                   {c.desc}
                 </p>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 20 }}>
                   {c.chips.map((chip) => (
                     <span key={chip} style={{
-                      fontSize: 11.5, fontWeight: 700, color: c.accent,
+                      fontSize: 10.5, fontWeight: 700, color: c.accent,
                       background: c.accentSoft, border: `1px solid ${c.accent}25`,
-                      borderRadius: 20, padding: "4px 11px",
+                      borderRadius: 20, padding: "3px 9px",
                     }}>
                       {chip}
                     </span>
@@ -156,9 +202,9 @@ export default function DashboardHub() {
 
                 <div style={{
                   display: "flex", alignItems: "center", gap: 7,
-                  fontSize: 13.5, fontWeight: 700, color: c.accent,
+                  fontSize: 12.5, fontWeight: 700, color: c.accent,
                 }}>
-                  Open dashboard
+                  {c.soon ? "Coming soon" : "Open dashboard"}
                   <i className="bi bi-arrow-right" style={{
                     fontSize: 15,
                     transition: "transform .18s ease",
@@ -171,7 +217,7 @@ export default function DashboardHub() {
         </div>
 
         <p style={{ position: "relative", zIndex: 2, marginTop: 36, fontSize: 12, color: "#9CA3AF" }}>
-          You can switch anytime from inside either dashboard.
+          You can switch departments anytime from inside any dashboard.
         </p>
       </div>
     </>

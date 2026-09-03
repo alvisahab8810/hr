@@ -48,8 +48,15 @@ const ProposalSchema = new mongoose.Schema(
     // Once the client accepts, the agreement goes out and comes back either
     // signed off or refused. "Not sent" until anyone touches it.
     agreement: {
-      status:    { type: String, default: "Not sent" }, // Not sent | Sent | Approved | Rejected
+      // Not sent | Draft | Sent | Follow up | Approved | Rejected
+      status:    { type: String, default: "Not sent" },
+      title:     { type: String, default: "" },
+      startDate: { type: String, default: "" },   // "YYYY-MM-DD"
+      endDate:   { type: String, default: "" },
+      clauses:   { type: [{ h: String, t: String }], default: [] },
+      createdOn: { type: Date, default: null },
       sentOn:    { type: Date, default: null },
+      fuOn:      { type: String, default: "" },   // next follow-up date
       decidedOn: { type: Date, default: null },
       note:      { type: String, default: "" },
     },

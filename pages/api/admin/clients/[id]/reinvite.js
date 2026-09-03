@@ -1,6 +1,6 @@
 // POST /api/admin/clients/[id]/reinvite
 // Reset password and optionally re-send invite email
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/utils/dbConnect";
 import Client from "@/models/clients/Client";
@@ -34,13 +34,9 @@ export default async function handler(req, res) {
     let emailSent = false;
     if (sendEmail && loginUrl) {
       try {
-        const transporter = nodemailer.createTransport({
-          host: "smtp.hostinger.com", port: 587, secure: false,
-          auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-          tls: { rejectUnauthorized: false },
-        });
+        const transporter = mailTransport();
         await transporter.sendMail({
-          from:    `"Viralon" <info@viralon.in>`,
+          from:    `"Viralon" <${MAIL_USER}>`,
           to:      client.email,
           subject: `Your ${brand?.name || "Viralon"} portal credentials have been updated`,
           html: `

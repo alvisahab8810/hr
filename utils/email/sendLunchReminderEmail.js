@@ -1,17 +1,11 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 export async function sendLunchReminderEmail({ to, name, minutes, exceeded }) {
   const mins     = Math.round(Number(minutes))  || 0;
   const excMin   = Math.round(Number(exceeded)) || Math.max(0, mins - 45);
   const deduction = excMin * 5;
 
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com",
-    port: 587,
-    secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = mailTransport();
 
   const html = `
 <!DOCTYPE html>
@@ -103,7 +97,7 @@ export async function sendLunchReminderEmail({ to, name, minutes, exceeded }) {
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon HR" <info@viralon.in>`,
+    from:    `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: `⏰ Lunch Exceeded — ${mins} min${excMin > 0 ? ` (${excMin} min over, ₹${deduction} deduction)` : ""}`,
     html,

@@ -7,10 +7,14 @@ import LeadField from "@/models/LeadField";
 import User from "@/models/User";
 import Salesperson from "@/models/Salesperson";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { salesId, scopeLeadFilter } from "@/utils/salesAuth";
+import { startLeadAutomation } from "@/utils/leadAutomation";
 
 const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export default async function handler(req, res) {
+  // The auto-reply and reminder timer boots with the app, once per process.
+  startLeadAutomation();
   if (!adminGuard(req, res)) return;
   await dbConnect();
 
@@ -18,10 +22,12 @@ export default async function handler(req, res) {
     /* ── GET: the whole board in one round trip ─────────────────────────── */
     if (req.method === "GET") {
       const [leads, owners, reps, fields] = await Promise.all([
-        Query.find({}).sort({ createdAt: -1 }).lean(),
-        User.find({ role: "salesperson" }).select("name email").lean().catch(() => []),
-        // Onboarded CRM salespeople are assignable the moment they are invited.
-        Salesperson.find({ active: true }).select("name email").lean().catch(() => []),
+        // A salesperson only ever sees the leads assigned to them.
+        Query.find(scopeLeadFilter(req)).sort({ createdAt: -1 }).lean(),
+        Promise.resolve([]),
+        // Only the CRM salespeople we invited who have actually signed in —
+        // an unused invite is not someone you can hand a lead to.
+        Salesperson.find({ active: true, lastLogin: { $ne: null } }).select("name email").lean().catch(() => []),
         LeadField.find({}).sort({ order: 1, createdAt: 1 }).lean().catch(() => []),
       ]);
 
@@ -35,7 +41,8 @@ export default async function handler(req, res) {
             ? Object.fromEntries(l.customFields)
             : (l.customFields || {}),
         })),
-        owners: [...(reps || []), ...(owners || [])].map((u) => ({ _id: String(u._id), name: u.name, email: u.email })),
+        // The team list is the admin's business, not a salesperson's.
+        owners: salesId(req) ? [] : [...(reps || []), ...(owners || [])].map((u) => ({ _id: String(u._id), name: u.name, email: u.email })),
         fields: (fields || []).map((f) => ({ ...f, _id: String(f._id) })),
       });
     }
@@ -90,7 +97,8 @@ export default async function handler(req, res) {
         website: b.website || "",
         instagram: b.instagram || "",
         notes: b.notes || "",
-        salespersonId: b.salespersonId || null,
+        // A salesperson can only raise a lead onto their own name.
+        salespersonId: salesId(req) || b.salespersonId || null,
         source: {
           utmSource:   b.source?.utmSource   || "",
           utmMedium:   b.source?.utmMedium   || "",

@@ -1516,7 +1516,7 @@ export default function TasksListPage() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: "#1E293B" }}>Delete Task?</div>
-                <div style={{ fontSize: 12, color: "#64748B" }}>Yeh action reverse nahi ho sakta</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>This action cannot be undone</div>
               </div>
             </div>
             <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#374151", fontWeight: 600 }}>

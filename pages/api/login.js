@@ -3,7 +3,7 @@ import { serialize } from "cookie";
 export default function handler(req, res) {
   const { username, password } = req.body;
 
-  if (username === "admin" && password === "admin123") {
+  if (username === "ivan@viralon.in" && password === "Viralon@1234") {
     const cookieValue = "true"; // replace with JWT later if needed
 
     const isProd = process.env.NODE_ENV === "production";

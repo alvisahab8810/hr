@@ -748,7 +748,7 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
     const nowEmpty   = !script.trim() && !caption.trim();
     if (hadContent && nowEmpty) {
       if (silent) return;
-      if (!window.confirm("Script aur Caption dono empty hain — pehle se maujood content permanently delete ho jayega. Confirm karein?")) return;
+      if (!window.confirm("Script and Caption are both empty — the existing content will be permanently deleted. Continue?")) return;
     }
     setSaving(true);
     try {

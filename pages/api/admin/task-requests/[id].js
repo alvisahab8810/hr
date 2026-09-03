@@ -1,5 +1,5 @@
 // PATCH /api/admin/task-requests/[id]  — review a task request
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import dbConnect from "@/utils/dbConnect";
 import TaskRequest from "@/models/TaskRequest";
 import AdminUser from "@/models/AdminUser";
@@ -8,11 +8,7 @@ import "@/models/tasks/Brand";
 import { sendNotification } from "@/utils/tasks/sendNotification";
 
 function makeT() {
-  return nodemailer.createTransport({
-    host:"smtp.hostinger.com", port:587, secure:false,
-    auth:{ user:"info@viralon.in", pass:process.env.EMAIL_PASS },
-    tls:{ rejectUnauthorized:false },
-  });
+  return mailTransport();
 }
 
 async function sendScopeEmail({ clientEmail, clientName, brandName, title, status, adminRemark }) {
@@ -31,7 +27,7 @@ async function sendScopeEmail({ clientEmail, clientName, brandName, title, statu
        ${adminRemark ? `<div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0"><div style="font-size:11px;font-weight:700;color:#DC2626;text-transform:uppercase;margin-bottom:4px">Reason</div><div style="font-size:13px;color:#7F1D1D">${adminRemark}</div></div>` : ""}
        <p style="font-size:13px;color:#374151">Please reach out if you have any questions or if you'd like to discuss alternatives.</p>`;
   await t.sendMail({
-    from: `"Viralon Team" <info@viralon.in>`,
+    from: `"Viralon Team" <${MAIL_USER}>`,
     to:   clientEmail,
     subject,
     html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif">

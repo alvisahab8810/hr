@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { ownsLead } from "@/utils/leadScope";
+import { salesId } from "@/utils/salesAuth";
 
 // Anything not on this list can't be written from the browser.
 const PLAIN = [
@@ -29,6 +31,9 @@ export default async function handler(req, res) {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: "Bad lead id" });
   }
+
+  // A salesperson only reaches their own leads.
+  if (!(await ownsLead(req, res, id))) return;
 
   try {
     if (req.method === "GET") {
@@ -93,7 +98,8 @@ export default async function handler(req, res) {
       if (Array.isArray(b.remindersSent)) set.remindersSent = b.remindersSent;
       if (b.scoreAnswers && typeof b.scoreAnswers === "object") set.scoreAnswers = b.scoreAnswers;
 
-      if (b.salespersonId !== undefined) {
+      // Only the admin hands leads out; a salesperson cannot reassign one.
+      if (b.salespersonId !== undefined && !salesId(req)) {
         set.salespersonId = mongoose.Types.ObjectId.isValid(b.salespersonId) ? b.salespersonId : null;
       }
 
@@ -141,6 +147,10 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "DELETE") {
+      // Deleting a lead is an admin action.
+      if (salesId(req)) {
+        return res.status(403).json({ success: false, message: "Only an admin can delete a lead" });
+      }
       await Query.findByIdAndDelete(id);
       return res.status(200).json({ success: true });
     }

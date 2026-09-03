@@ -1,7 +1,7 @@
 // GET  /api/client/call-requests?brand=slug  — list call requests for brand
 // POST /api/client/call-requests?brand=slug  — create a new call/meeting request
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import dbConnect from "@/utils/dbConnect";
 import Client from "@/models/clients/Client";
 import Brand from "@/models/tasks/Brand";
@@ -16,11 +16,7 @@ function getClientPayload(req) {
 }
 
 function makeTransporter() {
-  return nodemailer.createTransport({
-    host: "smtp.hostinger.com", port: 587, secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  return mailTransport();
 }
 
 const detailsTable = ({ clientName, brandName, preferredDate, preferredTime, note, requestType }) => `
@@ -54,7 +50,7 @@ async function notifyAnurag({ clientName, brandName, preferredDate, preferredTim
   const t = makeTransporter();
   const typeLabel = requestType === "meeting" ? "Meeting" : "Call";
   await t.sendMail({
-    from:    `"Viralon Client Portal" <info@viralon.in>`,
+    from:    `"Viralon Client Portal" <${MAIL_USER}>`,
     to:      "anurag@viralon.in",
     subject: `New ${typeLabel} Request — ${brandName}`,
     html: emailWrapper(`
@@ -82,7 +78,7 @@ async function confirmToClient({ clientEmail, clientName, brandName, preferredDa
   const t = makeTransporter();
   const typeLabel = requestType === "meeting" ? "Meeting" : "Call";
   await t.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      clientEmail,
     subject: `${typeLabel} Request Received — ${brandName}`,
     html: emailWrapper(`

@@ -45,17 +45,14 @@ const TERMS = [
 /* The service agreement raised off an accepted proposal: the same brand head,
    then the terms of engagement and two places to sign. Everything on it comes
    from the proposal, so nothing has to be typed twice. */
-function agreementHtml(d) {
-  const code = `VA-${String(d._id || "").slice(-4).toUpperCase()}`;
+export function defaultAgreementClauses(d) {
   const adv = Math.round(((d.amount || 0) * (d.advPct || 0)) / 100);
   const term = `${d.term || "Retainer"}${d.term === "Retainer" && d.months ? ` — ${d.months} months` : ""}`;
-  const meta = [
-    ["Agreement no.", code],
-    ["Date", fmtD(d.agreement?.sentOn || new Date())],
-    ["Proposal no.", `VP-${String(d._id || "").slice(-4).toUpperCase()}`],
-    ["Status", d.agreement?.status || "Not sent"],
-  ];
-  const clauses = [
+  return AGREE_CLAUSES(d, adv, term).map(([h, t]) => ({ h, t }));
+}
+
+function AGREE_CLAUSES(d, adv, term) {
+  return [
     [`Scope of work`, `${COMPANY.name} will deliver ${d.svc || "the services"} as set out in proposal ${`VP-${String(d._id || "").slice(-4).toUpperCase()}`}, for ${term.toLowerCase()}.`],
     ["Fees", `The total value of this engagement is ${inr(d.amount || 0)}${d.advPct ? `, of which ${d.advPct}% (${inr(adv)}) is payable in advance and the balance of ${inr((d.amount || 0) - adv)} as invoiced` : ", payable as invoiced"}. All figures are exclusive of applicable taxes.`],
     ["Term", `This agreement starts on the date signed below and runs for ${d.term === "Retainer" && d.months ? `${d.months} months` : "the duration of the work described above"}, unless ended earlier under the clauses below.`],
@@ -65,6 +62,27 @@ function agreementHtml(d) {
     ["Ending it", "Either side may end this agreement with 30 days' written notice. Work already delivered, and the current month's fee, remain payable."],
     ["Governing law", "This agreement is governed by the laws of India, and the courts of the company's registered place have jurisdiction."],
   ];
+}
+
+function agreementHtml(d) {
+  const code = `VA-${String(d._id || "").slice(-4).toUpperCase()}`;
+  const adv = Math.round(((d.amount || 0) * (d.advPct || 0)) / 100);
+  const term = `${d.term || "Retainer"}${d.term === "Retainer" && d.months ? ` — ${d.months} months` : ""}`;
+  const g = d.agreement || {};
+  const period = g.startDate
+    ? `${fmtD(g.startDate)}${g.endDate ? ` — ${fmtD(g.endDate)}` : ""}`
+    : "";
+  const meta = [
+    ["Agreement no.", code],
+    ["Date", fmtD(g.sentOn || g.createdOn || new Date())],
+    ["Proposal no.", `VP-${String(d._id || "").slice(-4).toUpperCase()}`],
+    ["Status", g.status || "Not sent"],
+    ...(period ? [["Period", period]] : []),
+  ];
+  // What the admin edited wins; otherwise the standard set.
+  const clauses = (Array.isArray(g.clauses) && g.clauses.length
+    ? g.clauses.map((c) => [c.h, c.t])
+    : AGREE_CLAUSES(d, adv, term));
 
   return `
 <div class="vp-sheet">
@@ -75,7 +93,7 @@ function agreementHtml(d) {
       <div class="vp-small">${esc(COMPANY.email)} · ${esc(COMPANY.site)}<br/>${esc(COMPANY.place)}${COMPANY.gstin ? `<br/>GSTIN ${esc(COMPANY.gstin)}` : ""}</div>
     </div>
     <div class="vp-title">
-      <h1>Agreement</h1>
+      <h1>${esc(d.agreement?.title || "Agreement")}</h1>
       <table class="vp-meta">
         ${meta.map(([k, v]) => `<tr><td>${esc(k)}</td><td><b>${esc(v)}</b></td></tr>`).join("")}
       </table>
@@ -139,8 +157,14 @@ export function docHtml(kind, d) {
     ? [[d.svc || "Service", forLine, inr(d.amount || 0)]]
     : [[d.svc || "Service", forLine, inr(d.amount || 0)]];
 
+  const paid = isInv ? (d.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0) : 0;
   const totals = isInv
-    ? [["Subtotal", inr(d.amount || 0)], [`GST ${d.gstPct || 0}%`, inr(gst)], ["Total", inr(total)]]
+    ? [
+        ["Subtotal", inr(d.amount || 0)],
+        [`GST ${d.gstPct || 0}%`, inr(gst)],
+        ["Total", inr(total)],
+        ...(paid ? [["Received", inr(paid)], ["Balance due", inr(Math.max(0, total - paid))]] : []),
+      ]
     : [
         ["Deal value", inr(d.amount || 0)],
         [`Advance ${d.advPct || 0}%`, inr(Math.round(((d.amount || 0) * (d.advPct || 0)) / 100))],

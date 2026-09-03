@@ -18,9 +18,7 @@ export default async function handler(req, res) {
       for (const k of KEYS) if (b[k] !== undefined) set[k] = k === "target" ? Number(b[k] || 0) : b[k];
       if (set.username) set.username = String(set.username).trim().toLowerCase();
       if (set.email) set.email = String(set.email).trim().toLowerCase();
-      if (b.permissions) {
-        for (const [k, v] of Object.entries(b.permissions)) set["permissions." + k] = !!v;
-      }
+      // Permissions are fixed to the Sales department, so the body cannot change them.
       const sp = await Salesperson.findByIdAndUpdate(id, { $set: set }, { new: true });
       if (!sp) return res.status(404).json({ success: false, message: "Not found" });
 

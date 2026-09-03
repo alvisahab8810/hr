@@ -14,6 +14,7 @@ import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import DocPreview from "@/components/DocPreview";
+import MailCompose from "@/components/MailCompose";
 import { SERVICES, inr, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList, useCrmSettings } from "@/utils/crmSettings";
 
@@ -21,7 +22,7 @@ const COLS_KEY = "viralon.invoices.hiddenCols";
 const DENSITY_KEY = "viralon.invoices.density";
 
 const KINDS = ["Advance", "Monthly", "Balance", "One time"];
-const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
+const STATUSES = ["Draft", "Sent", "Partly paid", "Paid", "Overdue", "Cancelled"];
 const METHODS = ["Bank transfer", "UPI", "Cheque", "Cash"];
 
 const invCode  = (i) => `INV-${String(i?._id || "").slice(-4).toUpperCase()}`;
@@ -30,15 +31,29 @@ const leadRef  = (id) => `VL-${String(id || "").slice(-4).toUpperCase()}`;
 
 const gstAmt   = (i) => Math.round(((i.amount || 0) * (i.gstPct || 0)) / 100);
 const grand    = (i) => (i.amount || 0) + gstAmt(i);
+const received = (i) => (i.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0);
+/* The invoice as it stood the moment one payment landed — used by both the
+   preview and the mail, so what is on screen is what goes out. */
+const asOfPayment = (i, paymentId) => {
+  if (!paymentId) return i;
+  const rows = i.payments || [];
+  const at = rows.findIndex((p) => String(p._id || "") === String(paymentId));
+  if (at < 0) return i;
+  const cut = rows.slice(0, at + 1);
+  const got = cut.reduce((n, p) => n + Number(p.amount || 0), 0);
+  return { ...i, payments: cut, status: got >= grand(i) ? "Paid" : "Partly paid" };
+};
+const balance  = (i) => Math.max(0, grand(i) - received(i));
 
 /* Nobody marks an invoice overdue by hand — the date does it. */
-const isLate = (i) => i.status === "Sent" && i.due && i.due < todayStr();
+const isLate = (i) => ["Sent", "Partly paid"].includes(i.status) && i.due && i.due < todayStr();
 const liveStatus = (i) => (isLate(i) ? "Overdue" : i.status);
 
 const statusMeta = (st) =>
   st === "Paid"      ? { bg: "#DCFCE7", fg: "#0F8A54" } :
   st === "Overdue"   ? { bg: "#FDEDED", fg: "#C42525" } :
   st === "Sent"      ? { bg: "#EEF2FF", fg: "#4338CA" } :
+  st === "Partly paid" ? { bg: "#FEF3C7", fg: "#B4690E" } :
   st === "Cancelled" ? { bg: "#F1F5F9", fg: "#94A3B8" } :
                        { bg: "#F1F5F9", fg: "#64748B" };
 
@@ -54,6 +69,7 @@ const COLS = [
   { k: "amount", n: "Amount",      on: true,  w: 115 },
   { k: "gst",    n: "GST",         on: false, w: 105 },
   { k: "total",  n: "Total",       on: true,  w: 120 },
+  { k: "pay",    n: "Payments",    on: true,  w: 195 },
   { k: "issued", n: "Issued",      on: true,  w: 110 },
   { k: "due",    n: "Due",         on: true,  w: 110 },
   { k: "status", n: "Status",      on: true,  w: 115 },
@@ -68,6 +84,7 @@ const PANEL_OF = {
   svc: "amounts", kind: "amounts", amount: "amounts", gst: "amounts", total: "amounts",
   issued: "dates", due: "dates",
   status: "payment", paidOn: "payment", method: "payment", ref: "payment",
+  pay: "records",
   owner: "owner",
 };
 
@@ -76,6 +93,7 @@ const PANEL_META = {
   amounts: { t: "What it is for",  i: "bi-cash-stack" },
   dates:   { t: "Dates",           i: "bi-calendar-event-fill" },
   payment: { t: "Payment",         i: "bi-bank" },
+  records: { t: "Payment records", i: "bi-journal-check" },
   owner:   { t: "Who is chasing it", i: "bi-person-badge-fill" },
 };
 
@@ -239,6 +257,7 @@ export default function InvoicesPage() {
       case "amount": return i.amount || 0;
       case "gst":    return gstAmt(i);
       case "total":  return grand(i);
+      case "pay":    return received(i);
       case "status": return liveStatus(i);
       default:       return String(i[k] ?? "");
     }
@@ -262,14 +281,13 @@ export default function InvoicesPage() {
 
   const stats = useMemo(() => {
     const live = rows.filter((i) => i.status !== "Cancelled" && i.status !== "Draft");
-    const paid = rows.filter((i) => i.status === "Paid");
     const late = rows.filter((i) => isLate(i));
     const due = live.filter((i) => i.status !== "Paid");
     return {
       raised: live.length,
       billed: live.reduce((a, i) => a + grand(i), 0),
-      collected: paid.reduce((a, i) => a + grand(i), 0),
-      outstanding: due.reduce((a, i) => a + grand(i), 0),
+      collected: rows.filter((i) => i.status !== "Cancelled").reduce((a, i) => a + received(i), 0),
+      outstanding: due.reduce((a, i) => a + balance(i), 0),
       overdue: late.length,
       overdueValue: late.reduce((a, i) => a + grand(i), 0),
       drafts: rows.filter((i) => i.status === "Draft").length,
@@ -305,6 +323,29 @@ export default function InvoicesPage() {
       case "amount": return inr(i.amount || 0);
       case "gst":    return i.gstPct ? `${i.gstPct}% · ${inr(gstAmt(i))}` : "—";
       case "total":  return <b style={{ fontWeight: 900, color: "#0F172A" }}>{inr(grand(i))}</b>;
+      case "pay": {
+        const tot = grand(i), got = received(i), n = (i.payments || []).length;
+        const pct = tot ? Math.min(100, Math.round((got / tot) * 100)) : 0;
+        const done = got > 0 && got >= tot;
+        return (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800 }}>
+              <span style={{ color: got ? (done ? "#0F8A54" : "#B4690E") : "#94A3B8" }}>{inr(got)}</span>
+              <span style={{ color: "#CBD5E1" }}>/</span>
+              <span style={{ color: "#64748B" }}>{inr(tot)}</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ ...s.tag, padding: "1px 7px", fontSize: 9.5,
+                             background: n ? "#EEF2FF" : "#F5F5FA", color: n ? "#4338CA" : "#B6BECB" }}>
+                {n} {n === 1 ? "record" : "records"}
+              </span>
+            </div>
+            <div style={{ height: 5, borderRadius: 4, background: "#F1F1F8", marginTop: 5, overflow: "hidden" }}>
+              <div style={{ width: pct + "%", height: "100%", borderRadius: 4,
+                            background: done ? "#16A34A" : "#6366F1" }} />
+            </div>
+          </div>
+        );
+      }
       case "issued": return i.issued ? fmtD(i.issued) : "—";
       case "due":
         return i.due
@@ -433,7 +474,7 @@ export default function InvoicesPage() {
                              style={{ fontSize: 8.5, marginLeft: 4, opacity: sort.k === c.k ? 1 : .35 }} />
                         </th>
                       ))}
-                      <th style={{ ...s.th, width: 96, minWidth: 96 }}>Actions</th>
+                      <th style={{ ...s.th, width: 132, minWidth: 132, textAlign: "right" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -447,22 +488,28 @@ export default function InvoicesPage() {
                       <tr key={i._id} className="lp-row">
                         {shown.map((c) => (
                           <td key={c.k} className="lp-cell"
-                              onClick={() => setModal({ type: "panel", inv: i, panel: PANEL_OF[c.k] || "record" })}
+                              onClick={() => setModal(c.k === "pay" ? { type: "records", inv: i } : { type: "panel", inv: i, panel: PANEL_OF[c.k] || "record" })}
                               style={{ ...s.td, padding: pad, width: c.w, minWidth: c.w, cursor: "pointer" }}>
                             {cell(i, c.k)}
                           </td>
                         ))}
                         <td style={{ ...s.td, padding: pad, whiteSpace: "nowrap" }}>
-                          <button onClick={() => setModal({ type: "pdf", inv: i })}
-                                  style={{ ...s.iconBtn, marginRight: 4, borderColor: "#C7D2FE", color: "#4338CA" }} title="Preview / PDF">
-                            <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} />
-                          </button>
-                          <button onClick={() => setModal({ type: "panel", inv: i, panel: "payment" })} style={s.iconBtn} title="Payment">
-                            <i className="bi bi-bank" style={{ fontSize: 12 }} />
-                          </button>
-                          <button onClick={() => remove(i)} style={{ ...s.iconBtn, marginLeft: 4, color: "#C42525" }} title="Delete">
-                            <i className="bi bi-trash3-fill" style={{ fontSize: 12 }} />
-                          </button>
+                          <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                            <button onClick={() => setModal({ type: "pdf", inv: i })}
+                                    style={{ ...s.iconBtn, borderColor: "#C7D2FE", color: "#4338CA" }} title="Preview / PDF">
+                              <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} />
+                            </button>
+                            <button onClick={() => setModal({ type: "records", inv: i })} style={s.iconBtn} title="Payment records">
+                              <i className="bi bi-journal-check" style={{ fontSize: 12 }} />
+                            </button>
+                            <button onClick={() => setModal({ type: "mail", inv: i, markSent: i.status === "Draft" })}
+                                    style={s.iconBtn} title="Send the invoice by mail">
+                              <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} />
+                            </button>
+                            <button onClick={() => remove(i)} style={{ ...s.iconBtn, color: "#C42525" }} title="Delete">
+                              <i className="bi bi-trash3-fill" style={{ fontSize: 12 }} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -492,16 +539,51 @@ export default function InvoicesPage() {
         return (
           <Modal title={`${meta.t} · ${invCode(live)}`} icon={meta.i} onClose={() => setModal(null)}>
             <Panel which={modal.panel} i={live} busy={busy} patch={patch}
+                   mail={(markSent) => setModal({ type: "mail", inv: live, markSent })}
+                   records={() => setModal({ type: "records", inv: live })}
                    pdf={() => setModal({ type: "pdf", inv: live })}
                    go={(pn) => setModal({ type: "panel", inv: live, panel: pn })} />
           </Modal>
         );
       })() : null}
 
-      {modal?.type === "pdf" ? (
-        <DocPreview kind="invoice" doc={rows.find((x) => x._id === modal.inv._id) || modal.inv}
-                    onClose={() => setModal(null)} />
+      {modal?.type === "records" ? (() => {
+        const live = rows.find((x) => x._id === modal.inv._id) || modal.inv;
+        return (
+          <Modal title={`Payment records · ${invCode(live)}`} icon="bi-journal-check" wide onClose={() => setModal(null)}>
+            <PayRecords
+              i={live} busy={busy} patch={patch}
+              mail={(paymentId, final) => setModal({
+                type: "mail", inv: live, paymentId, back: true,
+                title: final ? "Send the final invoice" : "Send the part-paid invoice",
+              })}
+              preview={(paymentId) => setModal({
+                type: "pdf", inv: live, paymentId, back: { type: "records", inv: live },
+              })} />
+          </Modal>
+        );
+      })() : null}
+
+      {modal?.type === "mail" ? (
+        <MailCompose
+          url={`/api/admin/invoices/${modal.inv._id}/mail`}
+          kind="invoice"
+          markSent={modal.markSent}
+          extra={modal.paymentId ? { paymentId: modal.paymentId } : null}
+          title={modal.title || (modal.markSent ? "Send the invoice" : "Mail the invoice again")}
+          onPreview={() => setModal({ type: "pdf", inv: modal.inv, paymentId: modal.paymentId, back: modal })}
+          onClose={() => setModal(modal.back ? { type: "records", inv: modal.inv } : null)}
+          onSent={load}
+        />
       ) : null}
+
+      {modal?.type === "pdf" ? (() => {
+        const live = rows.find((x) => x._id === modal.inv._id) || modal.inv;
+        return (
+          <DocPreview kind="invoice" doc={asOfPayment(live, modal.paymentId)}
+                      onClose={() => setModal(modal.back || null)} />
+        );
+      })() : null}
 
       <style jsx global>{`
         .lp-row:hover { background: #FAFAFE; }
@@ -516,7 +598,7 @@ export default function InvoicesPage() {
 
 /* ── the panels behind the cells ────────────────────────────────────────── */
 
-function Panel({ which, i, busy, patch, go, pdf }) {
+function Panel({ which, i, busy, patch, go, pdf, mail, records }) {
   switch (which) {
     case "record":
       return (
@@ -552,7 +634,7 @@ function Panel({ which, i, busy, patch, go, pdf }) {
     case "dates":
       return <Dates i={i} busy={busy} patch={patch} />;
     case "payment":
-      return <Payment i={i} busy={busy} patch={patch} />;
+      return <Payment i={i} busy={busy} patch={patch} mail={mail} records={records} />;
     case "owner":
       return <Owner i={i} busy={busy} patch={patch} />;
     default:
@@ -564,7 +646,7 @@ function Amounts({ i, busy, patch }) {
   const svcList = useList("services", SERVICES);
   const [f, setF] = useState({ kind: i.kind, svc: i.svc || "", amount: String(i.amount || ""), gstPct: String(i.gstPct ?? 18) });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const locked = i.status === "Paid";
+  const locked = i.status === "Paid" || i.status === "Partly paid";
   const amt = Number(f.amount || 0), g = Math.round((amt * Number(f.gstPct || 0)) / 100);
 
   return (
@@ -640,36 +722,64 @@ function Dates({ i, busy, patch }) {
   );
 }
 
-function Payment({ i, busy, patch }) {
-  const [f, setF] = useState({ method: i.method || "", ref: i.ref || "", paidOn: i.paidOn || todayStr() });
+function Payment({ i, busy, patch, mail, records }) {
+  const [f, setF] = useState({ method: i.method || "", ref: i.ref || "", paidOn: i.paidOn || todayStr(), amount: "" });
   const st = liveStatus(i);
   const m = statusMeta(st);
   return (
     <>
       <KV k="Status" v={<span style={{ ...s.tag, background: m.bg, color: m.fg }}>{st}</span>} />
       <KV k="Client pays" v={inr(grand(i))} />
+      <KV k="Received" v={inr(received(i))} />
+      <KV k="Balance" v={<span style={{ color: balance(i) ? "#B4690E" : "#0F8A54", fontWeight: 800 }}>{inr(balance(i))}</span>} />
       <KV k="Due" v={i.due ? fmtD(i.due) : "—"} />
       <KV k="Paid on" v={i.paidOn ? fmtD(i.paidOn) : "—"} />
       <KV k="How" v={i.method || "—"} />
       <KV k="Reference" v={i.ref || "—"} />
 
+      <PayHistory i={i} />
+
+      <div style={{ marginTop: 12 }}>
+        <button onClick={() => records?.()} style={s.miniBtn}>
+          <i className="bi bi-journal-check" style={{ fontSize: 11 }} /> Open payment records
+        </button>
+      </div>
+
       {i.status === "Paid" ? (
         <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: "#0F8A54", fontWeight: 700, alignSelf: "center" }}>Settled.</span>
-          <button onClick={() => patch(i._id, { status: "Sent", paidOn: "", method: "", ref: "" })} disabled={busy} style={s.miniBtn}>Undo</button>
+          <button onClick={() => mail?.(false)} disabled={busy} style={s.primaryBtnSm}>
+            <i className="bi bi-envelope-paper-fill" style={{ fontSize: 12 }} /> Mail the final invoice
+          </button>
+          <button onClick={() => patch(i._id, { clearPayments: true, status: "Sent" })} disabled={busy} style={s.miniBtn}>Undo</button>
         </div>
       ) : (
         <>
           <div style={{ display: "flex", gap: 6, margin: "14px 0", flexWrap: "wrap" }}>
             {i.status === "Draft" ? (
-              <button onClick={() => patch(i._id, { status: "Sent" })} disabled={busy} style={s.primaryBtn}>
-                <i className="bi bi-send-fill" style={{ fontSize: 12 }} /> Mark as sent
+              <>
+                <button onClick={() => mail?.(true)} disabled={busy} style={s.primaryBtnSm}>
+                  <i className="bi bi-envelope-paper-fill" style={{ fontSize: 12 }} /> Mail it to the client
+                </button>
+                <button onClick={() => patch(i._id, { status: "Sent" })} disabled={busy} style={s.miniBtn}
+                        title="Only marks it sent — no mail goes out">
+                  Mark as sent
+                </button>
+              </>
+            ) : (
+              <button onClick={() => mail?.(false)} disabled={busy} style={s.miniBtn}
+                      title="Opens the mail with the invoice PDF attached">
+                <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} /> Mail it again
               </button>
-            ) : null}
+            )}
             <button onClick={() => patch(i._id, { status: "Cancelled" })} disabled={busy} style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Cancel it</button>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Amount received" hint={`Leave it blank to record the whole balance of ${inr(balance(i))}.`}>
+              <input className="lp-in" style={s.input} inputMode="numeric" placeholder={String(balance(i))}
+                     value={f.amount} onChange={(e) => setF((x) => ({ ...x, amount: e.target.value.replace(/[^0-9]/g, "") }))} />
+            </Field>
             <Field label="Paid on">
               <input className="lp-in" style={s.input} type="date" value={f.paidOn} onChange={(e) => setF((x) => ({ ...x, paidOn: e.target.value }))} />
             </Field>
@@ -683,12 +793,240 @@ function Payment({ i, busy, patch }) {
           <Field label="Reference" hint="UTR, cheque number, whatever the bank shows.">
             <input className="lp-in" style={s.input} value={f.ref} onChange={(e) => setF((x) => ({ ...x, ref: e.target.value }))} />
           </Field>
-          <button onClick={() => patch(i._id, { ...f, status: "Paid" })} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
-            <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Record the payment
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              onClick={() => {
+                const amt = Number(f.amount || 0) || balance(i);
+                if (amt > balance(i)) return toast.error("That is more than the balance left");
+                patch(i._id, { payment: { amount: amt, on: f.paidOn, method: f.method, ref: f.ref } });
+                setF((x) => ({ ...x, amount: "" }));
+              }}
+              disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
+              <i className="bi bi-check2-circle" style={{ fontSize: 12 }} />
+              {Number(f.amount || 0) && Number(f.amount) < balance(i) ? " Record a part payment" : " Record the payment"}
+            </button>
+            {received(i) ? (
+              <button onClick={() => mail?.(false)} disabled={busy} style={s.miniBtn}
+                      title="Mails the part-paid invoice with the payments listed on it">
+                <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} /> Mail the receipt
+              </button>
+            ) : null}
+          </div>
         </>
       )}
     </>
+  );
+}
+
+/* ── the payment records book ───────────────────────────────────────────
+   Every amount that came in against one invoice, in the order it came in.
+   A record can be added, corrected or removed here, and the invoice as it
+   stood at any one of them can be mailed straight from its row. */
+
+function PayRecords({ i, busy, patch, mail, preview }) {
+  const rows = i.payments || [];
+  const total = grand(i), got = received(i), left = balance(i);
+  const pct = total ? Math.min(100, Math.round((got / total) * 100)) : 0;
+  const settled = got > 0 && left <= 0;
+
+  const [editId, setEditId] = useState("");
+  const [f, setF] = useState({ amount: "", on: todayStr(), method: "", ref: "" });
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const reset = () => { setEditId(""); setF({ amount: "", on: todayStr(), method: "", ref: "" }); };
+
+  const startEdit = (p) => {
+    setEditId(String(p._id || ""));
+    setF({ amount: String(p.amount || ""), on: p.on || todayStr(), method: p.method || "", ref: p.ref || "" });
+  };
+
+  // The balance the client was left with after each record.
+  let run = 0;
+  const book = rows.map((p, n) => {
+    run += Number(p.amount || 0);
+    return { p, n, after: Math.max(0, total - run), clears: run >= total };
+  });
+
+  const save = async () => {
+    const typed = Number(f.amount || 0);
+    const amt = typed || (editId ? 0 : left);
+    if (!(amt > 0)) return toast.error("Enter the amount that came in");
+    const others = got - (editId ? Number(rows.find((r) => String(r._id) === editId)?.amount || 0) : 0);
+    if (others + amt > total) return toast.error("That is more than the invoice total");
+    const out = editId
+      ? await patch(i._id, { editPayment: { _id: editId, amount: amt, on: f.on, method: f.method, ref: f.ref } })
+      : await patch(i._id, { payment: { amount: amt, on: f.on, method: f.method, ref: f.ref } });
+    if (out) reset();
+  };
+
+  const del = async (p) => {
+    if (!confirm(`Delete the payment of ${inr(p.amount)} recorded on ${p.on ? fmtD(p.on) : "an unknown date"}? This cannot be undone.`)) return;
+    const out = await patch(i._id, { deletePayment: { _id: String(p._id || "") } });
+    if (out && String(p._id || "") === editId) reset();
+  };
+
+  return (
+    <>
+      <div style={{ ...s.softBox, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 18, flexWrap: "wrap" }}>
+          <Stat label="Invoice total" value={inr(total)} />
+          <Stat label="Received" value={inr(got)} tone={got ? "#0F8A54" : "#94A3B8"} />
+          <Stat label="Balance" value={inr(left)} tone={left ? "#B4690E" : "#0F8A54"} />
+          <div style={{ flex: 1 }} />
+          <span style={{ ...s.tag, background: settled ? "#DCFCE7" : "#FEF3C7", color: settled ? "#0F8A54" : "#B4690E" }}>
+            {settled ? "Settled in full" : `${pct}% collected`}
+          </span>
+        </div>
+        <div style={{ height: 7, borderRadius: 5, background: "#EFEFF7", marginTop: 11, overflow: "hidden" }}>
+          <div style={{ width: pct + "%", height: "100%", borderRadius: 5, background: settled ? "#16A34A" : "#6366F1" }} />
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 7 }}>
+        Records ({rows.length})
+      </div>
+
+      <div style={{ border: "1px solid #F0F0F8", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+        {!rows.length ? (
+          <div style={{ padding: 22, textAlign: "center", color: "#94A3B8", fontSize: 12.5 }}>
+            Nothing received yet. Record the first payment below.
+          </div>
+        ) : (
+          <div className="lp-scroll" style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...s.th, width: 34 }}>#</th>
+                  <th style={{ ...s.th, width: 104 }}>Date</th>
+                  <th style={{ ...s.th, width: 110, textAlign: "right" }}>Amount</th>
+                  <th style={{ ...s.th, width: 110 }}>How</th>
+                  <th style={{ ...s.th }}>Reference</th>
+                  <th style={{ ...s.th, width: 112, textAlign: "right" }}>Balance after</th>
+                  <th style={{ ...s.th, width: 138, textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {book.map(({ p, n, after, clears }) => {
+                  const on = String(p._id || "") === editId;
+                  return (
+                    <tr key={p._id || n} style={{ background: on ? "#F7F7FE" : "transparent" }}>
+                      <td style={{ ...s.td, padding: "9px 12px", color: "#94A3B8", fontWeight: 800 }}>{n + 1}</td>
+                      <td style={{ ...s.td, padding: "9px 12px", fontWeight: 700, color: "#0F172A", whiteSpace: "nowrap" }}>
+                        {p.on ? fmtD(p.on) : "—"}
+                      </td>
+                      <td style={{ ...s.td, padding: "9px 12px", textAlign: "right", fontWeight: 900, color: "#0F8A54", whiteSpace: "nowrap" }}>
+                        {inr(p.amount)}
+                      </td>
+                      <td style={{ ...s.td, padding: "9px 12px" }}>{p.method || "—"}</td>
+                      <td style={{ ...s.td, padding: "9px 12px", color: "#64748B" }}>{p.ref || "—"}</td>
+                      <td style={{ ...s.td, padding: "9px 12px", textAlign: "right", fontWeight: 800, whiteSpace: "nowrap",
+                                   color: after ? "#B4690E" : "#0F8A54" }}>
+                        {inr(after)}
+                      </td>
+                      <td style={{ ...s.td, padding: "9px 12px", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                          <button onClick={() => mail?.(String(p._id || ""), clears)} disabled={busy || !p._id}
+                                  style={{ ...s.iconBtn, borderColor: "#C7D2FE", color: "#4338CA" }}
+                                  title={clears ? "Send the final invoice for this payment" : "Send the invoice as of this payment"}>
+                            <i className="bi bi-send-fill" style={{ fontSize: 11 }} />
+                          </button>
+                          <button onClick={() => preview?.(String(p._id || ""))} disabled={busy || !p._id}
+                                  style={s.iconBtn} title={clears ? "Preview the final invoice" : "Preview the part-paid invoice"}>
+                            <i className="bi bi-eye-fill" style={{ fontSize: 11 }} />
+                          </button>
+                          <button onClick={() => startEdit(p)} disabled={busy} style={s.iconBtn} title="Edit this record">
+                            <i className="bi bi-pencil-fill" style={{ fontSize: 11 }} />
+                          </button>
+                          <button onClick={() => del(p)} disabled={busy} style={{ ...s.iconBtn, color: "#C42525" }} title="Delete this record">
+                            <i className="bi bi-trash3-fill" style={{ fontSize: 11 }} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: `1px solid ${editId ? "#C7D2FE" : "#F0F0F8"}`, borderRadius: 12, padding: 14,
+                    background: editId ? "#FAFAFF" : "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 900, color: "#0F172A" }}>
+            {editId ? "Edit this payment record" : "Record a payment"}
+          </div>
+          <div style={{ flex: 1 }} />
+          {editId ? <button onClick={reset} style={s.miniBtn}>Cancel</button> : null}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+          <Field label="Amount (₹)" hint={editId ? "" : `Blank records the whole balance of ${inr(left)}.`}>
+            <input className="lp-in" style={s.input} inputMode="numeric" placeholder={String(left)}
+                   value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^0-9]/g, ""))} />
+          </Field>
+          <Field label="Received on">
+            <input className="lp-in" style={s.input} type="date" value={f.on} onChange={(e) => set("on", e.target.value)} />
+          </Field>
+          <Field label="How">
+            <select className="lp-in" style={s.input} value={f.method} onChange={(e) => set("method", e.target.value)}>
+              <option value="">—</option>
+              {METHODS.map((x) => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </Field>
+          <Field label="Reference" hint="UTR, cheque number, whatever the bank shows.">
+            <input className="lp-in" style={s.input} value={f.ref} onChange={(e) => set("ref", e.target.value)} />
+          </Field>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={save} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
+            <i className={`bi ${editId ? "bi-check2" : "bi-plus-lg"}`} style={{ fontSize: 12 }} />
+            {editId ? " Save the record" : " Add the record"}
+          </button>
+          {rows.length ? (
+            <button onClick={() => patch(i._id, { clearPayments: true, status: "Sent" })} disabled={busy}
+                    style={{ ...s.miniBtn, height: 36, color: "#C42525", borderColor: "#F6D0D0" }}
+                    title="Removes every payment record on this invoice">
+              Clear all records
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Stat({ label, value, tone }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".04em", textTransform: "uppercase", color: "#94A3B8" }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: tone || "#0F172A", lineHeight: 1.25 }}>{value}</div>
+    </div>
+  );
+}
+
+function PayHistory({ i }) {
+  const rows = i.payments || [];
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", letterSpacing: .3, textTransform: "uppercase", marginBottom: 7 }}>
+        Payments received
+      </div>
+      <div style={{ border: "1px solid #F0F0F8", borderRadius: 12, overflow: "hidden" }}>
+        {rows.map((p, n) => (
+          <div key={n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px",
+                                borderTop: n ? "1px solid #F5F5FB" : "none", fontSize: 12.5 }}>
+            <span style={{ color: "#0F172A", fontWeight: 700 }}>{p.on ? fmtD(p.on) : "—"}</span>
+            <span style={{ color: "#64748B" }}>{p.method || "—"}</span>
+            {p.ref ? <span style={{ color: "#94A3B8" }}>{p.ref}</span> : null}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontWeight: 800, color: "#0F8A54" }}>{inr(p.amount)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -881,4 +1219,5 @@ const s = {
   miniBtn: { display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: 9, border: "1px solid #E7E7F2", background: "#fff", color: "#475569", fontSize: 11.5, fontWeight: 800, cursor: "pointer" },
   miniBtnOn: { display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 11px", borderRadius: 9, border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4338CA", fontSize: 11.5, fontWeight: 800, cursor: "pointer" },
   primaryBtn: { display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 15px", borderRadius: 10, border: "1px solid #6366F1", background: "#6366F1", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" },
+  primaryBtnSm: { display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px", borderRadius: 9, border: "1px solid #6366F1", background: "#6366F1", color: "#fff", fontSize: 11.5, fontWeight: 800, cursor: "pointer" },
 };

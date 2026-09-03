@@ -5,9 +5,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { confirmLogout } from "./Logout";
+import { readDept, deptName, WEBSITE_MENUS } from "../utils/dept";
 
 // A salesperson signs in on /sales/login and only sees the menus the admin
 // ticked for them; the admin has no sales_perms cookie and sees everything.
@@ -61,13 +62,6 @@ const MENU = [
     label: "FAQs",
     biIcon: "bi-question-circle-fill",
     match: ["/dashboard/website/faqs"],
-  },
-  {
-    href: "/dashboard/website/slots",
-    perm: "slots",
-    label: "Call Slots",
-    biIcon: "bi-calendar2-week-fill",
-    match: ["/dashboard/website/slots"],
   },
   {
     href: "/dashboard/website/leads",
@@ -124,9 +118,25 @@ export default function WebsiteLeftbar() {
   const router   = useRouter();
   const pathname = usePathname();
   const sidebarRef = useRef(null);
-  const perms = salesPerms();
+  // Read after mount, like the department: the cookie does not exist on the
+  // server, so reading it during render made the first client paint differ
+  // from the HTML and React flagged a hydration mismatch.
+  const [perms, setPerms] = useState(null);
+  // The department picked on /dashboard/hub. Read after mount so the server and
+  // the first client render agree.
+  const [dept, setDept] = useState("");
+  // The hub is the admin's own screen; a salesperson has nowhere else to go.
+  const [isSales, setIsSales] = useState(false);
+  useEffect(() => {
+    setDept(readDept());
+    const p = salesPerms();
+    setPerms(p);
+    setIsSales(!!p);
+  }, []);
   // Admin: perms is null and the whole menu shows. Salesperson: only the ticks.
-  const menu = perms ? MENU.filter((i) => i.perm && perms[i.perm]) : MENU;
+  const allowed = perms ? MENU.filter((i) => i.perm && perms[i.perm]) : MENU;
+  const only = WEBSITE_MENUS[dept];
+  const menu = only ? allowed.filter((i) => only.includes(i.perm)) : allowed;
 
   const isActive = (item) => {
     if (!pathname) return false;
@@ -158,8 +168,8 @@ export default function WebsiteLeftbar() {
               <i className="bi bi-globe2" style={{ fontSize: 15, color: "#fff" }} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.2 }}>Website Panel</div>
-              <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>viralon.in Management</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.2 }}>{deptName(dept) || "Website"} Panel</div>
+              <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>{dept === "marketing" ? "Content & campaigns" : dept === "sales" ? "Pipeline & revenue" : "viralon.in Management"}</div>
             </div>
             <i className="bi bi-grid-fill" style={{ fontSize: 13, color: "#818CF8", flexShrink: 0 }} />
           </div>
@@ -220,6 +230,8 @@ export default function WebsiteLeftbar() {
               );
             })}
 
+            {!isSales && (
+            <>
             {/* ── Divider ── */}
             <li style={{ listStyle: "none" }}>
               <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
@@ -236,16 +248,8 @@ export default function WebsiteLeftbar() {
                 <span style={{ flex: 1 }}>Back to Hub</span>
               </Link>
             </li>
-            <li style={{ listStyle: "none" }}>
-              <Link
-                href="/"
-                className="waves-effect waves-block"
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}
-              >
-                <i className="bi bi-cash-stack" style={{ fontSize: 17, width: 20, textAlign: "center", flexShrink: 0, color: "rgba(0,0,0,0.5)" }} />
-                <span style={{ flex: 1 }}>Switch to Payroll</span>
-              </Link>
-            </li>
+            </>
+            )}
           </ul>
         </div>
       </aside>

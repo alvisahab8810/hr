@@ -715,7 +715,7 @@ export default function LeaveManagement() {
                                 className="lv-revoke-btn lv-view-btn"
                                 style={{ background: "#7C3AED", color: "#fff" }}
                                 onClick={async () => {
-                                  if (!window.confirm(`${leave.employee?.firstName} ${leave.employee?.lastName} ka ${leave.leaveType} (${leave.totalDays} day) revoke karna chahte ho? Balance restore ho jayega aur leave delete ho jayegi.`)) return;
+                                  if (!window.confirm(`${leave.employee?.firstName} ${leave.employee?.lastName} — revoke this ${leave.leaveType} (${leave.totalDays} day)? The balance will be restored and the leave deleted.`)) return;
                                   try {
                                     const r = await fetch("/api/admin/leave/revoke", {
                                       method: "POST",

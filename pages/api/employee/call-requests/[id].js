@@ -1,6 +1,6 @@
 // PATCH /api/employee/call-requests/[id] — approve / reject / schedule
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import dbConnect from "@/utils/dbConnect";
 import Employee from "@/models/hr/Employee";
 import Client from "@/models/clients/Client";
@@ -15,11 +15,7 @@ function verifyToken(req) {
 }
 
 async function sendActionEmail({ clientEmail, clientName, brandName, action, preferredDate, preferredTime, scheduledDate, scheduledTime, adminNote }) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com", port: 587, secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = mailTransport();
 
   const confirmed = action !== "rejected";
   const title = confirmed ? "Call / Meeting Confirmed" : "Call Request Update";
@@ -47,7 +43,7 @@ async function sendActionEmail({ clientEmail, clientName, brandName, action, pre
     <div style="text-align:center;margin-top:16px"><a href="${process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in"}/tourwatchout" style="display:inline-block;padding:10px 24px;background:#4F46E5;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px">Request New Time →</a></div>`;
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      clientEmail,
     subject: `${title} — ${brandName}`,
     html: `

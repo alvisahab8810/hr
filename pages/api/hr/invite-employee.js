@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import bcrypt from "bcryptjs";
 import dbConnect from "@/utils/dbConnect";
 import Employee from "@/models/hr/Employee";
@@ -137,16 +137,10 @@ export default async function handler(req, res) {
 
   try {
     console.log(`[invite-employee] Sending invite email to: ${email}`);
-    const transporter = nodemailer.createTransport({
-      host: "smtp.hostinger.com",
-      port: 587,
-      secure: false,
-      auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-      tls: { rejectUnauthorized: false },
-    });
+    const transporter = mailTransport();
 
     const info = await transporter.sendMail({
-      from: `"Viralon HR" <info@viralon.in>`,
+      from: `"Viralon HR" <${MAIL_USER}>`,
       to: email,
       subject: "You’re invited to access Viralon HQ",
       html: htmlBody,

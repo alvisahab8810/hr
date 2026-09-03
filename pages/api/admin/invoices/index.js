@@ -6,6 +6,8 @@ import Invoice from "@/models/Invoice";
 import Proposal from "@/models/Proposal";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { salesId } from "@/utils/salesAuth";
+import { ownsLead } from "@/utils/leadScope";
 
 const addDays = (d, n) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -19,10 +21,16 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
+      // A salesperson only sees the paperwork of the leads assigned to them.
+      const mine = salesId(req);
+      const own = mine
+        ? (await Query.find({ salespersonId: mine }).select("_id").lean()).map((l) => l._id)
+        : null;
+      const scope = own ? { leadId: { $in: own } } : {};
       const [invoices, proposals, leads] = await Promise.all([
-        Invoice.find({}).sort({ createdAt: -1 }).lean(),
-        Proposal.find({}).select("co contact em ph svc amount term months advPct status leadId owner").lean(),
-        Query.find({}).select("name businessName email phone").lean(),
+        Invoice.find(scope).sort({ createdAt: -1 }).lean(),
+        Proposal.find(scope).select("co contact em ph svc amount term months advPct status leadId owner").lean(),
+        Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone").lean(),
       ]);
       return res.status(200).json({
         success: true,
@@ -44,6 +52,7 @@ export default async function handler(req, res) {
       if (b.schedule && b.proposalId) {
         const p = await Proposal.findById(b.proposalId).lean();
         if (!p) return res.status(404).json({ success: false, message: "Proposal not found" });
+        if (!(await ownsLead(req, res, p.leadId))) return;
 
         // The same gate the board shows: nothing is billed off a proposal the
         // client has not accepted yet.
@@ -93,6 +102,7 @@ export default async function handler(req, res) {
 
       // One invoice, by hand.
       if (!b.leadId) return res.status(400).json({ success: false, message: "Pick a lead first" });
+      if (!(await ownsLead(req, res, b.leadId))) return;
       const lead = await Query.findById(b.leadId).lean();
       if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 

@@ -8,6 +8,7 @@ import Proposal from "@/models/Proposal";
 import Invoice from "@/models/Invoice";
 import User from "@/models/User";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { ownsLead } from "@/utils/leadScope";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -20,6 +21,9 @@ export default async function handler(req, res) {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: "Bad lead id" });
   }
+
+  // A salesperson only reaches their own leads.
+  if (!(await ownsLead(req, res, id))) return;
 
   try {
     const lead = await Query.findById(id).lean();

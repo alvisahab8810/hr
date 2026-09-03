@@ -8,6 +8,7 @@ import Proposal from "@/models/Proposal";
 import Invoice from "@/models/Invoice";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { sendSalesInvite } from "@/utils/salesInviteMail";
+import { salesRolePerms } from "@/utils/dept";
 
 const MENUS = {
   home: "Website Home", blogs: "Blogs", careers: "Careers", positions: "Job Positions",
@@ -15,7 +16,11 @@ const MENUS = {
   invoices: "Invoices", leadProfile: "Lead profile", salesTeam: "Sales team", reports: "Reports", slots: "Call Slots", settings: "Settings",
 };
 
-const cleanPerms = (p = {}) => Object.keys(MENUS).reduce((a, k) => ({ ...a, [k]: !!p[k] }), {});
+// Nothing is picked per person any more: a salesperson is the Sales department.
+const cleanPerms = () => {
+  const on = salesRolePerms();
+  return Object.keys(MENUS).reduce((a, k) => ({ ...a, [k]: !!on[k] }), {});
+};
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -52,7 +57,7 @@ export default async function handler(req, res) {
         return res.status(409).json({ success: false, message: "That username is already taken" });
       }
 
-      const perms = cleanPerms(b.permissions);
+      const perms = cleanPerms();
       const sp = await Salesperson.create({
         name, email, username, password,
         role: String(b.role || "Sales Executive").trim(),

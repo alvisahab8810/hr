@@ -10,18 +10,7 @@
 //   }
 
 //   try {
-//     const transporter = nodemailer.createTransport({
-//       host: "smtp.hostinger.com",
-//       port: 587,
-//       secure: false,
-//       auth: {
-//         user: "info@viralon.in", // same as invite email
-//         pass: process.env.EMAIL_PASS, // your Hostinger SMTP password
-//       },
-//       tls: {
-//         rejectUnauthorized: false,
-//       },
-//     });
+//     const transporter = mailTransport();
 
 //     const htmlBody = `
 //       <div style="font-family: sans-serif; line-height: 1.6;">
@@ -33,7 +22,7 @@
 //     `;
 
 //     await transporter.sendMail({
-//       from: `"Viralon HR" <info@viralon.in>`,
+//       from: `"Viralon HR" <${MAIL_USER}>`,
 //       to: email,
 //       subject: "Your Salary Slip",
 //       html: htmlBody,
@@ -56,7 +45,7 @@
 
 
 
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import path from "path";
 
 export default async function handler(req, res) {
@@ -72,18 +61,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.hostinger.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: "info@viralon.in", // ✅ Your Hostinger SMTP email
-        pass: process.env.EMAIL_PASS, // ✅ Hostinger SMTP password
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+    const transporter = mailTransport();
 
     // ✅ Convert the relative URL to an absolute path in the "public" folder
     const pdfPath = path.join(process.cwd(), "public", pdfUrl);
@@ -98,7 +76,7 @@ export default async function handler(req, res) {
     `;
 
     await transporter.sendMail({
-      from: `"Viralon HR" <info@viralon.in>`,
+      from: `"Viralon HR" <${MAIL_USER}>`,
       to: email,
       subject: "Your Salary Slip",
       html: htmlBody,

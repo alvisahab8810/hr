@@ -3,7 +3,7 @@
 // and when to meet, and writes it on the lead. These mails follow that — a
 // "we'll call you" note while nothing is fixed, then a confirmation and the
 // reminder ladder once a meeting is on the calendar.
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://viralon.in";
 
@@ -11,6 +11,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://viralon.in"
 // to leads, so they read as viralon.in, not as the payroll dashboard.
 const BRAND = "#5138ee";
 const INK = "#04000b";
+const BRAND2 = "#7C5CFF";
 
 export const prettyTime = (t) => {
   const [h, m] = String(t || "").split(":").map(Number);
@@ -26,22 +27,27 @@ export const prettyDate = (d) => {
   });
 };
 
+// The logo has to be a public https URL — mail clients cannot read local files.
+export const MAIL_LOGO =
+  process.env.MAIL_LOGO || "https://hq.viralon.in/assets/images/logo.png";
+
 function shell(bodyHtml, cta) {
   return `
   <div style="margin:0;padding:28px 12px;background:#F4F4F9;font-family:Arial,Helvetica,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #ECECF5;">
-      <div style="background:${BRAND};padding:20px 26px;">
-        <div style="color:#fff;font-size:19px;font-weight:800;letter-spacing:-.3px;">Viralon</div>
+    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #ECECF5;box-shadow:0 6px 24px rgba(81,56,238,.07);">
+      <div style="height:5px;background:linear-gradient(90deg,${BRAND},${BRAND2});font-size:0;line-height:0;">&nbsp;</div>
+      <div style="padding:22px 26px 6px;">
+        <img src="${MAIL_LOGO}" alt="Viralon" width="132" style="display:block;border:0;outline:none;height:auto;max-width:132px;" />
       </div>
-      <div style="padding:26px;color:${INK};font-size:15px;line-height:1.65;">
+      <div style="padding:14px 26px 26px;color:${INK};font-size:15px;line-height:1.65;">
         ${bodyHtml}
         ${cta ? `<div style="margin:26px 0 6px;">
-          <a href="${cta.href}" style="display:inline-block;background:${BRAND};color:#fff;text-decoration:none;
-             padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px;">${cta.label}</a>
+          <a href="${cta.href}" style="display:inline-block;background:linear-gradient(90deg,${BRAND},${BRAND2});color:#fff;text-decoration:none;
+             padding:13px 28px;border-radius:9px;font-weight:700;font-size:15px;">${cta.label}</a>
         </div>` : ""}
       </div>
       <div style="padding:16px 26px;background:#FAFAFD;border-top:1px solid #F1F1F8;color:#8A8AA3;font-size:12px;line-height:1.6;">
-        Team Viralon · <a href="${SITE_URL}" style="color:${BRAND};text-decoration:none;">viralon.in</a><br/>
+        Team Viralon · <a href="${SITE_URL}" style="color:${BRAND};text-decoration:none;font-weight:700;">viralon.in</a><br/>
         Sent because you asked us to get in touch. Reply to this mail to reach us directly.
       </div>
     </div>
@@ -306,11 +312,6 @@ export function buildLeadMail(template, lead) {
 /* Awaited by the caller — the team needs to know the mail actually left. */
 export function sendLeadMail({ to, cc, subject, html }) {
   if (!to) return Promise.reject(new Error("No email address on this lead"));
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com",
-    port: 465,
-    secure: true,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-  });
-  return transporter.sendMail({ from: '"Viralon" <info@viralon.in>', to, ...(cc ? { cc } : {}), subject, html });
+  const transporter = mailTransport();
+  return transporter.sendMail({ from: `"Viralon" <${MAIL_USER}>`, to, ...(cc ? { cc } : {}), subject, html });
 }

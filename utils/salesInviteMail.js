@@ -1,15 +1,10 @@
 // utils/salesInviteMail.js — the onboarding mail a new salesperson gets.
 // Same Hostinger mailbox the lead mails go out from.
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 const send = ({ to, subject, html }) => {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com",
-    port: 465,
-    secure: true,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-  });
-  return transporter.sendMail({ from: '"Viralon" <info@viralon.in>', to, subject, html });
+  const transporter = mailTransport();
+  return transporter.sendMail({ from: `"Viralon" <${MAIL_USER}>`, to, subject, html });
 };
 
 export function sendSalesInvite({ to, name, username, password, loginUrl, menus }) {

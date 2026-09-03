@@ -589,6 +589,8 @@ export default function TaskDashboard() {
           .stat-num { font-size:48px; font-weight:900; line-height:1; margin-bottom:6px; }
           .stat-sub { font-size:12px; font-weight:600; color:#64748B; }
           .stat-trend { font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:6px; }
+          .kpi-card { transition: transform .2s ease, box-shadow .2s ease; }
+          .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }
           .panel-card { background:#fff; border-radius:18px; border:1.5px solid #F1F5F9; padding:22px 24px; }
           .act-row { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #F8FAFC; }
           .act-row:last-child { border:none; }
@@ -656,67 +658,49 @@ export default function TaskDashboard() {
                 </div>
               )}
 
-              {/* ── 4 big stat cards ── */}
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 22 }}>
-                {/* Active Tasks */}
-                <div className="stat-mega">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Active Tasks</div>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className="bi bi-list-task" style={{ color: "#6366F1", fontSize: 16 }} />
+              {/* ── Summary cards (same card design as the other dashboards) ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 22 }}>
+                {[
+                  { label: "Active Tasks", value: active,  sub: "In progress + review", foot: `${stats?.total || 0} total tasks`,             icon: "bi-list-task",              accent: { bg: "#EEF2FF", icon: "#6366F1", shadow: "rgba(99,102,241,.18)" } },
+                  { label: "Completed",    value: done,    sub: "Tasks done",           foot: `${stats?.completionRate || 0}% on-time rate`,  icon: "bi-check-circle-fill",      accent: { bg: "#DCFCE7", icon: "#16A34A", shadow: "rgba(34,197,94,.18)"  } },
+                  { label: "At Risk",      value: atRisk,  sub: "Due within 3 days",    foot: "Need action this week",                        icon: "bi-exclamation-circle-fill", accent: { bg: "#FFEDD5", icon: "#EA580C", shadow: "rgba(249,115,22,.18)" } },
+                  { label: "Overdue",      value: overdue, sub: "Past due date",        foot: "Auto-escalated",                               icon: "bi-x-circle-fill",          accent: { bg: "#FEE2E2", icon: "#EF4444", shadow: "rgba(239,68,68,.18)"  } },
+                ].map((c) => {
+                  const total = stats?.total || 0;
+                  const pct = total ? Math.min(100, Math.round((c.value / total) * 100)) : 0;
+                  return (
+                    <div key={c.label} className="kpi-card" style={{
+                      background: `linear-gradient(160deg, #fff 55%, ${c.accent.bg} 165%)`,
+                      borderRadius: 16, border: `1px solid ${c.accent.bg}`,
+                      boxShadow: "0 3px 12px rgba(15,23,42,.06)", padding: "17px 18px 16px",
+                      position: "relative", overflow: "hidden",
+                    }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c.accent.icon }} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+                        <div style={{
+                          width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+                          background: c.accent.icon,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          boxShadow: `0 6px 16px ${c.accent.shadow}`,
+                        }}>
+                          <i className={`bi ${c.icon}`} style={{ fontSize: 19, color: "#fff" }} />
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", lineHeight: 1.05, letterSpacing: "-0.8px" }}>
+                            {loading ? "—" : c.value}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#475569", fontWeight: 700, marginTop: 3, whiteSpace: "nowrap" }}>{c.label}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "#64748B", fontWeight: 600, marginBottom: 8 }}>
+                        {c.sub} · <span style={{ color: c.accent.icon, fontWeight: 700 }}>{c.foot}</span>
+                      </div>
+                      <div style={{ height: 6, background: "#F1F5F9", borderRadius: 6 }}>
+                        <div style={{ height: 6, width: `${pct}%`, borderRadius: 6, background: c.accent.icon, transition: "width .4s" }} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="stat-num" style={{ color: "#1E293B" }}>{loading ? "—" : active}</div>
-                  <div className="stat-sub">In progress + review</div>
-                  <div className="stat-trend" style={{ color: "#6366F1" }}>
-                    <i className="bi bi-arrow-up-right" /> {stats?.total || 0} total tasks
-                  </div>
-                </div>
-
-                {/* Completed */}
-                <div className="stat-mega">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Completed</div>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className="bi bi-check-circle-fill" style={{ color: "#10B981", fontSize: 16 }} />
-                    </div>
-                  </div>
-                  <div className="stat-num" style={{ color: "#10B981" }}>{loading ? "—" : done}</div>
-                  <div className="stat-sub">Tasks done</div>
-                  <div className="stat-trend" style={{ color: "#10B981" }}>
-                    <i className="bi bi-arrow-up-right" /> {stats?.completionRate || 0}% on-time rate
-                  </div>
-                </div>
-
-                {/* At Risk */}
-                <div className="stat-mega">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>At Risk</div>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "#FFFBEB", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className="bi bi-exclamation-circle-fill" style={{ color: "#F59E0B", fontSize: 16 }} />
-                    </div>
-                  </div>
-                  <div className="stat-num" style={{ color: "#F59E0B" }}>{loading ? "—" : atRisk}</div>
-                  <div className="stat-sub">Due within 3 days</div>
-                  <div className="stat-trend" style={{ color: "#F59E0B" }}>
-                    <i className="bi bi-exclamation-circle" /> Need action this week
-                  </div>
-                </div>
-
-                {/* Overdue */}
-                <div className="stat-mega">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Overdue</div>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <i className="bi bi-x-circle-fill" style={{ color: "#EF4444", fontSize: 16 }} />
-                    </div>
-                  </div>
-                  <div className="stat-num" style={{ color: "#EF4444" }}>{loading ? "—" : overdue}</div>
-                  <div className="stat-sub">Past due date</div>
-                  <div className="stat-trend" style={{ color: "#EF4444" }}>
-                    <i className="bi bi-arrow-down-right" /> Auto-escalated
-                  </div>
-                </div>
+                  );
+                })}
               </div>
 
               {/* ── Middle row: Daily Output + Live Activity ── */}

@@ -2,6 +2,7 @@
 import dbConnect from "@/utils/dbConnect";
 import Salesperson from "@/models/Salesperson";
 import { signSales, SALES_COOKIE } from "@/utils/salesAuth";
+import { salesRolePerms } from "@/utils/dept";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ success: false, message: "Method not allowed" });
@@ -15,9 +16,8 @@ export default async function handler(req, res) {
   if (!sp || sp.password !== password) return res.status(401).json({ success: false, message: "Wrong username or password" });
   if (!sp.active) return res.status(403).json({ success: false, message: "This account has been switched off" });
 
-  const raw = sp.permissions?.toObject ? sp.permissions.toObject() : { ...(sp.permissions || {}) };
-  // The subdocument carries an _id of its own; the cookie only wants the flags.
-  const perms = Object.fromEntries(Object.entries(raw).filter(([k, v]) => typeof v === "boolean"));
+  // Every salesperson gets the Sales department, the same set for everyone.
+  const perms = salesRolePerms();
   const token = signSales({ id: String(sp._id), name: sp.name, perms });
 
   sp.lastLogin = new Date();

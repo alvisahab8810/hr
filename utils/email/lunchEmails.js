@@ -1,15 +1,6 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "info@viralon.in",
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: { rejectUnauthorized: false },
-});
+const transporter = mailTransport();
 
 const baseStyle = `
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
@@ -82,7 +73,7 @@ export async function sendLunchStartEmail({ to, name }) {
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon HR" <info@viralon.in>`,
+    from:    `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "🍽️ Lunch Break Started — Back by 2:15 PM",
     html,
@@ -186,7 +177,7 @@ export async function sendLunchOverEmail({ to, name, minutes }) {
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon HR" <info@viralon.in>`,
+    from:    `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: `⏰ Lunch Break Alert — ${mins} min (${exceeded > 0 ? exceeded + " min over" : "limit reached"})`,
     html,

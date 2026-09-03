@@ -82,6 +82,7 @@
 
 //   const { data: session } = useSession();
 
+
 //   const [profile, setProfile] = useState({
 //     name: "",
 //     avatarUrl: "/asets/images/avatar.png",
@@ -363,6 +364,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { confirmLogout } from "./Logout";
+import { readDept } from "../utils/dept";
 
 export default function Leftbar({ role = "admin" }) {
   const router = useRouter();
@@ -560,6 +562,15 @@ export default function Leftbar({ role = "admin" }) {
 
   const { data: session } = useSession();
 
+  // Department picked on /dashboard/hub: HR keeps the payroll menus,
+  // Operations keeps the task management system. Read after mount so the
+  // server and the first client render agree.
+  const [dept, setDept] = useState("");
+  useEffect(() => setDept(readDept()), []);
+  const showPayroll = dept !== "ops";
+  const showTMS     = dept !== "hr";
+  const tmsOnly     = dept === "ops";
+
   const [profile, setProfile] = useState({
     name: "",
     avatarUrl: "/asets/images/avatar.png",
@@ -646,6 +657,7 @@ export default function Leftbar({ role = "admin" }) {
           {/* Main Menu */}
           {menu
             .filter((item) => !item.adminOnly || isAdmin)
+            .filter(() => showPayroll)
             .map((item) => {
               if (item.type === "heading") {
                 return (
@@ -695,6 +707,7 @@ export default function Leftbar({ role = "admin" }) {
               );
             })}
 
+          {showPayroll && (<>
           {/* ── Divider before TMS ── */}
           <li style={{ listStyle: "none" }}>
             <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
@@ -734,9 +747,17 @@ export default function Leftbar({ role = "admin" }) {
               <span style={{ flex: 1 }}>SMM Reports</span>
             </a>
           </li>
+          </>)}
 
           {/* ── Task Management System ── */}
-          <li id="task-management-area" className={pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests") ? "active" : ""}>
+          {showTMS && (
+          <li
+            id="task-management-area"
+            className={!tmsOnly && (pathname?.startsWith("/dashboard/admin/tasks") || pathname?.startsWith("/dashboard/admin/task-requests")) ? "active" : ""}
+            style={tmsOnly ? { listStyle: "none", background: "transparent", border: "none", boxShadow: "none", padding: 0 } : undefined}
+          >
+            {/* Operations sees the task menus straight away — no parent toggle. */}
+            {!tmsOnly && (
             <a
               href="javascript:void(0);"
               onClick={(e) => { e.preventDefault(); toggleMenu("tms"); }}
@@ -749,8 +770,9 @@ export default function Leftbar({ role = "admin" }) {
               }} />
               <span style={{ flex: 1 }}>Task Management</span>
             </a>
+            )}
 
-            <ul className="ml-menu" style={{ display: openMenu === "tms" ? "block" : "none" }}>
+            <ul className="ml-menu" style={{ display: tmsOnly || openMenu === "tms" ? "block" : "none", ...(tmsOnly ? { background: "transparent", border: "none", boxShadow: "none", margin: 0 } : {}) }}>
 
               {/* WORKSPACE */}
               <li style={{ padding: "6px 16px 3px", fontSize: 10, fontWeight: 700, color: "#6366F1", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -880,21 +902,22 @@ export default function Leftbar({ role = "admin" }) {
 
             </ul>
           </li>
+          )}
 
           {/* ── Divider before section switch ── */}
           <li style={{ listStyle: "none" }}>
             <div style={{ height: 1, background: "#E0E7FF", margin: "10px 10px 6px" }} />
           </li>
 
-          {/* ── Switch to Website dashboard ── */}
+          {/* ── Back to the department hub ── */}
           <li style={{ listStyle: "none" }}>
             <Link
-              href="/dashboard/website"
+              href="/dashboard/hub"
               className="waves-effect waves-block"
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", textDecoration: "none" }}
             >
-              <i className="bi bi-globe2" style={{ fontSize: 17, width: 20, textAlign: "center", flexShrink: 0, color: "rgba(0,0,0,0.5)" }} />
-              <span style={{ flex: 1 }}>Switch to Website</span>
+              <i className="bi bi-grid-fill" style={{ fontSize: 17, width: 20, textAlign: "center", flexShrink: 0, color: "rgba(0,0,0,0.5)" }} />
+              <span style={{ flex: 1 }}>Back to Hub</span>
             </Link>
           </li>
 

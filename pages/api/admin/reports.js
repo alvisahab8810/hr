@@ -8,6 +8,7 @@ import Proposal from "@/models/Proposal";
 import Invoice from "@/models/Invoice";
 import Salesperson from "@/models/Salesperson";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { salesId } from "@/utils/salesAuth";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -15,13 +16,20 @@ export default async function handler(req, res) {
   await dbConnect();
 
   try {
+    // A salesperson sees their own numbers, not the whole company's.
+    const mine = salesId(req);
+    const own = mine
+      ? (await Query.find({ salespersonId: mine }).select("_id").lean()).map((l) => l._id)
+      : null;
+    const docScope = own ? { leadId: { $in: own } } : {};
+
     const [leads, proposals, invoices, team] = await Promise.all([
-      Query.find({})
+      Query.find(mine ? { salespersonId: mine } : {})
         .select("name businessName status budget source formType service salespersonId meetingDate held score prep lostReason createdAt")
         .lean(),
-      Proposal.find({}).select("leadId status approval sent amount term owner createdAt").lean(),
-      Invoice.find({}).select("leadId proposalId amount gstPct status issued due paidOn kind").lean(),
-      Salesperson.find({}).select("name role active").lean().catch(() => []),
+      Proposal.find(docScope).select("leadId status approval sent amount term owner createdAt").lean(),
+      Invoice.find(docScope).select("leadId proposalId amount gstPct status issued due paidOn kind").lean(),
+      mine ? Promise.resolve([]) : Salesperson.find({}).select("name role active").lean().catch(() => []),
     ]);
 
     return res.status(200).json({

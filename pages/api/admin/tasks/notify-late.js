@@ -5,16 +5,12 @@
 import dbConnect   from "@/utils/dbConnect";
 import Task        from "@/models/tasks/Task";
 import Employee    from "@/models/hr/Employee";
-import nodemailer  from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 const STAGE_NAMES = ["Script/Concept", "Shoot", "Design/Edit/Develop", "Posted/Live"];
 
 async function sendLateEmail(empEmail, empName, task, stageName, deadline) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com", port: 587, secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = mailTransport();
 
   const deadlineStr = new Date(deadline).toLocaleString("en-IN", {
     day: "numeric", month: "short", year: "numeric",
@@ -23,7 +19,7 @@ async function sendLateEmail(empEmail, empName, task, stageName, deadline) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      empEmail,
     subject: `OVERDUE: ${task.nomenclature || task.title} — ${stageName} deadline missed`,
     html: `

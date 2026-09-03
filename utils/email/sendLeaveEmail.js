@@ -1,15 +1,7 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import { renderActionEmailHtml } from "@/utils/email/actionEmailTemplate";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "info@viralon.in",
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const transporter = mailTransport();
 
 /* -------- EMPLOYEE APPLIED -------- */
 export async function sendLeaveAppliedEmail({
@@ -26,7 +18,7 @@ export async function sendLeaveAppliedEmail({
 }) {
   // 📩 Employee confirmation
   await transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to: employeeEmail,
     subject: "Leave Application Submitted",
     html: `
@@ -66,7 +58,7 @@ export async function sendLeaveAppliedEmail({
   });
 
   await transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to: [
       "hr@viralon.in",
       "ivan@viralon.in",

@@ -1,14 +1,6 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "info@viralon.in",
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const transporter = mailTransport();
 
 /* -------- APPROVED -------- */
 export async function sendLeaveApprovedEmail({
@@ -21,7 +13,7 @@ export async function sendLeaveApprovedEmail({
   remark,
 }) {
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "✅ Leave Approved",
     html: `
@@ -57,7 +49,7 @@ export async function sendLeaveRejectedEmail({
   remark,
 }) {
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "❌ Leave Rejected",
     html: `

@@ -23,7 +23,11 @@ export function adminGuard(req, res) {
   }
 
   // Salesperson session — only the CRM endpoints, never payroll or the site editors.
-  if (readSales(cookie) && salesMayCall(req.url || "")) return true;
+  // Settings are read-only for them: the documents need the branding.
+  if (readSales(cookie) && salesMayCall(req.url || "")) {
+    const readOnly = (req.url || "").startsWith("/api/admin/settings") && req.method !== "GET";
+    if (!readOnly) return true;
+  }
 
   res.status(401).json({ success: false, message: "Unauthorized" });
   return false;

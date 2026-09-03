@@ -329,7 +329,8 @@ const s = {
 
 export async function getServerSideProps({ req }) {
   const cookie = req.headers.cookie || "";
-  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=") && !cookie.includes("sales_token=")) {
+  // Admin-only: a salesperson login is limited to the Sales panel.
+  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=")) {
     return { redirect: { destination: "/dashboard/login", permanent: false } };
   }
   return { props: {} };

@@ -6,6 +6,8 @@ import dbConnect from "@/utils/dbConnect";
 import Proposal from "@/models/Proposal";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { ownsLead } from "@/utils/leadScope";
+import { salesId } from "@/utils/salesAuth";
 
 const FIELDS = [
   "svc", "amount", "term", "months", "advPct", "validTill", "owner", "notes",
@@ -20,6 +22,10 @@ export default async function handler(req, res) {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: "Bad proposal id" });
   }
+
+  // The document belongs to a lead, and the lead has an owner.
+  const parent = await Proposal.findById(id).select("leadId").lean();
+  if (parent && !(await ownsLead(req, res, parent.leadId))) return;
 
   try {
     if (req.method === "DELETE") {
@@ -45,21 +51,37 @@ export default async function handler(req, res) {
     if (b.agreement) {
       const g = b.agreement;
       const now = current.agreement?.status || "Not sent";
-      if (g.status === "Sent" && current.status !== "Accepted") {
+      if ((g.status === "Draft" || g.status === "Sent") && current.status !== "Accepted") {
         return res.status(400).json({ success: false, message: "The client has to accept the proposal before the agreement goes out" });
       }
-      if ((g.status === "Approved" || g.status === "Rejected") && now === "Not sent") {
+      if ((g.status === "Sent" || g.status === "Follow up") && now === "Not sent" && g.status !== "Sent") {
+        return res.status(400).json({ success: false, message: "Draft the agreement first" });
+      }
+      if ((g.status === "Approved" || g.status === "Rejected") && (now === "Not sent" || now === "Draft")) {
         return res.status(400).json({ success: false, message: "Send the agreement first" });
       }
       if (g.status) {
         set["agreement.status"] = g.status;
+        if (g.status === "Draft" && !current.agreement?.createdOn) set["agreement.createdOn"] = new Date();
         if (g.status === "Sent") set["agreement.sentOn"] = new Date();
         if (g.status === "Approved" || g.status === "Rejected") set["agreement.decidedOn"] = new Date();
       }
-      if (g.note !== undefined) set["agreement.note"] = String(g.note || "");
+      for (const k of ["title", "startDate", "endDate", "fuOn", "note"]) {
+        if (g[k] !== undefined) set["agreement." + k] = String(g[k] || "");
+      }
+      if (Array.isArray(g.clauses)) {
+        set["agreement.clauses"] = g.clauses
+          .map((c) => ({ h: String(c?.h || "").trim(), t: String(c?.t || "").trim() }))
+          .filter((c) => c.h || c.t);
+      }
     }
 
     // The admin's decision.
+    // The decision is the admin's. A salesperson only requests it.
+    if ((b.approval || b.adminNote !== undefined) && salesId(req)) {
+      return res.status(403).json({ success: false, message: "Only an admin can approve a proposal" });
+    }
+
     if (b.approval) {
       set.approval = b.approval;
       set.approvedOn = new Date();

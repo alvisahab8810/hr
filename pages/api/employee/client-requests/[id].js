@@ -8,18 +8,14 @@ import Task from "@/models/tasks/Task";
 import Brand from "@/models/tasks/Brand";
 import "@/models/clients/Client";
 import { sendNotification } from "@/utils/tasks/sendNotification";
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 const JWT_SECRET  = process.env.JWT_SECRET || "viralon_invite_secret_2024";
 const MONTH_SHORT = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
 const VALID_CT    = ["reel", "post", "carousel", "story"];
 
 function makeTransport() {
-  return nodemailer.createTransport({
-    host: "smtp.hostinger.com", port: 587, secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  return mailTransport();
 }
 
 async function sendScopeEmail({ clientEmail, clientName, brandName, title, status, adminRemark }) {
@@ -39,7 +35,7 @@ async function sendScopeEmail({ clientEmail, clientName, brandName, title, statu
     <p style="font-size:14px;color:#374151;line-height:1.65">Your task request <strong>"${title}"</strong> from <strong>${brandName}</strong> has been reviewed and marked <strong style="color:${confirmed?"#15803D":"#DC2626"}">${confirmed?"In Scope":"Out of Scope"}</strong>.</p>
     ${noteHtml}`;
   await makeTransport().sendMail({
-    from: `"Viralon Team" <info@viralon.in>`,
+    from: `"Viralon Team" <${MAIL_USER}>`,
     to: clientEmail,
     subject,
     html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif">

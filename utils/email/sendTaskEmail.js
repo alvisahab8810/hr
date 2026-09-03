@@ -1,12 +1,6 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-  tls: { rejectUnauthorized: false },
-});
+const transporter = mailTransport();
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function fmtDate(d) {
@@ -156,7 +150,7 @@ export async function sendTaskAssignedEmail({ employeeEmail, employeeName, task,
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      employeeEmail,
     subject: `📋 New Task: ${task.nomenclature || task.title}`,
     html,
@@ -269,7 +263,7 @@ export async function sendClientRequestEmail({ clientName, clientEmail, brandNam
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon Client Portal" <info@viralon.in>`,
+    from:    `"Viralon Client Portal" <${MAIL_USER}>`,
     to:      "anurag@viralon.in",
     cc:      "info@viralon.in",
     subject: `🆕 Task Request — ${brandName}: ${title}`,
@@ -364,7 +358,7 @@ export async function sendStageApprovedEmail({ employeeEmail, employeeName, task
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      employeeEmail,
     subject: `✅ Stage Approved — ${stageName} · ${task.nomenclature || task.title}`,
     html,
@@ -450,7 +444,7 @@ export async function sendStageRejectedEmail({ employeeEmail, employeeName, task
 </html>`;
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      employeeEmail,
     subject: `❌ Stage Rejected — ${stageName} · ${task.nomenclature || task.title}`,
     html,

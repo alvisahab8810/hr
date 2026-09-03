@@ -16,7 +16,8 @@ import toast, { Toaster } from "react-hot-toast";
 import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
-import DocPreview from "@/components/DocPreview";
+import DocPreview, { defaultAgreementClauses } from "@/components/DocPreview";
+import MailCompose from "@/components/MailCompose";
 import { SERVICES, inr, inrShort, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList } from "@/utils/crmSettings";
 
@@ -154,15 +155,15 @@ function Modal({ title, icon, wide, onClose, children }) {
   return (
     <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 2000,
-                  display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
-      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: wide ? 720 : 520,
+                  display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "28px 16px", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: wide ? 860 : 520,
                     boxShadow: "0 24px 60px rgba(15,23,42,.28)", overflow: "hidden" }}>
         <div style={{ padding: "15px 20px", borderBottom: "1px solid #F1F1FA", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={s.panelIcon}><i className={`bi ${icon}`} style={{ fontSize: 14 }} /></div>
           <span style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", flex: 1 }}>{title}</span>
           <button onClick={onClose} style={s.iconBtn} title="Close"><i className="bi bi-x-lg" style={{ fontSize: 12 }} /></button>
         </div>
-        <div className="lp-scroll" style={{ padding: 20, maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>{children}</div>
+        <div className="lp-scroll" style={{ padding: 20, maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>{children}</div>
       </div>
     </div>
   );
@@ -187,6 +188,7 @@ export default function ProposalsPage() {
   const [density, setDensity] = useState("comfortable");
   const [colsOpen, setColsOpen] = useState(false);
   const [modal, setModal] = useState(null);   // {type, p?, panel?, leadId?}
+  const [isSales, setIsSales] = useState(false);
 
   useEffect(() => {
     try {
@@ -196,6 +198,7 @@ export default function ProposalsPage() {
       const d = localStorage.getItem(DENSITY_KEY);
       if (d) setDensity(d);
     } catch { setHidden(COLS.filter((c) => !c.on).map((c) => c.k)); }
+    setIsSales(/(^|; *)sales_perms=/.test(document.cookie));
   }, []);
 
   const toggleCol = (k) => {
@@ -341,6 +344,7 @@ export default function ProposalsPage() {
       inPlay: inPlay.reduce((a, p) => a + (p.amount || 0), 0),
       waiting: waiting.length,
       waitingValue: waiting.reduce((a, p) => a + (p.amount || 0), 0),
+      waitingRows: waiting,
       won: won.length,
       winRate: decided.length ? Math.round((won.length / decided.length) * 100) : 0,
       avg: rows.length ? Math.round(total / rows.length) : 0,
@@ -451,11 +455,29 @@ export default function ProposalsPage() {
                             background: "#FFF9EC", border: "1px solid #FDE9BE", marginBottom: 14 }}>
                 <i className="bi bi-shield-exclamation" style={{ fontSize: 16, color: "#B4690E", marginTop: 1 }} />
                 <div style={{ fontSize: 12.5, color: "#7C5A12", lineHeight: 1.6 }}>
-                  <b>{stats.waiting} {stats.waiting === 1 ? "proposal is" : "proposals are"} waiting on you.</b>{" "}
-                  Nothing goes to a client until it is approved here. Approve, request changes, or reject with a
-                  reason the salesperson can act on.
+                  {isSales ? (
+                    <>
+                      <b>{stats.waiting} {stats.waiting === 1 ? "proposal is" : "proposals are"} with the admin for approval.</b>{" "}
+                      Nothing goes to a client until an admin approves it. You will see the decision on each proposal.
+                    </>
+                  ) : (
+                    <>
+                      <b>{stats.waiting} approval {stats.waiting === 1 ? "request is" : "requests are"} waiting on you.</b>{" "}
+                      Nothing goes to a client until it is approved here. Approve, request changes, or reject with a
+                      reason the salesperson can act on.
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                        {(stats.waitingRows || []).slice(0, 8).map((w) => (
+                          <button key={w._id} onClick={() => setModal({ type: "panel", p: w, panel: "approval" })}
+                                  style={{ ...s.miniBtn, height: 26, background: "#fff" }}
+                                  title={`Review ${propCode(w)}`}>
+                            {leadRef(w.leadId)} · {w.co || w.contact || "Lead"} · {inr(w.amount || 0)}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   <button onClick={() => { setFStatus(""); setQ(""); setSort({ k: "approval", dir: 1 }); }}
-                          style={{ ...s.miniBtn, marginLeft: 10, height: 26 }}>Show them first</button>
+                          style={{ ...s.miniBtn, marginLeft: 0, marginTop: 8, height: 26 }}>Show them first</button>
                 </div>
               </div>
             ) : null}
@@ -561,9 +583,6 @@ export default function ProposalsPage() {
                           <button onClick={() => setModal({ type: "panel", p, panel: "approval" })} style={s.iconBtn} title="Approval">
                             <i className="bi bi-shield-check" style={{ fontSize: 12 }} />
                           </button>
-                          <button onClick={() => setModal({ type: "panel", p, panel: "followups" })} style={{ ...s.iconBtn, marginLeft: 4 }} title="Follow ups">
-                            <i className="bi bi-chat-left-dots-fill" style={{ fontSize: 12 }} />
-                          </button>
                           <button onClick={() => remove(p)} style={{ ...s.iconBtn, marginLeft: 4, color: "#C42525" }} title="Delete">
                             <i className="bi bi-trash3-fill" style={{ fontSize: 12 }} />
                           </button>
@@ -593,14 +612,28 @@ export default function ProposalsPage() {
         const live = rows.find((x) => x._id === modal.p._id) || modal.p;
         const meta = PANEL_META[modal.panel] || PANEL_META.record;
         return (
-          <Modal title={`${meta.t} · ${propCode(live)}`} icon={meta.i} wide={modal.panel === "followups"} onClose={() => setModal(null)}>
-            <Panel which={modal.panel} p={live} busy={busy} patch={patch} invoice={raiseInvoice}
+          <Modal title={`${meta.t} · ${propCode(live)}`} icon={meta.i} wide={modal.panel === "followups" || modal.panel === "agreement"} onClose={() => setModal(null)}>
+            <Panel which={modal.panel} p={live} busy={busy} patch={patch} invoice={raiseInvoice} isSales={isSales}
+                   mail={(kind, markSent) => setModal({ type: "mail", p: live, kind, markSent })}
                    pdf={() => setModal({ type: "pdf", p: live })}
                    pdfAgreement={() => setModal({ type: "pdfAgree", p: live })}
                    go={(pn) => setModal({ type: "panel", p: live, panel: pn })} />
           </Modal>
         );
       })() : null}
+
+      {modal?.type === "mail" ? (
+        <MailCompose
+          url={`/api/admin/proposals/${modal.p._id}/mail`}
+          kind={modal.kind}
+          markSent={modal.markSent}
+          title={modal.markSent
+            ? (modal.kind === "agreement" ? "Send the agreement" : "Send the proposal")
+            : (modal.kind === "agreement" ? "Mail the agreement again" : "Mail the proposal again")}
+          onClose={() => setModal(null)}
+          onSent={load}
+        />
+      ) : null}
 
       {modal?.type === "pdfAgree" ? (
         <DocPreview kind="agreement" doc={rows.find((x) => x._id === modal.p._id) || modal.p}
@@ -626,7 +659,7 @@ export default function ProposalsPage() {
 
 /* ── the panels behind the cells ────────────────────────────────────────── */
 
-function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement }) {
+function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement, isSales, mail }) {
   switch (which) {
     case "record":
       return (
@@ -661,10 +694,10 @@ function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement }) {
       return <Commercials p={p} busy={busy} patch={patch} go={go} />;
 
     case "approval":
-      return <Approval p={p} busy={busy} patch={patch} go={go} />;
+      return <Approval p={p} busy={busy} patch={patch} go={go} isSales={isSales} />;
 
     case "status":
-      return <Status p={p} busy={busy} patch={patch} go={go} invoice={invoice} />;
+      return <Status p={p} busy={busy} patch={patch} go={go} invoice={invoice} mail={mail} />;
 
     case "followups":
       return <Followups p={p} busy={busy} patch={patch} />;
@@ -673,7 +706,7 @@ function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement }) {
       return <Owner p={p} busy={busy} patch={patch} />;
 
     case "agreement":
-      return <Agreement p={p} busy={busy} patch={patch} go={go} pdf={() => pdfAgreement?.()} />;
+      return <Agreement p={p} busy={busy} patch={patch} go={go} pdf={() => pdfAgreement?.()} mail={mail} />;
 
     default:
       return null;
@@ -744,7 +777,7 @@ function Commercials({ p, busy, patch, go }) {
   );
 }
 
-function Approval({ p, busy, patch, go }) {
+function Approval({ p, busy, patch, go, isSales }) {
   const [note, setNote] = useState(p.adminNote || "");
   const m = approvalMeta(p.approval);
   const decide = (approval) => patch(p._id, { approval, adminNote: note });
@@ -762,21 +795,35 @@ function Approval({ p, busy, patch, go }) {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 14 }}>
-        <Field label="Your note back" hint="The salesperson sees this, so give them something to act on.">
-          <textarea className="lp-in" style={{ ...s.input, height: 90, padding: "9px 11px", resize: "vertical" }}
-                    value={note} onChange={(e) => setNote(e.target.value)}
-                    placeholder="What needs changing, or why this is a no" />
-        </Field>
-      </div>
+      {p.adminNote ? (
+        <div style={{ ...s.softBox, marginTop: 12, fontSize: 12, color: "#475569", lineHeight: 1.55 }}>
+          <b style={{ color: "#0F172A" }}>From the admin.</b> {p.adminNote}
+        </div>
+      ) : null}
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button onClick={() => decide("Approved")} disabled={busy} style={s.primaryBtn}>
-          <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Approve
-        </button>
-        <button onClick={() => decide("Changes requested")} disabled={busy} style={s.miniBtn}>Ask for changes</button>
-        <button onClick={() => decide("Rejected")} disabled={busy} style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Reject</button>
-      </div>
+      {isSales ? (
+        <div style={{ ...s.softBox, marginTop: 14, fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
+          Only an admin can decide this. Your request is with them — you will see the decision here.
+        </div>
+      ) : (
+        <>
+          <div style={{ marginTop: 14 }}>
+            <Field label="Your note back" hint="The salesperson sees this, so give them something to act on.">
+              <textarea className="lp-in" style={{ ...s.input, height: 90, padding: "9px 11px", resize: "vertical" }}
+                        value={note} onChange={(e) => setNote(e.target.value)}
+                        placeholder="What needs changing, or why this is a no" />
+            </Field>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={() => decide("Approved")} disabled={busy} style={s.primaryBtnSm}>
+              <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Approve
+            </button>
+            <button onClick={() => decide("Changes requested")} disabled={busy} style={s.miniBtn}>Ask for changes</button>
+            <button onClick={() => decide("Rejected")} disabled={busy} style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Reject</button>
+          </div>
+        </>
+      )}
 
       {/* The gate itself. */}
       <div style={{ ...s.softBox, marginTop: 14 }}>
@@ -788,7 +835,7 @@ function Approval({ p, busy, patch, go }) {
         ) : p.status === "Draft" ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: 12, color: "#0F8A54", fontWeight: 700 }}>Approved — it can go out now.</span>
-            <button onClick={() => patch(p._id, { status: "Sent" })} disabled={busy} style={s.primaryBtn}>
+            <button onClick={() => patch(p._id, { status: "Sent" })} disabled={busy} style={s.primaryBtnSm}>
               <i className="bi bi-send-fill" style={{ fontSize: 12 }} /> Mark as sent
             </button>
           </div>
@@ -807,76 +854,175 @@ function Approval({ p, busy, patch, go }) {
    goes out, and then it either comes back approved or it is refused. */
 const AGREE = {
   "Not sent":  { n: "Not sent",  bg: "#F1F5F9", fg: "#94A3B8" },
+  "Draft":     { n: "Drafted",   bg: "#FEF3C7", fg: "#B4690E" },
   "Sent":      { n: "Sent",      bg: "#EEF2FF", fg: "#4338CA" },
-  "Approved":  { n: "Approved",  bg: "#DCFCE7", fg: "#0F8A54" },
+  "Follow up": { n: "Follow up", bg: "#E0F2FE", fg: "#0369A1" },
+  "Approved":  { n: "Accepted",  bg: "#DCFCE7", fg: "#0F8A54" },
   "Rejected":  { n: "Rejected",  bg: "#FDEDED", fg: "#C42525" },
 };
 const agreeMeta = (k) => AGREE[k] || AGREE["Not sent"];
 
-function Agreement({ p, busy, patch, go, pdf }) {
+function Agreement({ p, busy, patch, go, pdf, mail }) {
   const g = p.agreement || {};
   const st = g.status || "Not sent";
   const m = agreeMeta(st);
-  const [note, setNote] = useState(g.note || "");
   const accepted = p.status === "Accepted";
+  const drafted = st !== "Not sent";
+
+  const [edit, setEdit] = useState(false);
+  const [f, setF] = useState({
+    title: g.title || "Agreement",
+    startDate: g.startDate || "",
+    endDate: g.endDate || "",
+    fuOn: g.fuOn || "",
+    note: g.note || "",
+    clauses: (g.clauses && g.clauses.length ? g.clauses : defaultAgreementClauses(p)).map((c) => ({ h: c.h, t: c.t })),
+  });
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const setCl = (i, k, v) => setF((x) => ({ ...x, clauses: x.clauses.map((c, j) => (j === i ? { ...c, [k]: v } : c)) }));
+  const addCl = () => setF((x) => ({ ...x, clauses: [...x.clauses, { h: "", t: "" }] }));
+  const delCl = (i) => setF((x) => ({ ...x, clauses: x.clauses.filter((_, j) => j !== i) }));
+  const reset = () => setF((x) => ({ ...x, clauses: defaultAgreementClauses(p).map((c) => ({ h: c.h, t: c.t })) }));
+
+  const save = async (status) => {
+    await patch(p._id, { agreement: { ...f, ...(status ? { status } : {}) } });
+    setEdit(false);
+  };
 
   return (
     <>
       <KV k="Agreement" v={<span style={{ ...s.tag, background: m.bg, color: m.fg }}>{m.n}</span>} />
+      <KV k="Created on" v={g.createdOn ? fmtD(g.createdOn) : "—"} />
       <KV k="Sent on" v={g.sentOn ? fmtD(g.sentOn) : "—"} />
+      <KV k="Next follow up" v={g.fuOn ? fmtD(g.fuOn) : "—"} />
       <KV k="Decided on" v={g.decidedOn ? fmtD(g.decidedOn) : "—"} />
       {g.note ? <KV k="Note" v={g.note} /> : null}
 
       {!accepted ? (
         <div style={{ ...s.softBox, marginTop: 12, fontSize: 12, color: "#64748B", lineHeight: 1.6 }}>
-          The agreement goes out only after the client accepts the proposal.
+          The agreement is drafted only after the client accepts the proposal.
           <div style={{ marginTop: 9 }}><button onClick={() => go("status")} style={s.miniBtn}>Where it stands</button></div>
         </div>
-      ) : (
+      ) : edit ? (
         <>
-          <div style={{ marginTop: 14 }}>
-            <button onClick={() => pdf?.()} style={s.primaryBtn}>
-              <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} /> Preview / PDF
-            </button>
-            <div style={{ fontSize: 11.5, color: "#94A3B8", margin: "8px 0 12px", lineHeight: 1.55 }}>
-              Generated from this proposal — scope, fees, term and two signature blocks.
+          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+            <Field label="Title">
+              <input className="lp-in" style={s.input} value={f.title} onChange={(e) => set("title", e.target.value)}
+                     placeholder="Agreement" />
+            </Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <Field label="Starts on">
+                <input className="lp-in" style={s.input} type="date" value={f.startDate}
+                       onChange={(e) => set("startDate", e.target.value)} />
+              </Field>
+              <Field label="Ends on">
+                <input className="lp-in" style={s.input} type="date" value={f.endDate}
+                       onChange={(e) => set("endDate", e.target.value)} />
+              </Field>
             </div>
-            <Field label="Note">
-              <input className="lp-in" style={s.input} value={note} onChange={(e) => setNote(e.target.value)}
+
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", letterSpacing: .3, textTransform: "uppercase" }}>
+                  Terms of engagement
+                </div>
+                <div style={{ flex: 1 }} />
+                <button onClick={reset} style={{ ...s.miniBtn, height: 26 }}>Reset to standard</button>
+                <button onClick={addCl} style={{ ...s.miniBtn, height: 26 }}>+ Clause</button>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {f.clauses.map((c, i) => (
+                  <div key={i} style={{ ...s.softBox, padding: 10 }}>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                      <input className="lp-in" style={{ ...s.input, fontWeight: 700 }} value={c.h}
+                             onChange={(e) => setCl(i, "h", e.target.value)} placeholder="Heading" />
+                      <button onClick={() => delCl(i)} style={{ ...s.iconBtn, color: "#DC2626" }} title="Remove clause">
+                        <i className="bi bi-trash-fill" style={{ fontSize: 12 }} />
+                      </button>
+                    </div>
+                    <textarea className="lp-in" style={{ ...s.input, height: 70, padding: "9px 11px", resize: "vertical" }}
+                              value={c.t} onChange={(e) => setCl(i, "t", e.target.value)} placeholder="What this clause says" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Field label="Note" hint="It also prints on the agreement.">
+              <input className="lp-in" style={s.input} value={f.note} onChange={(e) => set("note", e.target.value)}
                      placeholder="Anything worth remembering" />
             </Field>
           </div>
 
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
-            {st === "Not sent" ? (
-              <button onClick={() => patch(p._id, { agreement: { status: "Sent", note } })} disabled={busy} style={s.primaryBtn}>
-                <i className="bi bi-send-fill" style={{ fontSize: 12 }} /> Send the agreement
-              </button>
-            ) : (
-              <button onClick={() => patch(p._id, { agreement: { note } })} disabled={busy} style={s.miniBtn}>Save</button>
-            )}
-            {st === "Sent" || st === "Rejected" ? (
-              <button onClick={() => patch(p._id, { agreement: { status: "Approved", note } })} disabled={busy} style={s.primaryBtn}>
-                <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Approved
-              </button>
-            ) : null}
-            {st === "Sent" || st === "Approved" ? (
-              <button onClick={() => patch(p._id, { agreement: { status: "Rejected", note } })} disabled={busy}
-                      style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Rejected</button>
-            ) : null}
-            {st !== "Not sent" ? (
-              <button onClick={() => patch(p._id, { agreement: { status: "Sent", note } })} disabled={busy} style={s.miniBtn}>
-                Sent again
+            <button onClick={() => save(drafted ? undefined : "Draft")} disabled={busy} style={s.primaryBtnSm}>
+              <i className="bi bi-check2" style={{ fontSize: 12 }} /> {drafted ? "Save changes" : "Create the draft"}
+            </button>
+            <button onClick={() => setEdit(false)} disabled={busy} style={s.miniBtn}>Cancel</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ marginTop: 14, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={() => setEdit(true)} style={drafted ? s.miniBtn : s.primaryBtnSm}>
+              <i className="bi bi-pencil-fill" style={{ fontSize: 12 }} /> {drafted ? "Edit the agreement" : "Create the agreement"}
+            </button>
+            {drafted ? (
+              <button onClick={() => pdf?.()} style={s.miniBtn}>
+                <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} /> Preview / PDF
               </button>
             ) : null}
           </div>
+          <div style={{ fontSize: 11.5, color: "#94A3B8", margin: "8px 0 12px", lineHeight: 1.55 }}>
+            {drafted
+              ? "Drafted off this proposal — scope, fees, term and two signature blocks. Edit any clause before it goes out."
+              : "Draft it first: the standard clauses are filled in from the proposal, and you can change any of them."}
+          </div>
+
+          {drafted ? (
+            <>
+              <Field label="Next follow up" hint="When to chase the signature.">
+                <input className="lp-in" style={s.input} type="date" value={f.fuOn}
+                       onChange={(e) => { set("fuOn", e.target.value); patch(p._id, { agreement: { fuOn: e.target.value } }, true); }} />
+              </Field>
+
+              <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+                {st === "Draft" ? (
+                  <button onClick={() => mail?.("agreement", true)} disabled={busy} style={s.primaryBtnSm}>
+                    <i className="bi bi-envelope-paper-fill" style={{ fontSize: 12 }} /> Mail it to the client
+                  </button>
+                ) : null}
+                {st === "Sent" || st === "Follow up" ? (
+                  <>
+                    <button onClick={() => mail?.("agreement", false)} disabled={busy} style={s.miniBtn}
+                            title="Opens the mail with the agreement PDF attached">
+                      <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} /> Mail it again
+                    </button>
+                    <button onClick={() => patch(p._id, { agreement: { status: "Follow up" } })} disabled={busy} style={s.miniBtn}>
+                      <i className="bi bi-arrow-repeat" style={{ fontSize: 12 }} /> Followed up
+                    </button>
+                    <button onClick={() => patch(p._id, { agreement: { status: "Approved" } })} disabled={busy} style={s.primaryBtnSm}>
+                      <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Accepted
+                    </button>
+                    <button onClick={() => patch(p._id, { agreement: { status: "Rejected" } })} disabled={busy}
+                            style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Rejected</button>
+
+                  </>
+                ) : null}
+                {st === "Rejected" ? (
+                  <button onClick={() => mail?.("agreement", true)} disabled={busy} style={s.miniBtn}>
+                    Send a revised copy
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </>
       )}
     </>
   );
 }
 
-function Status({ p, busy, patch, go, invoice }) {
+function Status({ p, busy, patch, go, invoice, mail }) {
   const m = statusMeta(p.status);
   const canSend = p.approval === "Approved";
   return (
@@ -894,13 +1040,24 @@ function Status({ p, busy, patch, go, invoice }) {
       ) : (
         <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
           {p.status === "Draft" ? (
-            <button onClick={() => patch(p._id, { status: "Sent" })} disabled={busy} style={s.primaryBtn}>
-              <i className="bi bi-send-fill" style={{ fontSize: 12 }} /> Mark as sent
+            <>
+              <button onClick={() => mail?.("proposal", true)} disabled={busy} style={s.primaryBtnSm}>
+                <i className="bi bi-envelope-paper-fill" style={{ fontSize: 12 }} /> Mail it to the client
+              </button>
+              <button onClick={() => patch(p._id, { status: "Sent" })} disabled={busy} style={s.miniBtn}
+                      title="Only marks it sent — no mail goes out">
+                Mark as sent
+              </button>
+            </>
+          ) : (
+            <button onClick={() => mail?.("proposal", false)} disabled={busy} style={s.miniBtn}
+                    title="Opens the mail with the proposal PDF attached">
+              <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} /> Mail it again
             </button>
-          ) : null}
+          )}
           {p.status === "Sent" || p.status === "Negotiation" ? (
             <>
-              <button onClick={() => patch(p._id, { status: "Accepted" })} disabled={busy} style={s.primaryBtn}>
+              <button onClick={() => patch(p._id, { status: "Accepted" })} disabled={busy} style={s.primaryBtnSm}>
                 <i className="bi bi-check2-circle" style={{ fontSize: 12 }} /> Mark as accepted
               </button>
               {p.status !== "Negotiation" ? (
@@ -911,7 +1068,7 @@ function Status({ p, busy, patch, go, invoice }) {
           ) : null}
           {p.status === "Accepted" ? (
             <>
-              <button onClick={() => invoice?.(p)} disabled={busy} style={s.primaryBtn}>
+              <button onClick={() => invoice?.(p)} disabled={busy} style={s.primaryBtnSm}>
                 <i className="bi bi-receipt" style={{ fontSize: 12 }} /> Raise the invoices
               </button>
               <Link href={`/dashboard/website/invoices?lead=${p.leadId}`} style={{ ...s.miniBtn, textDecoration: "none" }}>
@@ -1180,5 +1337,10 @@ const s = {
     display: "inline-flex", alignItems: "center", gap: 7, height: 36, padding: "0 15px",
     borderRadius: 10, border: "1px solid #6366F1", background: "#6366F1", color: "#fff",
     fontSize: 12.5, fontWeight: 800, cursor: "pointer",
+  },
+  primaryBtnSm: {
+    display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 12px",
+    borderRadius: 9, border: "1px solid #6366F1", background: "#6366F1", color: "#fff",
+    fontSize: 11.5, fontWeight: 800, cursor: "pointer",
   },
 };

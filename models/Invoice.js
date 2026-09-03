@@ -28,8 +28,20 @@ const InvoiceSchema = new mongoose.Schema(
     issued: { type: String, default: "" },     // plain "YYYY-MM-DD", like the lead dates
     due: { type: String, default: "" },
 
-    // Draft | Sent | Paid | Overdue | Cancelled
+    // Draft | Sent | Partly paid | Paid | Overdue | Cancelled
     status: { type: String, default: "Draft" },
+
+    // Every amount received against this invoice, in the order it came in.
+    payments: {
+      type: [{
+        on: { type: String, default: "" },     // "YYYY-MM-DD"
+        amount: { type: Number, default: 0 },
+        method: { type: String, default: "" },
+        ref: { type: String, default: "" },
+        at: { type: Date, default: Date.now },
+      }],
+      default: [],
+    },
     paidOn: { type: String, default: "" },
     method: { type: String, default: "" },     // Bank transfer | UPI | Cheque | Cash
     ref: { type: String, default: "" },        // UTR / cheque number

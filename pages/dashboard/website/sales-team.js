@@ -5,6 +5,7 @@
 // and a tick against every menu that person may open. The mail goes out with
 // the login and the link.
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
 import Head from "next/head";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -27,7 +28,11 @@ export default function SalesTeamPage() {
   const [data, setData] = useState({ team: [], leads: [], proposals: [], invoices: [], menus: {} });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [modal, setModal] = useState(null);   // {type:'manage'} | {type:'form', sp}
+  const [modal, setModal] = useState(null);   // {type:'form', sp}
+  // The team list lives on its own screen (?manage=1), not in a popup.
+  const router  = useRouter();
+  const manage  = router.query.manage === "1";
+  const go = (on) => router.push(on ? "/dashboard/website/sales-team?manage=1" : "/dashboard/website/sales-team", undefined, { shallow: true });
 
   const load = async () => {
     try {
@@ -100,7 +105,7 @@ export default function SalesTeamPage() {
       } else {
         toast.success(j.mailed ? "Saved and the login was mailed again" : "Saved");
       }
-      setModal({ type: "manage" });
+      setModal(null);
       load();
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
@@ -143,8 +148,9 @@ export default function SalesTeamPage() {
             <h1 style={s.h1}>Sales team</h1>
             <div style={s.sub}>Assigned load, activity quality and revenue against target, per person.</div>
           </div>
-          <button style={s.primary} onClick={() => setModal({ type: "manage" })}>
-            <i className="bi bi-people-fill" style={{ marginRight: 6 }} />Manage the team
+          <button style={s.primary} onClick={() => go(!manage)}>
+            <i className={manage ? "bi bi-speedometer2" : "bi bi-people-fill"} style={{ marginRight: 6 }} />
+            {manage ? "Back to the board" : "Manage the team"}
           </button>
         </div>
 
@@ -158,7 +164,56 @@ export default function SalesTeamPage() {
              n={totals.best ? `${totals.best.pct}% of target` : "nobody onboarded yet"} tone="#F59E0B" />
         </div>
 
-        {loading ? (
+        {manage ? (
+          /* The team list is a page of its own, not a popup. */
+          <div style={s.panel}>
+            <div style={s.panelHead}>
+              <button style={s.ghost} onClick={() => go(false)}>
+                <i className="bi bi-arrow-left" style={{ marginRight: 6 }} />Back to the board
+              </button>
+              <div style={{ flex: 1 }} />
+              <button style={s.primary} onClick={() => setModal({ type: "form", sp: null })}>
+                <i className="bi bi-person-plus-fill" style={{ marginRight: 6 }} />Onboard a salesperson
+              </button>
+            </div>
+            <div style={{ padding: 16 }}>
+              {!data.team.length ? <div style={s.empty}>Nobody yet.</div> : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {data.team.map((sp) => (
+                    <div key={sp._id} style={s.row}>
+                      <span style={{ ...s.ava, background: sp.color }}>{initials(sp.name)}</span>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{sp.name}</div>
+                        <div style={{ fontSize: 11.5, color: "#94A3B8" }}>
+                          {sp.role} · {sp.username} · {sp.email}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
+                          {sp.lastLogin ? `Last signed in ${fmtDT(sp.lastLogin)}` : "Has not signed in yet"}
+                        </div>
+                      </div>
+                      <span style={{ ...s.tag, ...(sp.active ? s.tagGreen : s.tagRed) }}>{sp.active ? "Active" : "Off"}</span>
+                      <button style={s.iconBtn} title="Edit" onClick={() => setModal({ type: "form", sp })}>
+                        <i className="bi bi-pencil-fill" />
+                      </button>
+                      <button style={s.iconBtn} title="Mail the login again" disabled={busy}
+                              onClick={() => patch(sp, { resend: true })}>
+                        <i className="bi bi-envelope-fill" />
+                      </button>
+                      <button style={s.iconBtn} title={sp.active ? "Switch off" : "Switch on"} disabled={busy}
+                              onClick={() => patch(sp, { active: !sp.active })}>
+                        <i className={`bi ${sp.active ? "bi-toggle-on" : "bi-toggle-off"}`} />
+                      </button>
+                      <button style={{ ...s.iconBtn, borderColor: "#FECACA", color: "#DC2626" }} title="Remove"
+                              disabled={busy} onClick={() => remove(sp)}>
+                        <i className="bi bi-trash3-fill" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : loading ? (
           <div style={s.empty}>Loading…</div>
         ) : !stats.length ? (
           <div style={s.empty}>
@@ -176,55 +231,11 @@ export default function SalesTeamPage() {
         </section>
       </div>
 
-      {modal?.type === "manage" ? (
-        <Modal title="Manage the team" onClose={() => setModal(null)}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <button style={s.primary} onClick={() => setModal({ type: "form", sp: null })}>
-              <i className="bi bi-person-plus-fill" style={{ marginRight: 6 }} />Onboard a salesperson
-            </button>
-          </div>
-          {!data.team.length ? <div style={s.empty}>Nobody yet.</div> : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {data.team.map((sp) => (
-                <div key={sp._id} style={s.row}>
-                  <span style={{ ...s.ava, background: sp.color }}>{initials(sp.name)}</span>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{sp.name}</div>
-                    <div style={{ fontSize: 11.5, color: "#94A3B8" }}>
-                      {sp.role} · {sp.username} · {sp.email}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                      {sp.lastLogin ? `Last signed in ${fmtDT(sp.lastLogin)}` : "Has not signed in yet"}
-                    </div>
-                  </div>
-                  <span style={{ ...s.tag, ...(sp.active ? s.tagGreen : s.tagRed) }}>{sp.active ? "Active" : "Off"}</span>
-                  <button style={s.iconBtn} title="Edit / permissions" onClick={() => setModal({ type: "form", sp })}>
-                    <i className="bi bi-pencil-fill" />
-                  </button>
-                  <button style={s.iconBtn} title="Mail the login again" disabled={busy}
-                          onClick={() => patch(sp, { resend: true })}>
-                    <i className="bi bi-envelope-fill" />
-                  </button>
-                  <button style={s.iconBtn} title={sp.active ? "Switch off" : "Switch on"} disabled={busy}
-                          onClick={() => patch(sp, { active: !sp.active })}>
-                    <i className={`bi ${sp.active ? "bi-toggle-on" : "bi-toggle-off"}`} />
-                  </button>
-                  <button style={{ ...s.iconBtn, borderColor: "#FECACA", color: "#DC2626" }} title="Remove"
-                          disabled={busy} onClick={() => remove(sp)}>
-                    <i className="bi bi-trash3-fill" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </Modal>
-      ) : null}
-
       {modal?.type === "form" ? (
         <Modal title={modal.sp ? `Edit ${modal.sp.name}` : "Onboard a salesperson"}
-               onClose={() => setModal({ type: "manage" })}>
+               onClose={() => setModal(null)}>
           <PersonForm sp={modal.sp} menus={data.menus || {}} busy={busy}
-                      onCancel={() => setModal({ type: "manage" })}
+                      onCancel={() => setModal(null)}
                       onSave={(f) => save(f, modal.sp)} />
         </Modal>
       ) : null}
@@ -248,7 +259,6 @@ function PersonForm({ sp, menus, busy, onSave, onCancel }) {
     : blankForm()));
   const [resend, setResend] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const tick = (k) => setF((p) => ({ ...p, permissions: { ...p.permissions, [k]: !p.permissions[k] } }));
 
   const submit = () => {
     if (!f.name.trim() || !f.email.trim() || !f.username.trim() || !f.password) {
@@ -270,16 +280,11 @@ function PersonForm({ sp, menus, busy, onSave, onCancel }) {
         </Field>
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <div style={s.flabel}>What this person can open</div>
-        <div style={s.permGrid}>
-          {MENU_ORDER.filter((k) => menus[k]).map((k) => (
-            <label key={k} style={{ ...s.perm, ...(f.permissions[k] ? s.permOn : {}) }}>
-              <input type="checkbox" checked={!!f.permissions[k]} onChange={() => tick(k)} />
-              <span>{menus[k]}</span>
-            </label>
-          ))}
-        </div>
+      {/* No ticks any more: a salesperson gets the Sales department — leads,
+          lead profiles, proposals and invoices — and nothing else. */}
+      <div style={s.note}>
+        <i className="bi bi-shield-lock-fill" style={{ marginRight: 6 }} />
+        This login opens the <b>Sales</b> panel only — Leads, Lead profile, Proposals and Invoices.
       </div>
 
       {sp ? (
@@ -399,7 +404,8 @@ function Modal({ title, children, onClose }) {
 
 export async function getServerSideProps({ req }) {
   const cookie = req.headers.cookie || "";
-  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=") && !cookie.includes("sales_token=")) {
+  // Admin-only: a salesperson login is limited to the Sales panel.
+  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=")) {
     return { redirect: { destination: "/dashboard/login", permanent: false } };
   }
   return { props: {} };

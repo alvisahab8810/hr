@@ -109,6 +109,9 @@ const MODULES = [
 export default function WebsiteDashboard() {
   const router = useRouter();
   const [blogStats, setBlogStats] = useState(null);
+  // A salesperson sees their own name here, the admin sees theirs. Read after
+  // mount: the cookie does not exist on the server.
+  const [who, setWho] = useState("Ivan Sinha");
   const [loading, setLoading]     = useState(true);
 
   const fetchStats = useCallback(async () => {
@@ -128,6 +131,10 @@ export default function WebsiteDashboard() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    const m = document.cookie.match(/sales_name=([^;]+)/);
+    if (m) setWho(decodeURIComponent(m[1]));
+  }, []);
 
   const _v = (val) => loading ? "—" : val ?? "—";
 
@@ -155,7 +162,7 @@ export default function WebsiteDashboard() {
 
             {/* ── GREETING ROW (same as payroll home) ─────────────── */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-              <div className="greetings-box" style={{ flex: 1, margin: 0 }}><DateTimeGreeting name="Ivan Sinha" /></div>
+              <div className="greetings-box" style={{ flex: 1, margin: 0 }}><DateTimeGreeting name={who} /></div>
               <button onClick={() => router.reload()} style={{
                 border: "none", borderRadius: 10, padding: "9px 18px",
                 background: "linear-gradient(135deg,#6366F1,#818CF8)",
@@ -180,7 +187,8 @@ export default function WebsiteDashboard() {
 
 export async function getServerSideProps({ req }) {
   const cookie = req.headers.cookie || "";
-  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=")) {
+  // The panel home is a salesperson's own dashboard as well.
+  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=") && !cookie.includes("sales_token=")) {
     return { redirect: { destination: "/dashboard/login", permanent: false } };
   }
   return { props: {} };

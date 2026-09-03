@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { ownsLead } from "@/utils/leadScope";
 import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
 
 const LABEL = {
@@ -41,6 +42,9 @@ export default async function handler(req, res) {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ success: false, message: "Bad lead id" });
   }
+
+  // A salesperson only reaches their own leads.
+  if (!(await ownsLead(req, res, id))) return;
 
   try {
     const lead = await Query.findById(id).lean();

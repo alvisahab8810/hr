@@ -1,15 +1,7 @@
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 import { renderActionEmailHtml } from "@/utils/email/actionEmailTemplate";
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "info@viralon.in",
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const transporter = mailTransport();
 
 const MANAGEMENT_EMAILS = [
   "hr@viralon.in",
@@ -32,7 +24,7 @@ export async function sendOvertimeAppliedEmployeeEmail({
 
 }) {
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "🕒 Overtime Request Submitted",
     html: `
@@ -105,7 +97,7 @@ export async function sendOvertimeAppliedAdminEmail({
   });
 
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to: MANAGEMENT_EMAILS,
     subject: `🕒 New Overtime Request — ${employeeName}${project ? ` (${project})` : ""}`,
     html,
@@ -125,7 +117,7 @@ export async function sendOvertimeApprovedEmail({
   endTime,
 }) {
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "✅ Overtime Request Approved",
     html: `
@@ -157,7 +149,7 @@ export async function sendOvertimeRejectedEmail({
   remark,
 }) {
   return transporter.sendMail({
-    from: `"Viralon HR" <info@viralon.in>`,
+    from: `"Viralon HR" <${MAIL_USER}>`,
     to,
     subject: "❌ Overtime Request Rejected",
     html: `

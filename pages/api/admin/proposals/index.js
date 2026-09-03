@@ -5,6 +5,8 @@ import dbConnect from "@/utils/dbConnect";
 import Proposal from "@/models/Proposal";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
+import { salesId } from "@/utils/salesAuth";
+import { ownsLead } from "@/utils/leadScope";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -12,9 +14,14 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
+      // A salesperson only sees the proposals of the leads assigned to them.
+      const mine = salesId(req);
+      const own = mine
+        ? (await Query.find({ salespersonId: mine }).select("_id").lean()).map((l) => l._id)
+        : null;
       const [props, leads] = await Promise.all([
-        Proposal.find({}).sort({ createdAt: -1 }).lean(),
-        Query.find({}).select("name businessName email phone budget service status salespersonId").lean(),
+        Proposal.find(own ? { leadId: { $in: own } } : {}).sort({ createdAt: -1 }).lean(),
+        Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone budget service status salespersonId").lean(),
       ]);
       return res.status(200).json({
         success: true,
@@ -26,6 +33,7 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const b = req.body || {};
       if (!b.leadId) return res.status(400).json({ success: false, message: "Pick a lead first" });
+      if (!(await ownsLead(req, res, b.leadId))) return;
 
       const lead = await Query.findById(b.leadId).lean();
       if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });

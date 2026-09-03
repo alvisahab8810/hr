@@ -10,7 +10,7 @@ import dbConnect  from "@/utils/dbConnect";
 import Task       from "@/models/tasks/Task";
 import Brand      from "@/models/tasks/Brand";
 import Client      from "@/models/clients/Client";
-import nodemailer from "nodemailer";
+import { mailTransport, MAIL_FROM, MAIL_USER } from "@/utils/mailer";
 
 const CONTENT_LABEL = { reel: "Reel", post: "Post", carousel: "Carousel", story: "Story" };
 
@@ -21,11 +21,7 @@ function startOfToday() {
 }
 
 async function sendReminderEmail(client, items) {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.hostinger.com", port: 587, secure: false,
-    auth: { user: "info@viralon.in", pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false },
-  });
+  const transporter = mailTransport();
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://hq.viralon.in";
   const rows = items.map(t => `
@@ -38,7 +34,7 @@ async function sendReminderEmail(client, items) {
   const portalUrl = items[0]?.brandSlug ? `${baseUrl}/${items[0].brandSlug}/login` : baseUrl;
 
   await transporter.sendMail({
-    from:    `"Viralon Team" <info@viralon.in>`,
+    from:    `"Viralon Team" <${MAIL_USER}>`,
     to:      client.email,
     subject: `Reminder: ${items.length} item${items.length > 1 ? "s" : ""} awaiting your approval`,
     html: `
