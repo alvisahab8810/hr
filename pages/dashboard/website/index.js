@@ -95,6 +95,16 @@ const MODULES = [
     live: true,
   },
   {
+    key: "newsletter",
+    title: "Newsletter",
+    desc: "Everyone who signed up from the footer — search, export, unsubscribe.",
+    icon: "bi-envelope-paper-fill",
+    href: "/dashboard/website/newsletter",
+    accent: "#4F46E5",
+    soft: "#EEF2FF",
+    live: true,
+  },
+  {
     key: "faqs",
     title: "FAQs",
     desc: "Manage the FAQ sections shown across website pages.",

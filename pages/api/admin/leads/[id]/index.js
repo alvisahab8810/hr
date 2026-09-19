@@ -9,7 +9,7 @@ import { salesId } from "@/utils/salesAuth";
 
 // Anything not on this list can't be written from the browser.
 const PLAIN = [
-  "name", "email", "phone", "businessName", "budget", "status",
+  "name", "email", "phone", "businessName", "budget", "runningAds", "status",
   "city", "industry", "service", "website", "instagram", "notes",
   "score", "held", "matSent", "lostReason", "prep", "prepNotes", "formType",
   // The meeting the team fixes on the phone.

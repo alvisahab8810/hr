@@ -8,6 +8,7 @@ import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
 import { gradeTask, pointsToGrade } from "@/utils/tasks/gradeTask";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 /* ─── Grade badge component ────────────────────────────── */
 function GradeBadge({ task }) {
@@ -1634,7 +1635,7 @@ export default function TasksListPage() {
                       <span><i className="bi bi-check-circle-fill me-2" />Approved</span>
                       <button
                         onClick={async () => {
-                          if (!confirm("Reset this stage for re-review? The employee will need to re-submit.")) return;
+                          if (!(await confirmDialog("Reset this stage for re-review? The employee will need to re-submit."))) return;
                           setStageSaving(true);
                           try {
                             const cur = stageTask.stages?.[stageIdx] || {};

@@ -14,6 +14,11 @@ import { SessionProvider } from "next-auth/react";
 
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
+// The app-wide "are you sure?" dialog. Mounted once here so any page can call
+// confirmDialog() without the browser drawing its own grey system box.
+import ConfirmHost from "../components/ConfirmDialog";
+
 function MyApp({ Component, pageProps }) {
   return (
     <>
@@ -97,6 +102,8 @@ function MyApp({ Component, pageProps }) {
         pauseOnHover
         theme="light"
       />
+
+        <ConfirmHost />
       </SessionProvider>
     </>
   );

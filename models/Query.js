@@ -15,7 +15,13 @@ const querySchema = new mongoose.Schema(
     // Who owns this lead in the CRM (a User with role "salesperson").
     salespersonId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
-    // The website's enquiry form asks for a monthly marketing budget.
+    // What every website form asks: "Are you running ads at the moment?"
+    // -- "Yes, ourselves" | "Yes, through an agency" | "Not yet".
+    runningAds: { type: String, default: "" },
+
+    // Monthly budget. The forms stopped asking for it; the team fills it in
+    // from the Leads board after the first call, and the pipeline value is
+    // still sized off it, so leads captured earlier keep theirs.
     budget: { type: String, default: "" },
 
     // Where the lead came from — Google/Meta ad click ids and UTM tags picked up

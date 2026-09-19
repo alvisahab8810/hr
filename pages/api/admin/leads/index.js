@@ -90,6 +90,7 @@ export default async function handler(req, res) {
         businessName: String(b.businessName || "").trim(),
         formType: b.formType || "Added manually",
         budget: b.budget || "",
+        runningAds: b.runningAds || "",
         status: b.status || "New",
         city: b.city || "",
         industry: b.industry || "",

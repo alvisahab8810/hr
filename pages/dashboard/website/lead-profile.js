@@ -39,7 +39,8 @@ function journeyOf(l, proposals, invoices, ownerName) {
   push(l.createdAt, "acc", "Lead captured",
     `Source ${srcOf(l)}${l.source?.utmCampaign ? `, campaign ${l.source.utmCampaign}` : ""}` +
     `${l.source?.adset ? `, ad set ${l.source.adset}` : ""}. Assigned to ${ownerName}.` +
-    `${l.budget ? ` Budget stated at ${l.budget} a month.` : ""}`);
+    `${l.budget ? ` Budget stated at ${l.budget} a month.` : ""}` +
+    `${l.runningAds ? ` Running ads: ${l.runningAds}.` : ""}`);
 
   if (l.meetingDate) {
     const when = `${fmtD(l.meetingDate)}${l.meetingTime ? ` at ${prettyTime(l.meetingTime)}` : ""}`;
@@ -300,7 +301,7 @@ export default function LeadProfile() {
                     <Panel title="Contact"
                            right={<Link href={`/dashboard/website/leads?lead=${l._id}`} style={{ ...s.miniBtn, textDecoration: "none", height: 26 }}>Edit</Link>}>
                       <KV k="Name" v={l.name} />
-                      <KV k="Company" v={l.businessName} />
+                      <KV k="Business Name" v={l.businessName} />
                       <KV k="Phone" v={l.phone} />
                       <KV k="Email" v={l.email} />
                       <KV k="Meeting" v={l.meetingDate ? `${fmtD(l.meetingDate)}${l.meetingTime ? ` · ${prettyTime(l.meetingTime)}` : ""}` : ""} />
@@ -316,6 +317,7 @@ export default function LeadProfile() {
                       <KV k="Source" v={srcOf(l)} />
                       <KV k="Form" v={l.formType} />
                       <KV k="Stated budget" v={l.budget} />
+                      <KV k="Running ads" v={l.runningAds} />
                       {l.service ? <KV k="Service asked for" v={l.service} /> : null}
                       {/* Ad fields only exist on paid clicks — hidden until one lands. */}
                       {adRows.length ? adRows.map(([k, v]) => <KV key={k} k={k} v={v} />) : null}

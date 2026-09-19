@@ -15,8 +15,9 @@ import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import { useList } from "@/utils/crmSettings";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 import {
-  statusMeta, statusOptions, isManualStatus, RAIL, BUDGETS, SERVICES, INDUSTRIES, SOURCES,
+  statusMeta, statusOptions, isManualStatus, RAIL, RUNNING_ADS, SERVICES, INDUSTRIES, SOURCES,
   LOST_REASONS, CONNECT_VIA, CONNECT_OUTCOME, LADDER, PREP, PREP_GROUPS, SCOREQ,
   BASE_COLS, MEETING_MODES, modeMeta, leadCode, inr, inrShort, budgetValue,
   srcOf, scoreCol, prepPct, initials, tintFor, prettyTime, prettyDate,
@@ -110,7 +111,7 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
   // The picklists come from Settings; the built-in lists are the fallback.
   const industryList = useList("industries", INDUSTRIES);
   const serviceList  = useList("services", SERVICES);
-  const budgetList   = useList("budgets", BUDGETS);
+  const runAdsList   = useList("runningAds", RUNNING_ADS);
   const sourceList   = useList("sources", SOURCES);
   const [f, setF] = useState(() => ({
     name: initial?.name || "",
@@ -120,7 +121,7 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
     city: initial?.city || "",
     industry: initial?.industry || "",
     service: initial?.service || "",
-    budget: initial?.budget || "",
+    runningAds: initial?.runningAds || "",
     salespersonId: initial?.salespersonId ? String(initial.salespersonId) : "",
     status: initial?.status || "New",
     website: initial?.website || "",
@@ -153,7 +154,7 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
         <Field label="Name *">
           <input className="lp-in" style={s.input} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Full name" />
         </Field>
-        <Field label="Company">
+        <Field label="Business Name">
           <input className="lp-in" style={s.input} value={f.businessName} onChange={(e) => set("businessName", e.target.value)} placeholder="Business name" />
         </Field>
         <Field label="Phone" hint="10 digits, no +91">
@@ -182,10 +183,12 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
             {serviceList.map((i) => <option key={i} value={i}>{i}</option>)}
           </select>
         </Field>
-        <Field label="Monthly budget">
-          <select className="lp-in" style={s.input} value={f.budget} onChange={(e) => set("budget", e.target.value)}>
+        {/* The one qualifying question the website forms ask. A lead added by
+            hand can be answered here so the column reads the same either way. */}
+        <Field label="Running ads">
+          <select className="lp-in" style={s.input} value={f.runningAds} onChange={(e) => set("runningAds", e.target.value)}>
             <option value="">—</option>
-            {budgetList.map((b) => <option key={b} value={b}>{b}</option>)}
+            {runAdsList.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </Field>
         {/* The admin hands the lead out; a salesperson keeps their own. */}
@@ -888,7 +891,9 @@ export default function LeadsPage() {
       if (!needle) return true;
       return [
         l.name, l.businessName, l.email, l.phone, l.city, l.industry,
-        l.service, l.status, leadCode(l), ownerName(l),
+        // formType is how a lead is traced back to the form it came from —
+        // "blog form", "contact form" — so the search box has to see it.
+        l.service, l.status, l.formType, leadCode(l), ownerName(l),
         l.source?.utmCampaign, l.source?.campaignId, l.source?.adName,
       ].filter(Boolean).join(" ").toLowerCase().includes(needle);
     });
@@ -910,7 +915,7 @@ export default function LeadsPage() {
       case "ad":       return (l.source?.adName || "").toLowerCase();
       case "content":  return (l.source?.utmContent || "").toLowerCase();
       case "svc":      return (l.service || "").toLowerCase();
-      case "budget":   return budgetValue(l.budget);
+      case "runAds":   return (l.runningAds || "").toLowerCase();
       case "owner":    return ownerName(l).toLowerCase();
       case "status":   return statusMeta(l.status).stage;
       case "score":    return l.score === null || l.score === undefined ? -1 : Number(l.score);
@@ -1024,7 +1029,7 @@ export default function LeadsPage() {
   };
 
   const removeLead = async (l) => {
-    if (!confirm(`Delete ${l.name || "this lead"} for good? Their call slot, if any, opens back up.`)) return;
+    if (!(await confirmDialog(`Delete ${l.name || "this lead"} for good? Their call slot, if any, opens back up.`))) return;
     try {
       const r = await fetch(`/api/admin/leads/${l._id}`, { method: "DELETE", credentials: "include" });
       const j = await r.json();
@@ -1064,7 +1069,7 @@ export default function LeadsPage() {
   };
 
   const clearMeeting = async (l) => {
-    if (!confirm("Clear this meeting? The date, time and link all go.")) return;
+    if (!(await confirmDialog("Clear this meeting? The date, time and link all go."))) return;
     setBusy(true);
     const saved = await patch(l._id, { meetingMode: "" }, true);
     if (saved) { toast.success("Meeting cleared"); setModal(null); }
@@ -1089,7 +1094,7 @@ export default function LeadsPage() {
   };
 
   const deleteField = async (f) => {
-    if (!confirm(`Remove the “${f.label}” column? Values already saved stay on the leads.`)) return;
+    if (!(await confirmDialog(`Remove the “${f.label}” column? Values already saved stay on the leads.`))) return;
     try {
       const r = await fetch(`/api/admin/leads/fields?key=${encodeURIComponent(f.key)}`, {
         method: "DELETE", credentials: "include",
@@ -1131,7 +1136,7 @@ export default function LeadsPage() {
   const mailAllUnbooked = async () => {
     const targets = rows.filter((l) => !l.meetingDate && l.email);
     if (!targets.length) return toast.error("Nobody in this view is waiting on us");
-    if (!confirm(`Send the "we'll call you shortly" mail to ${targets.length} lead${targets.length === 1 ? "" : "s"}?`)) return;
+    if (!(await confirmDialog(`Send the "we'll call you shortly" mail to ${targets.length} lead${targets.length === 1 ? "" : "s"}?`))) return;
     setBusy(true);
     let ok = 0;
     for (const l of targets) {
@@ -1183,7 +1188,7 @@ export default function LeadsPage() {
       case "ad":       return l.source?.adName || "";
       case "content":  return l.source?.utmContent || "";
       case "svc":      return l.service || "";
-      case "budget":   return l.budget || "";
+      case "runAds":   return l.runningAds || "";
       case "owner":    return on(l) || "Unassigned";
       case "status":   return l.status || "";
       case "score":    return l.score ?? "";
@@ -1203,7 +1208,7 @@ export default function LeadsPage() {
   };
 
   /* ── sorting header ───────────────────────────────────────────────────── */
-  const sortBy = (k) => setSort((p) => (p.k === k ? { k, dir: -p.dir } : { k, dir: k === "created" || k === "score" || k === "budget" ? -1 : 1 }));
+  const sortBy = (k) => setSort((p) => (p.k === k ? { k, dir: -p.dir } : { k, dir: k === "created" || k === "score" ? -1 : 1 }));
 
   const pad = density === "compact" ? "7px 10px" : "11px 12px";
 
@@ -1252,9 +1257,9 @@ export default function LeadsPage() {
       case "content": return <span style={s.cellTxt}>{l.source?.utmContent || "—"}</span>;
       case "svc":     return <span style={s.cellTxt}>{l.service || "—"}</span>;
 
-      case "budget":
-        return l.budget
-          ? <span style={{ fontSize: 12.5, fontWeight: 800, color: "#0F172A" }}>{l.budget}</span>
+      case "runAds":
+        return l.runningAds
+          ? <span style={s.cellTxt}>{l.runningAds}</span>
           : <span style={s.dim}>—</span>;
 
       case "owner": {
@@ -1450,7 +1455,7 @@ export default function LeadsPage() {
      meeting, the actions) are left alone — everything else is clickable. */
   const PANEL_OF = {
     id: "record", nm: "record", co: "record", city: "record",
-    ind: "record", svc: "record", budget: "record",
+    ind: "record", svc: "record",
     ph: "contact", em: "contact",
     src: "attribution", campNm: "attribution", campId: "attribution",
     adset: "attribution", ad: "attribution", content: "attribution",
@@ -1498,11 +1503,11 @@ export default function LeadsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 14px" }}>
               {kv("Lead ID", leadCode(l))}
               {kv("Name", l.name)}
-              {kv("Company", l.businessName)}
+              {kv("Business Name", l.businessName)}
               {kv("City", l.city)}
               {kv("Industry", l.industry)}
               {kv("What they want", l.service)}
-              {kv("Budget", l.budget)}
+              {kv("Running ads", l.runningAds)}
               {kv("Owner", ownerName(l) || "Unassigned")}
               {kv("Status", l.status)}
               {kv("Came in", fmtDT(l.createdAt))}
@@ -1526,7 +1531,7 @@ export default function LeadsPage() {
               {kv("Name", l.name)}
               {kv("Phone", l.phone)}
               {kv("Email", l.email)}
-              {kv("Company", l.businessName)}
+              {kv("Business Name", l.businessName)}
               {kv("Times we tried them", (l.connects || []).length)}
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>

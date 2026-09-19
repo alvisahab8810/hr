@@ -3,6 +3,7 @@ import Head from "next/head";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function fmtDate(d) {
@@ -479,7 +480,7 @@ export default function AdminClientsPage() {
 
   async function toggleStatus(client) {
     const next = client.status === "Active" ? "Inactive" : "Active";
-    if (!confirm(`${next === "Inactive" ? "Deactivate" : "Activate"} ${client.name}?\n\n${next === "Inactive" ? "Client will lose portal access immediately." : "Client will regain portal access."}`)) return;
+    if (!(await confirmDialog(`${next === "Inactive" ? "Deactivate" : "Activate"} ${client.name}?\n\n${next === "Inactive" ? "Client will lose portal access immediately." : "Client will regain portal access."}`))) return;
     setToggling(p => ({ ...p, [client._id]: true }));
     try {
       await fetch(`/api/admin/clients/${client._id}`, {

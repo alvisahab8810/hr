@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../../components/ConfirmDialog";
 
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const CONTENT_META = {
@@ -121,7 +122,7 @@ export default function BrandDetailPage() {
   };
 
   const disconnectGsc = async () => {
-    if (!confirm("Disconnect Google Search Console from this brand?")) return;
+    if (!(await confirmDialog("Disconnect Google Search Console from this brand?"))) return;
     setGscDisconnecting(true);
     try {
       const res  = await fetch(`/api/admin/brands/${id}/gsc/disconnect`, { method: "DELETE", credentials: "include" });

@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 const PHASES = [
   { key: "uiux",        label: "UI/UX Design",  short: "UI/UX",  color: "#7C3AED", bg: "#F5F3FF", icon: "bi-palette"          },
@@ -368,7 +369,7 @@ export default function WebProjectsPage() {
   };
 
   const handleDeleteFeature = async (featureId, sprintKey) => {
-    if (!confirm("Delete this feature?")) return;
+    if (!(await confirmDialog("Delete this feature?"))) return;
     const ft = (features[sprintKey] || []).find(f => f._id === featureId);
     try {
       await fetch(`/api/admin/features/${featureId}`, { method: "DELETE", credentials: "include" });
@@ -495,7 +496,7 @@ export default function WebProjectsPage() {
 
   const handleDeleteProject = async () => {
     if (!selectedProject) return;
-    if (!confirm(`Delete project "${selectedProject.name}"? This will also delete its sprints.`)) return;
+    if (!(await confirmDialog(`Delete project "${selectedProject.name}"? This will also delete its sprints.`))) return;
     try {
       const r = await fetch(`/api/admin/projects/${selectedId}`, { method: "DELETE", credentials: "include" });
       const d = await r.json();
@@ -556,7 +557,7 @@ export default function WebProjectsPage() {
 
   const handleDeleteSprint = async (sprintId) => {
     const sp = sprints.find(s => s._id === sprintId);
-    if (!confirm(`Delete sprint "${sp?.name || ""}"? Its features will remain but become unassigned from this sprint.`)) return;
+    if (!(await confirmDialog(`Delete sprint "${sp?.name || ""}"? Its features will remain but become unassigned from this sprint.`))) return;
     try {
       const r = await fetch(`/api/admin/sprints/${sprintId}`, { method: "DELETE", credentials: "include" });
       const d = await r.json();

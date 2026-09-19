@@ -7,6 +7,7 @@ import { MdSearch, MdAdd, MdEdit, MdDelete, MdArticle, MdVisibility } from "reac
 import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 export default function BlogList() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function BlogList() {
   }, []);
 
   async function deleteBlog(id) {
-    if (!confirm("Delete this blog post?")) return;
+    if (!(await confirmDialog("Delete this blog post?"))) return;
     setBlogs(prev => prev.filter(b => b.id !== id));
     await fetch(`/api/admin/blogs/${id}`, { method: "DELETE", credentials: "include" });
   }

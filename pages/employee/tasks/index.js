@@ -11,6 +11,7 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { isOverdue, getStageDeadline, filterTasksByMonth, calcGrade } from "@/utils/tasks/employeeGrade";
 import { calcAttendancePoints, calcOverallScore } from "@/utils/attendance/attendancePoints";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const getToken = () => typeof window !== "undefined" ? localStorage.getItem("employeeToken") || "" : "";
@@ -748,7 +749,7 @@ function ContentEditorTab({ tasks, initialTask, onBack }) {
     const nowEmpty   = !script.trim() && !caption.trim();
     if (hadContent && nowEmpty) {
       if (silent) return;
-      if (!window.confirm("Script and Caption are both empty — the existing content will be permanently deleted. Continue?")) return;
+      if (!(await confirmDialog("Script and Caption are both empty — the existing content will be permanently deleted. Continue?"))) return;
     }
     setSaving(true);
     try {

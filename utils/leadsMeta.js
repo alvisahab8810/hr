@@ -47,6 +47,15 @@ export const RAIL = [
 /* ── Picklists ────────────────────────────────────────────────────────────── */
 // Must stay word-for-word what the website form offers, or the budget column
 // reads differently for form leads and hand-added ones.
+// The one qualifying question the website forms ask. Same wording and same
+// order as viralon-new/utils/leadTracking.js -- a lead arrives carrying one of
+// these three strings, and the board filters and reports on them.
+export const RUNNING_ADS = [
+  "Yes, ourselves",
+  "Yes, through an agency",
+  "Not yet",
+];
+
 export const BUDGETS = [
   "Under ₹25,000",
   "₹25,000 to ₹75,000",
@@ -138,7 +147,7 @@ export const SCOREQ = [
 export const BASE_COLS = [
   { k: "id",       n: "Lead ID",     on: true,  lock: true,  w: 96 },
   { k: "nm",       n: "Name",        on: true,  lock: true,  w: 190 },
-  { k: "co",       n: "Company",     on: true,  w: 160 },
+  { k: "co",       n: "Business Name", on: true, w: 170 },
   { k: "ph",       n: "Phone",       on: true,  w: 130 },
   { k: "em",       n: "Email",       on: false, w: 200 },
   { k: "city",     n: "City",        on: false, w: 110 },
@@ -150,7 +159,7 @@ export const BASE_COLS = [
   { k: "ad",       n: "Ad name",     on: false, w: 130 },
   { k: "content",  n: "Content",     on: false, w: 120 },
   { k: "svc",      n: "Service",     on: false, w: 160 },
-  { k: "budget",   n: "Budget",      on: true,  w: 150 },
+  { k: "runAds",   n: "Running ads", on: true,  w: 165 },
   { k: "owner",    n: "Assign to",   on: true,  w: 145 },
   { k: "connects", n: "Connects",    on: true,  w: 95 },
   { k: "status",   n: "Status",      on: true,  w: 150 },

@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../../components/ConfirmDialog";
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
 
@@ -185,7 +186,7 @@ export default function BrandsPage() {
   };
 
   const disconnectGsc = async () => {
-    if (!confirm("Disconnect Google Search Console from this brand?") || !selected?._id) return;
+    if (!(await confirmDialog("Disconnect Google Search Console from this brand?")) || !selected?._id) return;
     setGscDisconnecting(true);
     try {
       const res  = await fetch(`/api/admin/brands/${selected._id}/gsc/disconnect`, { method: "DELETE", credentials: "include" });
@@ -308,7 +309,7 @@ export default function BrandsPage() {
   /* ─── Delete ─────────────────────────────────────────────────────────── */
 
   async function handleDelete(b) {
-    if (!confirm(`Delete brand "${b.name}"?`)) return;
+    if (!(await confirmDialog(`Delete brand "${b.name}"?`))) return;
     try {
       const r = await fetch(`/api/admin/brands/${b._id}`, { method: "DELETE", credentials: "include" });
       const d = await r.json();

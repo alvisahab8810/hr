@@ -9,6 +9,7 @@ import toast, { Toaster } from "react-hot-toast";
 import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const WEEKDAYS = [
   { n: 1, label: "Mon" }, { n: 2, label: "Tue" }, { n: 3, label: "Wed" },
@@ -181,7 +182,7 @@ export default function CallSlots() {
 
   const setStatus = async (slot, status) => {
     if (slot.status === "booked" && status === "open") {
-      if (!confirm(`Cancel the booking of ${slot.booking?.name || "this lead"} at ${prettyTime(slot.time)}? The slot becomes available again.`)) return;
+      if (!(await confirmDialog(`Cancel the booking of ${slot.booking?.name || "this lead"} at ${prettyTime(slot.time)}? The slot becomes available again.`))) return;
     }
     try {
       const res = await fetch(`/api/admin/slots/${slot._id}`, {
@@ -196,7 +197,7 @@ export default function CallSlots() {
   };
 
   const removeSlot = async (slot) => {
-    if (!confirm(`Remove the ${prettyTime(slot.time)} slot on ${slot.date}?`)) return;
+    if (!(await confirmDialog(`Remove the ${prettyTime(slot.time)} slot on ${slot.date}?`))) return;
     try {
       const res = await fetch(`/api/admin/slots/${slot._id}`, { method: "DELETE" });
       const json = await res.json();

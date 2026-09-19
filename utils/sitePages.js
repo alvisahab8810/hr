@@ -13,6 +13,7 @@ export const SITE_PAGES = [
   { key: "blogs",       label: "Blogs",       path: "/blogs",       group: "Main pages" },
   { key: "career",      label: "Career",      path: "/career",      group: "Main pages" },
   { key: "contact-us",  label: "Contact Us",  path: "/contact-us",  group: "Main pages" },
+  { key: "brand",       label: "Brand",       path: "/brand",       group: "Main pages" },
 
   // ── Service pages ──────────────────────────────────────────────────────
   { key: "our-services/digital-marketing",     label: "Digital Marketing",     path: "/our-services/digital-marketing",     group: "Service pages" },

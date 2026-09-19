@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 
@@ -166,7 +167,7 @@ export default function TaskDetail() {
     const hadContent = !!(task?.description?.trim() || task?.caption?.trim());
     const nowEmpty   = !editScript.trim() && !editCaption.trim();
     if (hadContent && nowEmpty) {
-      if (!window.confirm("Script and Caption are both empty — the existing content will be permanently deleted. Continue?")) return;
+      if (!(await confirmDialog("Script and Caption are both empty — the existing content will be permanently deleted. Continue?"))) return;
     }
     setSavingScript(true);
     try {
@@ -186,7 +187,7 @@ export default function TaskDetail() {
   }
 
   async function handleRequestReEdit() {
-    if (!window.confirm("This unlocks stage S1 — ask the content writer to rewrite the script?")) return;
+    if (!(await confirmDialog("This unlocks stage S1 — ask the content writer to rewrite the script?"))) return;
     try {
       const updatedStages = (task.stages || []).map((s, i) =>
         i === 0 ? { ...s, done: false, approved: false, rejected: false, doneAt: null } : s
@@ -380,7 +381,7 @@ export default function TaskDetail() {
 
   /* ── Approve ────────────────────────────────────────────────────────────── */
   const handleApprove = async () => {
-    if (!window.confirm("Mark this task as Completed?")) return;
+    if (!(await confirmDialog("Mark this task as Completed?"))) return;
     try {
       const now = new Date().toISOString();
       const updates = { status: "completed", performedByName: adminUser?.name || "Admin" };
@@ -454,7 +455,7 @@ export default function TaskDetail() {
   };
 
   const handleAttachmentDelete = async (attachmentId) => {
-    if (!window.confirm("Remove this file?")) return;
+    if (!(await confirmDialog("Remove this file?"))) return;
     try {
       const res  = await fetch(`/api/admin/tasks/${id}/attachments`, {
         method: "DELETE", credentials: "include",

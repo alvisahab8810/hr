@@ -5,7 +5,7 @@ import dbConnect from "@/utils/dbConnect";
 import Setting from "@/models/Setting";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { readSales } from "@/utils/salesAuth";
-import { SOURCES, SERVICES, INDUSTRIES, BUDGETS, LOST_REASONS } from "@/utils/leadsMeta";
+import { SOURCES, SERVICES, INDUSTRIES, BUDGETS, RUNNING_ADS, LOST_REASONS } from "@/utils/leadsMeta";
 
 export const DEFAULTS = {
   lists: {
@@ -13,6 +13,7 @@ export const DEFAULTS = {
     services: SERVICES,
     industries: INDUSTRIES,
     budgets: BUDGETS,
+    runningAds: RUNNING_ADS,
     lostReasons: LOST_REASONS,
   },
   company: {

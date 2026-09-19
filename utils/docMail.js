@@ -8,7 +8,7 @@ const BRAND = "#5138ee";
 const INK = "#04000b";
 const BRAND2 = "#7C5CFF";
 // A public https URL — mail clients cannot read local files.
-const LOGO = process.env.MAIL_LOGO || "https://hq.viralon.in/assets/images/logo.png";
+const LOGO = process.env.MAIL_LOGO || "https://viralon.in/assets/images/logo.png";
 const rupee = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
 
 function shell(bodyHtml) {

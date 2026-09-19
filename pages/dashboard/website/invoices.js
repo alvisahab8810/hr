@@ -17,6 +17,7 @@ import DocPreview from "@/components/DocPreview";
 import MailCompose from "@/components/MailCompose";
 import { SERVICES, inr, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList, useCrmSettings } from "@/utils/crmSettings";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const COLS_KEY = "viralon.invoices.hiddenCols";
 const DENSITY_KEY = "viralon.invoices.density";
@@ -240,7 +241,7 @@ export default function InvoicesPage() {
   }, []);
 
   const remove = async (i) => {
-    if (!confirm(`Delete ${invCode(i)}? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete ${invCode(i)}? This cannot be undone.`))) return;
     const r = await fetch(`/api/admin/invoices/${i._id}`, { method: "DELETE", credentials: "include" });
     const j = await r.json();
     if (!j.success) return toast.error(j.message || "Could not delete");
@@ -859,7 +860,7 @@ function PayRecords({ i, busy, patch, mail, preview }) {
   };
 
   const del = async (p) => {
-    if (!confirm(`Delete the payment of ${inr(p.amount)} recorded on ${p.on ? fmtD(p.on) : "an unknown date"}? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete the payment of ${inr(p.amount)} recorded on ${p.on ? fmtD(p.on) : "an unknown date"}? This cannot be undone.`))) return;
     const out = await patch(i._id, { deletePayment: { _id: String(p._id || "") } });
     if (out && String(p._id || "") === editId) reset();
   };

@@ -20,6 +20,7 @@ import DocPreview, { defaultAgreementClauses } from "@/components/DocPreview";
 import MailCompose from "@/components/MailCompose";
 import { SERVICES, inr, inrShort, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList } from "@/utils/crmSettings";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const COLS_KEY = "viralon.proposals.hiddenCols.v2";
 const DENSITY_KEY = "viralon.proposals.density";
@@ -255,7 +256,7 @@ export default function ProposalsPage() {
   }, []);
 
   const remove = async (p) => {
-    if (!confirm(`Delete ${propCode(p)}? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete ${propCode(p)}? This cannot be undone.`))) return;
     const r = await fetch(`/api/admin/proposals/${p._id}`, { method: "DELETE", credentials: "include" });
     const j = await r.json();
     if (!j.success) return toast.error(j.message || "Could not delete");
@@ -272,7 +273,7 @@ export default function ProposalsPage() {
     const line = p.term === "Retainer"
       ? `advance ${inr(adv)} + ${p.months || 1} monthly invoice${(p.months || 1) === 1 ? "" : "s"}`
       : `advance ${inr(adv)} + the balance`;
-    if (!confirm(`Raise the invoices for ${propCode(p)} — ${line}?`)) return;
+    if (!(await confirmDialog(`Raise the invoices for ${propCode(p)} — ${line}?`))) return;
     setBusy(true);
     try {
       const r = await fetch("/api/admin/invoices", {
@@ -1219,6 +1220,7 @@ function NewProposal({ leads, leadId, onClose, onDone }) {
           <KV k="Contact" v={lead.name || "—"} />
           <KV k="Email" v={lead.email || "—"} />
           <KV k="Their budget" v={lead.budget || "—"} />
+          <KV k="Running ads" v={lead.runningAds || "—"} />
         </div>
       ) : null}
 

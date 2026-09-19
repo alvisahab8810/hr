@@ -13,11 +13,12 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
 import { inr, initials, budgetValue, statusMeta, prepPct, fmtDT } from "@/utils/leadsMeta";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const OPEN_OUT = ["Won", "Lost", "Not qualified", "NPC"];
 
 const MENU_ORDER = ["home", "blogs", "careers", "positions", "pages", "faqs",
-  "leads", "proposals", "invoices", "leadProfile", "salesTeam", "reports", "slots", "settings"];
+  "leads", "newsletter", "proposals", "invoices", "leadProfile", "salesTeam", "reports", "slots", "settings"];
 
 const blankForm = () => ({
   name: "", role: "Sales Executive", email: "", username: "", password: "",
@@ -125,7 +126,7 @@ export default function SalesTeamPage() {
   };
 
   const remove = async (sp) => {
-    if (!confirm(`Remove ${sp.name} from the sales team? Their leads stay where they are.`)) return;
+    if (!(await confirmDialog(`Remove ${sp.name} from the sales team? Their leads stay where they are.`))) return;
     setBusy(true);
     try {
       await fetch(`/api/admin/sales-team/${sp._id}`, { method: "DELETE", credentials: "include" });

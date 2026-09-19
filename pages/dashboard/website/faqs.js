@@ -12,6 +12,7 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import RichFieldEditor from "@/components/RichFieldEditor";
 import { SITE_PAGES, getSitePage } from "@/utils/sitePages";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const DEFAULT_KICKER = "Still Having Queries ?";
 const DEFAULT_HEADING = "Frequently Asked Questions";
@@ -260,7 +261,7 @@ export default function WebsiteFaqs({ websiteOrigin }) {
   };
 
   const deleteSet = async (row) => {
-    if (!confirm(`Delete the FAQ set on "${row.pageLabel || row.pageKey}"? The page will show no FAQ section.`)) return;
+    if (!(await confirmDialog(`Delete the FAQ set on "${row.pageLabel || row.pageKey}"? The page will show no FAQ section.`))) return;
     try {
       const res = await fetch(`/api/admin/faqs/${row._id}`, { method: "DELETE" });
       const json = await res.json();

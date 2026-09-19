@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 function fmtDate(d) {
   if (!d) return "Never";
@@ -153,7 +154,7 @@ export default function InstagramManagement() {
   }
 
   async function disconnect(brandId, brandName) {
-    if (!confirm(`Disconnect Instagram from ${brandName}? This will remove cached post data.`)) return;
+    if (!(await confirmDialog(`Disconnect Instagram from ${brandName}? This will remove cached post data.`))) return;
     const r = await fetch(`/api/admin/brands/${brandId}/instagram/disconnect`, { method: "DELETE" });
     const d = await r.json();
     if (d.success) { setAlert({ type: "success", msg: "Instagram disconnected" }); load(); }

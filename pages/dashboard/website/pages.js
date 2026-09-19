@@ -12,6 +12,7 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import RichFieldEditor from "@/components/RichFieldEditor";
 import { TEMPLATES, getTemplate, SECTION_TYPES, SECTION_TYPE_KEYS } from "@/utils/landingTemplates";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const EMPTY_CONTENT = {
   hero: { kicker: "", headline: "", headlineAccent: "", subheadline: "", heroImage: "", ctaText: "", ctaLink: "" },
@@ -322,9 +323,9 @@ export default function SeoPages({ websiteOrigin }) {
     setPreview({ url: buildPreviewUrl(form.template, content, form.title), name: `${tpl.name} — your content` });
   };
 
-  const loadSample = () => {
+  const loadSample = async () => {
     if (!contentIsEmpty(form.content) &&
-        !window.confirm("Replace the current content with this template's sample content?")) return;
+        !(await confirmDialog("Replace the current content with this template's sample content?"))) return;
     setForm(f => ({ ...f, content: { ...getTemplate(f.template).defaults } }));
     toast.success("Sample content loaded — edit away");
   };
@@ -391,7 +392,7 @@ export default function SeoPages({ websiteOrigin }) {
   };
 
   const deletePage = async (p) => {
-    if (!window.confirm(`Delete "${p.title}"? The URL /${p.slug} will stop working.`)) return;
+    if (!(await confirmDialog(`Delete "${p.title}"? The URL /${p.slug} will stop working.`))) return;
     try {
       const r = await fetch(`/api/admin/landing-pages/${p._id}`, { method: "DELETE", credentials: "include" });
       const data = await r.json();

@@ -4,6 +4,7 @@ import Link from "next/link";
 import SmartLeftbar from "@/components/SmartLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
+import { confirmDialog } from "../../../../components/ConfirmDialog";
 
 const PLATFORM_META = {
   meta:     { label: "Meta",     color: "#1877F2", bg: "#EEF6FF", icon: "bi-facebook" },
@@ -189,7 +190,7 @@ export default function AdCampaignsPage() {
   };
 
   const disconnectAds = async (brandId, source) => {
-    if (!confirm(`Disconnect ${source === "meta" ? "Meta" : "Google"} Ads from this brand?`)) return;
+    if (!(await confirmDialog(`Disconnect ${source === "meta" ? "Meta" : "Google"} Ads from this brand?`))) return;
     await fetch(`/api/admin/brands/${brandId}/${source}-ads/disconnect`, { method: "DELETE" });
     loadAllBrands();
   };
@@ -266,7 +267,7 @@ export default function AdCampaignsPage() {
   };
 
   const deleteCampaign = async (id) => {
-    if (!confirm("Delete this campaign?")) return;
+    if (!(await confirmDialog("Delete this campaign?"))) return;
     await fetch(`/api/admin/campaigns/${id}`, { method: "DELETE" });
     load();
   };

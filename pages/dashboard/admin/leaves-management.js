@@ -6,6 +6,7 @@ import LeftbarMobile from "@/components/LeftbarMobile";
 import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 export default function LeaveManagement() {
   const [reasonModalData, setReasonModalData] = useState(null);
@@ -715,7 +716,7 @@ export default function LeaveManagement() {
                                 className="lv-revoke-btn lv-view-btn"
                                 style={{ background: "#7C3AED", color: "#fff" }}
                                 onClick={async () => {
-                                  if (!window.confirm(`${leave.employee?.firstName} ${leave.employee?.lastName} — revoke this ${leave.leaveType} (${leave.totalDays} day)? The balance will be restored and the leave deleted.`)) return;
+                                  if (!(await confirmDialog(`${leave.employee?.firstName} ${leave.employee?.lastName} — revoke this ${leave.leaveType} (${leave.totalDays} day)? The balance will be restored and the leave deleted.`))) return;
                                   try {
                                     const r = await fetch("/api/admin/leave/revoke", {
                                       method: "POST",

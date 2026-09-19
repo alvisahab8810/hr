@@ -10,6 +10,7 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import { clearCrmSettings } from "@/utils/crmSettings";
 import { initials, fmtDT } from "@/utils/leadsMeta";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const TABS = [
   ["lists", "Picklists"],
@@ -23,7 +24,7 @@ const LISTS = [
   ["sources", "Lead sources", "Offered under Source on the lead form."],
   ["services", "Services", "Used on the lead, proposal and invoice forms."],
   ["industries", "Industries", "Offered under Industry on the lead form."],
-  ["budgets", "Budget bands", "Must match the website form word for word."],
+  ["runningAds", "Running ads answers", "Must match the website form word for word."],
   ["lostReasons", "Drop out reasons", "Asked for when a lead is marked lost."],
 ];
 
@@ -107,7 +108,7 @@ export default function CrmSettings() {
     else flash(j.message || "Could not add");
   }
   async function delField(key) {
-    if (!window.confirm("Remove this column? Values already saved on leads stay untouched.")) return;
+    if (!(await confirmDialog("Remove this column? Values already saved on leads stay untouched."))) return;
     const r = await fetch(`/api/admin/leads/fields?key=${encodeURIComponent(key)}`, { method: "DELETE", credentials: "include" });
     const j = await r.json();
     if (j.success) { setFields((f) => f.filter((x) => x.key !== key)); flash("Column removed"); }

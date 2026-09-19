@@ -11,6 +11,7 @@ import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import RichFieldEditor from "@/components/RichFieldEditor";
+import { confirmDialog } from "../../../components/ConfirmDialog";
 
 const IMAGES = [
   { value: "/assets/img/careers/img1.webp", label: "Image 1" },
@@ -157,7 +158,7 @@ export default function JobPositions({ websiteOrigin }) {
   };
 
   const deletePost = async (p) => {
-    if (!window.confirm(`Delete "${p.title}"? This removes it from the website too.`)) return;
+    if (!(await confirmDialog(`Delete "${p.title}"? This removes it from the website too.`))) return;
     try {
       const r = await fetch(`/api/admin/job-posts/${p._id}`, { method: "DELETE", credentials: "include" });
       const data = await r.json();

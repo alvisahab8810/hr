@@ -21,7 +21,7 @@ export default async function handler(req, res) {
         : null;
       const [props, leads] = await Promise.all([
         Proposal.find(own ? { leadId: { $in: own } } : {}).sort({ createdAt: -1 }).lean(),
-        Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone budget service status salespersonId").lean(),
+        Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone budget runningAds service status salespersonId").lean(),
       ]);
       return res.status(200).json({
         success: true,

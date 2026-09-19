@@ -1,10 +1,13 @@
 // utils/leadAutomation.js — the lead mails that go out without anyone clicking.
 //
-// Two jobs, both driven off the same record (remindersSent) the manual
-// "Send now" writes, so a mail can never go twice:
-//   1. autoReply — a brand new lead, from the website form or added by hand,
-//      gets the "invite" acknowledgement.
-//   2. reminders — the LADDER rungs before a booked meeting.
+// Everything here hangs off a booked meeting. A brand new lead gets nothing
+// from this app -- the website already sends its own acknowledgement the
+// moment the form is submitted (viralon-new, pages/api/queries/query.js), and
+// a second mail from here only put two of them in the same inbox.
+//   1. reminders — the LADDER rungs before a booked meeting.
+//   2. afterMeeting — the pack, or the note when they did not turn up.
+// Both are driven off the same record (remindersSent) the manual "Send now"
+// writes, so a mail can never go twice.
 //
 // It runs on a timer inside the Node process (see startLeadAutomation) and the
 // /api/cron/lead-reminders endpoint calls the same function, so an external
@@ -164,7 +167,11 @@ export async function runLeadAutomation() {
   await dbConnect();
   const sent = [];
   const skipped = [];
-  const a = await autoReply(sent, skipped);
+  // The website sends the acknowledgement itself the moment the form is
+  // submitted (viralon-new, pages/api/queries/query.js), so this used to put a
+  // second mail in the same inbox minutes later. The "invite" template is
+  // still there for the board's own Send now button.
+  const a = 0; // await autoReply(sent, skipped);
   const b = await reminders(sent, skipped);
   const c = await afterMeeting(sent, skipped);
   return { checked: a + b + c, sent, skipped };

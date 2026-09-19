@@ -106,6 +106,13 @@ const MENU = [
     match: ["/dashboard/website/reports"],
   },
   {
+    href: "/dashboard/website/newsletter",
+    perm: "newsletter",
+    label: "Newsletter",
+    biIcon: "bi-envelope-paper-fill",
+    match: ["/dashboard/website/newsletter"],
+  },
+  {
     href: "/dashboard/website/settings",
     label: "Settings",
     biIcon: "bi-gear-fill",

@@ -29,8 +29,8 @@ export function writeDept(k) {
 /* Which website menus each team sees. Everything the website sidebar carries is
    listed once, so nothing becomes unreachable from the hub. */
 export const WEBSITE_MENUS = {
-  sales: ["home", "leads", "leadProfile", "proposals", "invoices", "salesTeam", "settings"],
-  marketing: ["home", "blogs", "pages", "leads", "reports", "faqs", "careers", "positions"],
+  sales: ["home", "leads", "leadProfile", "proposals", "invoices", "salesTeam", "newsletter", "settings"],
+  marketing: ["home", "blogs", "pages", "leads", "newsletter", "reports", "faqs", "careers", "positions"],
 };
 
 /* A salesperson login is the Sales department, nothing else. There is no

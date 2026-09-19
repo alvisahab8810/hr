@@ -12,7 +12,7 @@ import { salesRolePerms } from "@/utils/dept";
 
 const MENUS = {
   home: "Website Home", blogs: "Blogs", careers: "Careers", positions: "Job Positions",
-  pages: "SEO Pages", faqs: "FAQs", leads: "Leads", proposals: "Proposals",
+  pages: "SEO Pages", faqs: "FAQs", leads: "Leads", newsletter: "Newsletter", proposals: "Proposals",
   invoices: "Invoices", leadProfile: "Lead profile", salesTeam: "Sales team", reports: "Reports", slots: "Call Slots", settings: "Settings",
 };
 
