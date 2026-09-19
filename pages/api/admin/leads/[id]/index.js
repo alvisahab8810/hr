@@ -6,6 +6,7 @@ import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { salesId } from "@/utils/salesAuth";
+import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
 
 // Anything not on this list can't be written from the browser.
 const PLAIN = [
@@ -122,6 +123,31 @@ export default async function handler(req, res) {
           if (date && mode && ["New", "Contacted", "NPC"].includes(current.status) && !("status" in set)) {
             set.status = "Meeting booked";
             events.push({ at: new Date(), type: "status", text: "Status moved to “Meeting booked”" });
+          }
+
+          // The client hears about it straight away — a confirmation the first
+          // time, a note that it moved after that. The ladder is wound back so
+          // the reminders fire again against the new date.
+          if (date && mode && current.email) {
+            const first = (current.remindersSent || []).every((r) => r.key !== "confirm");
+            const key = first ? "confirm" : "reschedule";
+            const mail = buildLeadMail(key, { ...current.toObject(), meetingDate: date, meetingTime: time, meetingMode: mode });
+            if (mail) {
+              try {
+                await sendLeadMail({ to: current.email, subject: mail.subject, html: mail.html });
+                events.push({
+                  at: new Date(), type: "mail",
+                  text: `${first ? "Meeting confirmation" : "Updated meeting details"} sent automatically to ${current.email}`,
+                });
+                set.remindersSent = [
+                  ...(current.remindersSent || []).filter((r) => !["confirm", "reschedule", "d2", "d1", "h3", "m45", "start"].includes(r.key)),
+                  { key: "confirm", at: new Date() },
+                ];
+              } catch (e) {
+                // A bad address must not block the meeting being saved.
+                events.push({ at: new Date(), type: "mail", text: `Meeting mail could not be sent — ${e?.message || "unknown error"}` });
+              }
+            }
           }
         }
       }

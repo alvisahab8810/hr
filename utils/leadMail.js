@@ -165,6 +165,28 @@ export function buildLeadMail(template, lead) {
         ),
       };
 
+    case "start":
+      return {
+        subject: "We're starting now — your Viralon session",
+        html: shell(
+          `<p>Hi ${first},</p>
+           <p>We're on now — ${headline}.</p>
+           ${detail}
+           <p>If you need a minute, just reply and we'll wait.</p>`
+        ),
+      };
+
+    case "reschedule":
+      return {
+        subject: "Your Viralon session has been moved",
+        html: shell(
+          `<p>Hi ${first},</p>
+           <p>Your session has been updated — we're now meeting over ${headline}.</p>
+           ${detail}
+           <p>If that doesn't suit you, reply here and we'll find another time.</p>`
+        ),
+      };
+
     /* ── After the meeting ──────────────────────────────────────────────── */
     case "material":
       return {

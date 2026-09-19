@@ -109,6 +109,7 @@ export const LADDER = [
   { k: "d1",   n: "1 day before",   short: "1d",   off: 24 },
   { k: "h3",   n: "3 hours before", short: "3h",   off: 3 },
   { k: "m45",  n: "45 mins before", short: "45m",  off: 0.75 },
+  { k: "start", n: "At start time",  short: "Now",  off: 0 },
 ];
 
 /* ── Homework before the call ─────────────────────────────────────────────── */

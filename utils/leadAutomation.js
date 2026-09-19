@@ -26,6 +26,7 @@ const LABEL = {
   d1: "Reminder · 1 day before",
   h3: "Reminder · 3 hours before",
   m45: "Reminder · 45 mins before",
+  start: "Reminder · at start time",
 };
 
 // "2026-09-04" + "16:30" (IST) -> epoch ms. Missing time means 10:00 IST.
@@ -94,7 +95,9 @@ async function reminders(sent, skipped) {
 
   for (const lead of leads) {
     const at = meetingAt(lead);
-    if (!at || at <= now) continue;
+    // The start rung is due at the meeting time itself, so a run that lands a
+    // few minutes late must still send it — but nothing fires long after.
+    if (!at || now > at + 30 * 60000) continue;
 
     const already = new Set((lead.remindersSent || []).map((r) => r.key));
     // A rung is due once we are inside its window; "confirm" is due the
