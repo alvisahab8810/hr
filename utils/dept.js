@@ -30,7 +30,7 @@ export function writeDept(k) {
    listed once, so nothing becomes unreachable from the hub. */
 export const WEBSITE_MENUS = {
   sales: ["home", "leads", "leadProfile", "proposals", "invoices", "salesTeam", "newsletter", "settings"],
-  marketing: ["home", "blogs", "pages", "leads", "newsletter", "reports", "faqs", "careers", "positions"],
+  marketing: ["home", "blogs", "pages", "leads", "newsletter", "reports", "faqs", "pageSeo", "careers", "positions"],
 };
 
 /* A salesperson login is the Sales department, nothing else. There is no

@@ -14,6 +14,11 @@ export const SITE_PAGES = [
   { key: "career",      label: "Career",      path: "/career",      group: "Main pages" },
   { key: "contact-us",  label: "Contact Us",  path: "/contact-us",  group: "Main pages" },
   { key: "brand",       label: "Brand",       path: "/brand",       group: "Main pages" },
+  { key: "search",      label: "Search",      path: "/search",      group: "Main pages" },
+  { key: "social-content", label: "Social Content", path: "/social-content", group: "Main pages" },
+  { key: "paid-ads",    label: "Paid Ads",    path: "/paid-ads",    group: "Main pages" },
+  { key: "analytics-and-tracking", label: "Analytics & Tracking", path: "/analytics-and-tracking", group: "Main pages" },
+  { key: "website-and-cro", label: "Website & CRO", path: "/website-and-cro", group: "Main pages" },
 
   // ── Service pages ──────────────────────────────────────────────────────
   { key: "our-services/digital-marketing",     label: "Digital Marketing",     path: "/our-services/digital-marketing",     group: "Service pages" },
