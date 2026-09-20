@@ -619,37 +619,6 @@ export default function PageSeoAdmin({ websiteOrigin }) {
                     </div>
                   </div>
 
-                  {/* Social share */}
-                  <div style={s.panel}>
-                    <div style={s.panelHead}>
-                      <div style={s.panelIcon}><i className="bi bi-share-fill" style={{ fontSize: 14, color: "#6366F1" }} /></div>
-                      <span style={{ fontWeight: 800, fontSize: 13, color: "#0F172A" }}>Social share (Open Graph &amp; Twitter)</span>
-                    </div>
-                    <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px,1fr))", gap: 14 }}>
-                      <Field label="OG Title" hint="Blank falls back to the title above.">
-                        <input className="sp-input" style={s.input} value={form.ogTitle}
-                               onChange={(e) => f("ogTitle", e.target.value)} />
-                      </Field>
-                      <Field label="Twitter Card">
-                        <select className="sp-input" style={s.input} value={form.twitterCard}
-                                onChange={(e) => f("twitterCard", e.target.value)}>
-                          <option value="summary_large_image">summary_large_image</option>
-                          <option value="summary">summary</option>
-                        </select>
-                      </Field>
-                      <Field label="OG Description" hint="Blank falls back to the meta description." span>
-                        <textarea className="sp-input"
-                                  style={{ ...s.input, height: 70, padding: "10px 12px", lineHeight: 1.6, resize: "vertical" }}
-                                  value={form.ogDescription}
-                                  onChange={(e) => f("ogDescription", e.target.value)} />
-                      </Field>
-                      <Field label="OG Image URL" hint="1200×630 works best. A path like /assets/img/og.png is fine." span>
-                        <input className="sp-input" style={s.input} value={form.ogImage}
-                               placeholder="/assets/img/og-default.png"
-                               onChange={(e) => f("ogImage", e.target.value)} />
-                      </Field>
-                    </div>
-                  </div>
 
                   {/* Schema */}
                   <div style={s.panel}>

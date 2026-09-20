@@ -52,7 +52,7 @@ const MENU = [
   {
     href: "/dashboard/website/pages",
     perm: "pages",
-    label: "SEO Pages",
+    label: "Landing Pages",
     biIcon: "bi-window-stack",
     match: ["/dashboard/website/pages"],
   },

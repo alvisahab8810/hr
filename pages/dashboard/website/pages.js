@@ -714,7 +714,7 @@ export default function SeoPages({ websiteOrigin }) {
   return (
     <section className="main-dashboard-area">
       <Head>
-        <title>SEO Pages — Viralon</title>
+        <title>Landing Pages — Viralon</title>
         <link rel="stylesheet" href="/asets/css/bootstrap.min.css" />
         <link rel="stylesheet" href="/asets/css/main.css" />
         <link rel="stylesheet" href="/asets/css/admin.css" />
@@ -854,7 +854,7 @@ export default function SeoPages({ websiteOrigin }) {
                 )}
                 <div>
                   <div style={{ fontSize: 19, fontWeight: 900, color: "#0F172A", lineHeight: 1.15 }}>
-                    {view === "form" ? (editingId ? "Edit Page" : "New Page") : "SEO Pages"}
+                    {view === "form" ? (editingId ? "Edit Page" : "New Page") : "Landing Pages"}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748B", fontWeight: 600, marginTop: 1 }}>
                     {view === "form"
