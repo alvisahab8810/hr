@@ -25,7 +25,7 @@ const formatDate = (date) => {
   });
 };
 
-const DateTimeGreeting = ({ name = "Admin" }) => {
+const DateTimeGreeting = ({ name = "Ivan Sinha" }) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {

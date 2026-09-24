@@ -159,7 +159,7 @@ export default function LoginPage() {
               <img src="/assets/images/logo.png" alt="Viralon" width={100} />
             </div>
             <h2 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "#111827" }}>
-              Good {greeting}, Admin
+              Good {greeting}, Ivan Sinha
             </h2>
             <p style={{ margin: "5px 0 0", fontSize: 13, color: "#6B7280" }}>
               Sign in to the Viralon payroll dashboard

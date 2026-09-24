@@ -24,11 +24,16 @@ function MyApp({ Component, pageProps }) {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+        <link rel="icon" href="/favicon/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg" />
         <link
           rel="icon"
-          type="image/x-icon"
-          href="/assets/images/favicon.png"
+          type="image/png"
+          sizes="96x96"
+          href="/favicon/favicon-96x96.png"
         />
+        <link rel="apple-touch-icon" href="/favicon/apple-touch-icon.png" />
+        <link rel="manifest" href="/favicon/site.webmanifest" />
         <meta
           name="robots"
           content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"

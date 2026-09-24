@@ -131,7 +131,7 @@ export default function DashboardHub() {
         <div style={{ position: "relative", zIndex: 2, textAlign: "center", marginBottom: 40, animation: "hub-in .5s cubic-bezier(.16,1,.3,1)" }}>
           <img src="/assets/images/logo.png" alt="Viralon" width={70} style={{ marginBottom: 18 }} />
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#111827" }}>
-            Good {greeting}, Admin
+            Good {greeting}, Ivan Sinha
           </h1>
           <p style={{ margin: "8px 0 0", fontSize: 14.5, color: "#6B7280" }}>
             Where would you like to go today?
