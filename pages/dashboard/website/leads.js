@@ -1457,7 +1457,8 @@ export default function LeadsPage() {
     id: "record", nm: "record", co: "record", city: "record",
     ind: "record", svc: "record",
     ph: "contact", em: "contact",
-    src: "attribution", campNm: "attribution", campId: "attribution",
+    // Campaign carries nothing worth a panel, so it stays plain text.
+    src: "attribution", campId: "attribution",
     adset: "attribution", ad: "attribution", content: "attribution",
     ladder: "mails", prep: "prep", after: "after",
     connects: "connects", created: "journey",
