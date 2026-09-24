@@ -29,7 +29,7 @@ export const prettyDate = (d) => {
 
 // The logo has to be a public https URL — mail clients cannot read local files.
 export const MAIL_LOGO =
-  process.env.MAIL_LOGO || "https://viralon.in/assets/images/logo.png";
+  process.env.MAIL_LOGO || "https://viralon.in/assets/images/brand-logo.png";
 
 function shell(bodyHtml, cta) {
   return `
@@ -37,7 +37,7 @@ function shell(bodyHtml, cta) {
     <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #ECECF5;box-shadow:0 6px 24px rgba(81,56,238,.07);">
       <div style="height:5px;background:linear-gradient(90deg,${BRAND},${BRAND2});font-size:0;line-height:0;">&nbsp;</div>
       <div style="padding:22px 26px 6px;">
-        <img src="${MAIL_LOGO}" alt="Viralon" width="132" style="display:block;border:0;outline:none;height:auto;max-width:132px;" />
+        <img src="${MAIL_LOGO}" alt="Viralon" width="70" style="display:block;border:0;outline:none;height:auto;max-width:70px;" />
       </div>
       <div style="padding:14px 26px 26px;color:${INK};font-size:15px;line-height:1.65;">
         ${bodyHtml}

@@ -99,7 +99,7 @@ export default async function handler(req, res) {
     }
 
     const year = new Date().getFullYear();
-    const logoUrl = `${baseUrl}/assets/images/logo.png`;
+    const logoUrl = "https://viralon.in/assets/images/brand-logo.png";
 
     let emailSent = false;
     if (sendEmail) {
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td style="padding:36px 40px 0;text-align:center">
-              <img src="${logoUrl}" alt="Viralon" width="48" height="48" style="width:48px;height:48px;object-fit:contain;border-radius:10px;margin-bottom:12px" onerror="this.style.display='none'">
+              <img src="${logoUrl}" alt="Viralon" width="70" style="display:block;width:70px;max-width:70px;height:auto;border:0;margin-bottom:12px" onerror="this.style.display='none'">
               <div style="font-size:22px;font-weight:800;letter-spacing:3px;color:#ffffff;margin-bottom:4px">VIRALON</div>
               <div style="font-size:11px;letter-spacing:2px;color:#02EBAD;text-transform:uppercase;margin-bottom:28px">Digital Growth Partner</div>
             </td>

@@ -8,7 +8,7 @@ import { signEmail } from "@/utils/newsletterToken";
 const BRAND = "#5138ee";
 const BRAND2 = "#7C5CFF";
 const INK = "#04000b";
-const LOGO = process.env.MAIL_LOGO || "https://viralon.in/assets/images/logo.png";
+const LOGO = process.env.MAIL_LOGO || "https://viralon.in/assets/images/brand-logo.png";
 // The unsubscribe page lives on the website, not on HQ.
 const SITE = process.env.NEWSLETTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://viralon.in";
 
@@ -22,7 +22,7 @@ function shell(bodyHtml, link) {
     <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #ECECF5;box-shadow:0 6px 24px rgba(81,56,238,.07);">
       <div style="height:5px;background:linear-gradient(90deg,${BRAND},${BRAND2});font-size:0;line-height:0;">&nbsp;</div>
       <div style="padding:22px 30px 6px;">
-        <img src="${LOGO}" alt="Viralon" width="132" style="display:block;border:0;outline:none;height:auto;max-width:132px;" />
+        <img src="${LOGO}" alt="Viralon" width="70" style="display:block;border:0;outline:none;height:auto;max-width:70px;" />
       </div>
       <div style="padding:14px 30px 30px;font-size:15px;line-height:1.65;">${bodyHtml}</div>
       <div style="padding:16px 30px;background:#FAFAFD;border-top:1px solid #F1F1F8;font-size:12.5px;color:#8A8AA3;">
