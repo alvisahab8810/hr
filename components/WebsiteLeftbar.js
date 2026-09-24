@@ -64,6 +64,13 @@ const MENU = [
     match: ["/dashboard/website/faqs"],
   },
   {
+    href: "/dashboard/website/case-studies",
+    perm: "caseStudies",
+    label: "Case Studies",
+    biIcon: "bi-trophy-fill",
+    match: ["/dashboard/website/case-studies"],
+  },
+  {
     href: "/dashboard/website/page-seo",
     perm: "pageSeo",
     label: "Pages SEO",
