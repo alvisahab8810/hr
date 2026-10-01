@@ -248,7 +248,16 @@ export async function generateSalaryForMonth(month, year) {
       }
     });
 
-    // ── Walk elapsed days only ───────────────────────────────────────────
+    // Someone who checked in has worked that day, whatever the leave
+    // application said — attendance wins, so the day is never charged.
+    Object.keys(attMap).forEach((dk) => {
+      if (!attMap[dk]?.startTime) return;
+      paidLeaveDates.delete(dk);
+      unpaidLeaveDates.delete(dk);
+      unpaidHalfDayDates.delete(dk);
+    });
+
+    // ── Walk elapsed days only ─────────────────────────────────────────
     let presentDays  = 0;
     let absentDays   = 0;
     let lateCount    = 0;

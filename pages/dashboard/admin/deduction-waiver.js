@@ -390,8 +390,11 @@ export default function AdminDeductionWaiver() {
                   // Approved leave days the engine charged as unpaid. A Sunday caught
                   // inside a sandwich leave is charged too, so it is listed as well —
                   // leaving it out made the per-day share read higher than it is.
+                  // A day with a check-in was worked, so it is not leave any more.
+                  const workedDates = new Set(attRecords.filter(x => x.startTime).map(x => x.date));
                   const unpaidLeaveDates = Object.entries(leaveDateMap)
-                    .filter(([, v]) => v.status === "Approved" && v.paid === false && v.leaveType !== "Half Day")
+                    .filter(([d, v]) => v.status === "Approved" && v.paid === false
+                      && v.leaveType !== "Half Day" && !workedDates.has(d))
                     .map(([d]) => d).sort();
 
                   return (

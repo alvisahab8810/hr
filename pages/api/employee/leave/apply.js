@@ -309,9 +309,7 @@ router.post(async (req, res) => {
     } else {
       /* ================= BASE DAYS ================= */
 
-      const baseDays = Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1;
-
-      /* ================= SANDWICH LOGIC (CORRECT) ================= */
+      /* ================= SANDWICH LOGIC ================= */
 
       // ONLY check weekends BETWEEN start & end (not before / after)
       let cursor = new Date(s);
@@ -325,7 +323,16 @@ router.post(async (req, res) => {
         cursor.setDate(cursor.getDate() + 1);
       }
 
-      totalDays = baseDays + extraDeductedDays;
+      // Sunday is never a working day, so it is not a leave day either. The
+      // sandwiched days already sit inside the range — counting them again on
+      // top of it charged the employee twice for the same weekend.
+      let days = 0;
+      const dayCursor = new Date(s);
+      while (dayCursor <= e) {
+        if (dayCursor.getDay() !== 0) days++;
+        dayCursor.setDate(dayCursor.getDate() + 1);
+      }
+      totalDays = days;
     }
 
     /* ================= LEAVE BALANCE ================= */
