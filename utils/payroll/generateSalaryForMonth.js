@@ -237,10 +237,11 @@ export async function generateSalaryForMonth(month, year) {
       const cur   = new Date(start);
       while (cur <= end) {
         const dk = toDateStr(cur);
-        // Once a leave is approved it is paid in full — a sandwiched weekend
-        // is flagged on the application, but it never costs the employee.
         const isPaid =
-          ["Sick Leave", "Earned Leave", "Annual Leave", "Casual Leave"].includes(leave.leaveType);
+          leave.leaveType === "Sick Leave"   ||
+          leave.leaveType === "Earned Leave" ||
+          leave.leaveType === "Annual Leave" ||
+          (leave.leaveType === "Casual Leave" && !leave.policyFlags?.sandwichLeave);
         if (isPaid) paidLeaveDates.add(dk);
         else        unpaidLeaveDates.add(dk);
         cur.setDate(cur.getDate() + 1);

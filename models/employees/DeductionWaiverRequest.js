@@ -30,6 +30,10 @@ const DeductionWaiverRequestSchema = new mongoose.Schema(
       default: "Pending",
     },
 
+    // The exact days this waiver covers, so the screen can tick the day the
+// admin clicked instead of guessing oldest-first from the amount.
+    waivedDates: { type: [String], default: [] },
+
     adminRemark: { type: String, default: "" },
 
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" },

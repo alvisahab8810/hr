@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
-  const { employeeId, month, year, deductionType, amount, adminRemark } = req.body;
+  const { employeeId, month, year, deductionType, amount, adminRemark, waivedDate, waivedDates } = req.body;
 
   if (!employeeId) return res.status(400).json({ success: false, message: "employeeId required" });
   if (month === undefined || month === null) return res.status(400).json({ success: false, message: "month required" });
@@ -39,6 +39,9 @@ export default async function handler(req, res) {
     existing.approvedBy  = admin._id || null;
     existing.approvedAt  = new Date();
     existing.reason      = existing.reason || "Admin override";
+    if (Array.isArray(waivedDates))      existing.waivedDates = waivedDates;
+    else if (waivedDate && !(existing.waivedDates || []).includes(waivedDate))
+      existing.waivedDates = [...(existing.waivedDates || []), waivedDate];
     await existing.save();
     waiver = existing;
   } else {
@@ -48,6 +51,7 @@ export default async function handler(req, res) {
       year:          Number(year),
       deductionType,
       amount:        Number(amount),
+      waivedDates:   Array.isArray(waivedDates) ? waivedDates : waivedDate ? [waivedDate] : [],
       reason:        "Admin override — waived directly by admin",
       status:        "Approved",
       adminRemark:   adminRemark?.trim() || "Waived by admin",

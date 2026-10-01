@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       status: { $in: ["Pending", "Approved", "Rejected"] },
       startDate: { $lt: monthEnd },
       endDate:   { $gte: monthStart },
-    }).select("employee leaveType startDate endDate status").lean(),
+    }).select("employee leaveType startDate endDate status isPaid policyFlags").lean(),
   ]);
 
   // Group attendance by employee ID
@@ -68,12 +68,18 @@ export default async function handler(req, res) {
   const leaveDateMap = {};
   leaveApplications.forEach(l => {
     const eid   = l.employee.toString();
+    // Same rule the salary engine uses, so the screen lists exactly the days
+    // that were actually charged as unpaid leave.
+    const paid = l.leaveType === "Half Day"
+      ? l.isPaid !== false
+      : ["Sick Leave", "Earned Leave", "Annual Leave"].includes(l.leaveType) ||
+        (l.leaveType === "Casual Leave" && !l.policyFlags?.sandwichLeave);
     const start = new Date(Math.max(new Date(l.startDate), monthStart));
     const end   = new Date(Math.min(new Date(l.endDate), new Date(monthEnd - 1)));
     const cur   = new Date(start);
     while (cur <= end) {
       const dk = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}-${String(cur.getDate()).padStart(2,"0")}`;
-      leaveDateMap[`${eid}_${dk}`] = { leaveType: l.leaveType, status: l.status };
+      leaveDateMap[`${eid}_${dk}`] = { leaveType: l.leaveType, status: l.status, paid };
       cur.setDate(cur.getDate() + 1);
     }
   });
