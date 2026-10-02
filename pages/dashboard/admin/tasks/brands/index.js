@@ -40,7 +40,7 @@ function svcMeta(key) { return SERVICES.find(s => s.key === key) || {}; }
 
 function freshForm() {
   return {
-    name: "", logo: "", color: "#6366F1", contactEmail: "", notes: "",
+    name: "", logo: "", color: "#6366F1", contactEmail: "", notes: "", clientId: null,
     services: [],
     monthlyDeliverables: { reels: 0, posts: 0, carousels: 0, stories: 0 },
     weeklySchedule: [],
@@ -106,6 +106,17 @@ export default function BrandsPage() {
       if (found) { setSelected(found); setActiveTab("seo"); }
     }
   }, [router.query, brands]); // eslint-disable-line
+
+  /* Arriving from Website → Leads → Convert to client. */
+  const handedOver = useRef(false);
+  useEffect(() => {
+    const { newBrand, clientId, name, email } = router.query;
+    if (newBrand !== "1" || handedOver.current) return;
+    handedOver.current = true;
+    setForm({ ...freshForm(), name: name ? String(name) : "", contactEmail: email ? String(email) : "", clientId: clientId ? String(clientId) : null });
+    setEditMode(false);
+    setShowModal(true);
+  }, [router.query]); // eslint-disable-line
 
   /* Reset GSC sites when selected brand changes; auto-load if already connected */
   useEffect(() => {

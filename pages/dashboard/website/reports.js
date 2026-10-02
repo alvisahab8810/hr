@@ -55,6 +55,13 @@ export default function ReportsPage() {
   const [range, setRange] = useState("all");
   const [loading, setLoading] = useState(true);
 
+  // A salesperson gets their own report and no money on it. The API already
+  // refuses to send the figures; this only decides what is drawn, so the page
+  // never shows an empty "₹0 collected" where a panel used to be.
+  const [isSales, setIsSales] = useState(false);
+  useEffect(() => { setIsSales(/(^|; *)sales_perms=/.test(document.cookie)); }, []);
+  const money$ = !isSales;
+
   useEffect(() => {
     (async () => {
       try {
@@ -168,8 +175,12 @@ export default function ReportsPage() {
 
             <div style={s.head}>
               <div>
-                <h2 style={s.h1}>Reports</h2>
-                <p style={s.sub}>Leads, funnel, proposals, revenue and collections, in one place.</p>
+                <h2 style={s.h1}>{money$ ? "Reports" : "My reports"}</h2>
+                <p style={s.sub}>
+                  {money$
+                    ? "Leads, funnel, proposals, revenue and collections, in one place."
+                    : "Your leads, your funnel and your proposals. Billing stays with the admin."}
+                </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <select style={s.sel} value={range} onChange={(e) => setRange(e.target.value)}>
@@ -188,9 +199,18 @@ export default function ReportsPage() {
               <M k="Leads received" v={cut.leads.length} n="all sources" />
               <M k="Meeting show rate" v={`${Math.round((held / Math.max(1, booked)) * 100)}%`} n="booked to held" />
               <M k="Lead to win" v={`${Math.round((funnel[6].v / top) * 100)}%`} n="end to end conversion" tone="#0F8A54" />
-              <M k="Value won" v={inr(money.won)} n="accepted proposals" tone="#0F8A54" />
-              <M k="Collected" v={inr(money.received)} n="paid invoices, with GST" />
-              <M k="Outstanding" v={inr(money.outstanding)} n={`${inr(money.overdue)} of it overdue`} tone={money.overdue ? "#DC2626" : "#0F172A"} />
+              {money$ ? (
+                <>
+                  <M k="Value won" v={inr(money.won)} n="accepted proposals" tone="#0F8A54" />
+                  <M k="Collected" v={inr(money.received)} n="paid invoices, with GST" />
+                  <M k="Outstanding" v={inr(money.outstanding)} n={`${inr(money.overdue)} of it overdue`} tone={money.overdue ? "#DC2626" : "#0F172A"} />
+                </>
+              ) : (
+                <>
+                  <M k="Proposals sent" v={funnel[5].v} n="out to clients" />
+                  <M k="Won" v={funnel[6].v} n="closed in this range" tone="#0F8A54" />
+                </>
+              )}
             </div>
 
             {loading ? <div style={s.empty}>Loading…</div> : (
@@ -214,6 +234,7 @@ export default function ReportsPage() {
                     </div>
                   </Panel>
 
+                  {money$ ? (
                   <Panel title="Revenue by month" tag={`${inr(revenue.reduce((a, r) => a + r.v, 0))} total`}>
                     {revenue.length ? (
                       <div style={s.bars}>
@@ -229,6 +250,17 @@ export default function ReportsPage() {
                       </div>
                     ) : <div style={s.muted}>No payment has been marked received yet.</div>}
                   </Panel>
+                  ) : (
+                    /* A salesperson's second panel is their meetings, not the
+                       money — the column would otherwise sit empty. */
+                    <Panel title="Meetings" tag={`${booked} booked`}>
+                      <KV k="Meetings booked" v={booked} />
+                      <KV k="Held" v={held} />
+                      <KV k="No show or cancelled" v={cut.leads.filter((l) => ["noshow", "cancelled"].includes(l.held)).length} />
+                      <KV k="Rescheduled" v={cut.leads.filter((l) => l.held === "rescheduled").length} />
+                      <KV k="Show rate" v={`${Math.round((held / Math.max(1, booked)) * 100)}%`} />
+                    </Panel>
+                  )}
                 </div>
 
                 <div className="rp-cols3" style={s.cols3}>
@@ -245,11 +277,12 @@ export default function ReportsPage() {
                     <KV k="Blocked at approval" v={cut.proposals.filter((p) => p.approval !== "Approved").length} />
                     <KV k="Sent to clients" v={cut.proposals.filter((p) => p.sent).length} />
                     <KV k="Accepted" v={cut.proposals.filter((p) => p.status === "Accepted").length} />
-                    <KV k="Value proposed" v={inr(money.proposed)} />
-                    <KV k="Value won" v={inr(money.won)} />
+                    {money$ ? <KV k="Value proposed" v={inr(money.proposed)} /> : null}
+                    {money$ ? <KV k="Value won" v={inr(money.won)} /> : null}
                     <KV k="Win rate" v={`${Math.round((cut.proposals.filter((p) => p.status === "Accepted").length / Math.max(1, cut.proposals.length)) * 100)}%`} />
                   </Panel>
 
+                  {money$ ? (
                   <Panel title="Collections">
                     <KV k="Invoiced" v={inr(money.invoiced)} />
                     <KV k="Received" v={inr(money.received)} />
@@ -259,6 +292,7 @@ export default function ReportsPage() {
                     <KV k="Invoices raised" v={cut.invoices.length} />
                     <KV k="Paid" v={cut.invoices.filter((i) => i.status === "Paid").length} />
                   </Panel>
+                  ) : null}
                 </div>
 
                 <div className="rp-cols2" style={{ ...s.cols2, marginTop: 14 }}>
@@ -282,7 +316,7 @@ export default function ReportsPage() {
                   </Panel>
                 </div>
 
-                {perTeam.length ? (
+                {money$ && perTeam.length ? (
                   <div style={{ marginTop: 14 }}>
                     <Panel title="How the team is doing" tag={`${perTeam.length} on the team`}>
                       <div style={{ overflowX: "auto" }}>
@@ -370,8 +404,9 @@ const M = ({ k, v, n, tone }) => (
 
 export async function getServerSideProps({ req }) {
   const cookie = req.headers.cookie || "";
-  // Admin-only: a salesperson login is limited to the Sales panel.
-  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=")) {
+  // The admin and the sales team both open this page -- what each of them is
+  // shown is decided above, and by the API.
+  if (!cookie.includes("admin_auth=true") && !cookie.includes("admin_user_token=") && !cookie.includes("sales_token=")) {
     return { redirect: { destination: "/dashboard/login", permanent: false } };
   }
   return { props: {} };

@@ -29,6 +29,12 @@ const ProposalSchema = new mongoose.Schema(
     em: { type: String, default: "" },
     ph: { type: String, default: "" },
 
+    // One line per service. `svc` and `amount` stay in step with these as a
+    // summary, so every old proposal and every old report still reads fine.
+    items: {
+      type: [{ svc: String, note: String, amount: Number }],
+      default: [],
+    },
     svc: { type: String, default: "" },
     amount: { type: Number, default: 0 },          // total value, ₹
     term: { type: String, default: "Retainer" },   // Retainer | One-off | Project

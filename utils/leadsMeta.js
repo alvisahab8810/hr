@@ -20,7 +20,10 @@ export const STATUSES = [
 /* The only statuses a human picks. Everything else on the list above is set by
    the CRM itself (a booked meeting, a sent proposal, a paid invoice), so it is
    shown when a lead is already there but never offered in the dropdown. */
-export const MANUAL_STATUSES = ["New", "Contacted", "Qualified", "Not qualified"];
+// "Lost" is here and "Won" is not, and that is the whole shape of the thing:
+// losing a deal is a judgement somebody makes, winning one is a payment that
+// lands (utils/leadWon.js).
+export const MANUAL_STATUSES = ["New", "Contacted", "Qualified", "Not qualified", "Lost"];
 
 // The dropdown for one lead is always just the four manual choices. Where the
 // automation has put the lead is carried by a hidden option, so the closed
@@ -88,6 +91,16 @@ export const LOST_REASONS = [
 /* ── How the meeting will happen ──────────────────────────────────────────────
    Nothing is booked from the website any more: the team rings the lead, agrees
    one of these, and writes the date and time in by hand. */
+/* ── How the meeting actually went ───────────────────────────────────────────
+   Four outcomes, because a meeting that moved or was called off is neither
+   held nor a no show. Why a deal was lost lives on the lead's status. */
+export const MEETING_OUTCOMES = [
+  { k: "held",        n: "It happened", bg: "#DCFCE7", fg: "#15803D" },
+  { k: "noshow",      n: "No show",     bg: "#FEE2E2", fg: "#B91C1C" },
+  { k: "rescheduled", n: "Rescheduled", bg: "#FEF3C7", fg: "#B45309" },
+  { k: "cancelled",   n: "Cancelled",   bg: "#F1F5F9", fg: "#475569" },
+];
+
 export const MEETING_MODES = [
   { k: "Google Meet", icon: "bi-camera-video-fill", bg: "#EEF2FF", fg: "#4F46E5", needs: "link" },
   { k: "Phone call",  icon: "bi-telephone-fill",    bg: "#E0F2FE", fg: "#0369A1", needs: null },
@@ -111,6 +124,26 @@ export const LADDER = [
   { k: "m45",  n: "45 mins before", short: "45m",  off: 0.75 },
   { k: "start", n: "At start time",  short: "Now",  off: 0 },
 ];
+
+/* The one sentence about winning a lead, kept here because both the server
+   (utils/leadWon.js, which enforces it) and the boards (which have to say it
+   out loud) need the same words. */
+export const WON_RULE =
+  "A lead is won once the advance is received. Record the payment against its invoice — the lead moves to Won by itself.";
+
+// "2 days before" and "1 day before" are claims about the calendar, not about
+// hours left — a meeting fixed for today can never truthfully get either, so
+// the board stops offering them instead of letting someone send a mail that
+// says "tomorrow" about this afternoon. utils/leadAutomation.js skips them for
+// the same reason.
+export function rungGone(k, meetingDate) {
+  if (!meetingDate || (k !== "d2" && k !== "d1")) return false;
+  const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+  const days = Math.round(
+    (Date.parse(`${meetingDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000
+  );
+  return !Number.isNaN(days) && days < (k === "d2" ? 2 : 1);
+}
 
 /* ── Homework before the call ─────────────────────────────────────────────── */
 export const PREP = [
@@ -164,17 +197,19 @@ export const BASE_COLS = [
   { k: "owner",    n: "Assign to",   on: true,  w: 145 },
   { k: "connects", n: "Connects",    on: true,  w: 95 },
   { k: "status",   n: "Status",      on: true,  w: 150 },
-  { k: "score",    n: "Score",       on: true,  w: 90 },
   { k: "meeting",  n: "Meeting",     on: true,  w: 175 },
   { k: "mode",     n: "How",         on: true,  w: 125 },
   { k: "ladder",   n: "Reminders",   on: true,  w: 120 },
   { k: "prep",     n: "Prep",        on: true,  w: 110 },
-  { k: "after",    n: "After meeting", on: true, w: 230 },
-  // The three things the "After meeting" panel used to hide behind a click,
-  // each with its own column and its own button.
+  { k: "score",    n: "Score",       on: true,  w: 90 },
+  // What came of the meeting, each with its own column and its own button.
+  // The Meeting status cell opens the panel that sets all three.
   { k: "held",     n: "Meeting status", on: true, w: 130 },
   { k: "matSent",  n: "Material",    on: true,  w: 140 },
   { k: "prop",     n: "Proposal",    on: true,  w: 140 },
+  // The hand-over: a won lead becomes a client, and Operations hangs its
+  // brands off that client.
+  { k: "client",   n: "Client",      on: true,  w: 150 },
   { k: "created",  n: "Created",     on: false, w: 120 },
   { k: "act",      n: "Actions",     on: true,  lock: true, w: 130 },
 ];
@@ -231,6 +266,9 @@ export const scoreCol = (v) => {
   if (v >= 4) return { fg: "#B45309", bg: "#FEF3C7" };
   return { fg: "#B91C1C", bg: "#FEE2E2" };
 };
+
+export const matDone = (l) =>
+  !!l.matSent || (l.remindersSent || []).some((r) => r.key === "material");
 
 export const prepPct = (l) =>
   Math.round(((l?.prep?.length || 0) / PREP.length) * 100);

@@ -4,10 +4,13 @@
 import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Proposal from "@/models/Proposal";
+import Invoice from "@/models/Invoice";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { salesId } from "@/utils/salesAuth";
+import { cleanItems, itemsTotal, itemsLabel } from "@/utils/proposalItems";
+import { advanceReceived } from "@/utils/leadWon";
 
 const FIELDS = [
   "svc", "amount", "term", "months", "advPct", "validTill", "owner", "notes",
@@ -29,7 +32,22 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "DELETE") {
-      await Proposal.findByIdAndDelete(id);
+      // Invoices hang off the proposal and carry the money. Deleting it would
+      // leave them pointing at nothing, so the invoices go first — by hand, so
+      // somebody has actually looked at what is being thrown away.
+      const billed = await Invoice.countDocuments({ proposalId: id });
+      if (billed) {
+        return res.status(409).json({
+          success: false,
+          message: `${billed} invoice${billed === 1 ? " is" : "s are"} raised against this proposal. Delete those first.`,
+        });
+      }
+      const gone = await Proposal.findByIdAndDelete(id);
+      if (gone?.leadId) {
+        await Query.findByIdAndUpdate(gone.leadId, {
+          $push: { events: { at: new Date(), type: "proposal", text: "Proposal deleted" } },
+        }).catch(() => {});
+      }
       return res.status(200).json({ success: true });
     }
 
@@ -45,6 +63,14 @@ export default async function handler(req, res) {
     for (const k of FIELDS) {
       if (b[k] === undefined) continue;
       set[k] = ["amount", "months", "advPct"].includes(k) ? Number(b[k] || 0) : b[k];
+    }
+
+    // Service lines rule the total — `svc` and `amount` follow them.
+    if (b.items !== undefined) {
+      const items = cleanItems(b.items);
+      set.items = items;
+      set.amount = itemsTotal(items);
+      set.svc = itemsLabel(items);
     }
 
     // The agreement, which only exists after the client has accepted.
@@ -123,12 +149,26 @@ export default async function handler(req, res) {
       ).catch(() => {});
     }
 
-    // Winning a proposal wins the lead.
+    // An accepted proposal is a yes, not a win — the lead is won when the
+    // advance lands (utils/leadWon.js). Until then it sits in Negotiation,
+    // which is where the chasing for that payment belongs.
     if (b.status === "Accepted") {
-      await Query.findByIdAndUpdate(saved.leadId, {
-        $set: { status: "Won" },
-        $push: { events: { at: new Date(), type: "proposal", text: "Proposal accepted" } },
-      }).catch(() => {});
+      const paid = await advanceReceived(saved.leadId);
+      await Query.findOneAndUpdate(
+        paid
+          ? { _id: saved.leadId }
+          : { _id: saved.leadId, status: { $nin: ["Won", "Lost", "Not qualified"] } },
+        {
+          $set: { status: paid ? "Won" : "Negotiation" },
+          $push: {
+            events: {
+              at: new Date(),
+              type: "proposal",
+              text: paid ? "Proposal accepted" : "Proposal accepted — waiting for the advance",
+            },
+          },
+        }
+      ).catch(() => {});
     }
 
     return res.status(200).json({

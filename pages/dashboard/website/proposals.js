@@ -18,6 +18,8 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import DocPreview, { defaultAgreementClauses } from "@/components/DocPreview";
 import MailCompose from "@/components/MailCompose";
+import ServiceLines from "@/components/ServiceLines";
+import { docItems, itemsTotal } from "@/utils/proposalItems";
 import { SERVICES, inr, inrShort, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList } from "@/utils/crmSettings";
 import { confirmDialog } from "../../../components/ConfirmDialog";
@@ -48,6 +50,16 @@ const propCode = (p) => `VP-${String(p?._id || "").slice(-4).toUpperCase()}`;
 const leadRef  = (id) => `VL-${String(id || "").slice(-4).toUpperCase()}`;
 
 const advAmt   = (p) => Math.round(((p.amount || 0) * (p.advPct || 0)) / 100);
+/* What "raise the invoices" will actually produce, in words. */
+const invoicePlan = (p) => {
+  const adv = advAmt(p);
+  const months = p.term === "Retainer" ? Math.max(1, Number(p.months || 1)) : 0;
+  const parts = [];
+  if (adv > 0) parts.push(`an advance of ${inr(adv)}`);
+  if (months) parts.push(`${months} monthly invoice${months === 1 ? "" : "s"}`);
+  else if ((p.amount || 0) - adv > 0) parts.push(adv > 0 ? "the balance" : `the full ${inr(p.amount || 0)}`);
+  return parts.join(" and ") || "nothing — the deal value is zero";
+};
 const perMonth = (p) => (p.term === "Retainer" && p.months ? Math.round((p.amount || 0) / p.months) : 0);
 const replies  = (p) => (p.followups || []).filter((f) => f.type === "reply").length;
 const lastTouch = (p) => {
@@ -244,7 +256,9 @@ export default function ProposalsPage() {
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message);
-      setRows((prev) => prev.map((p) => (p._id === id ? j.data : p)));
+      // The saved row comes back without the board-only invoice count, so it
+      // is carried over rather than lost on every edit.
+      setRows((prev) => prev.map((p) => (p._id === id ? { ...j.data, invCount: p.invCount || 0 } : p)));
       if (!quiet) toast.success("Saved");
       setBusy(false);
       return j.data;
@@ -269,11 +283,8 @@ export default function ProposalsPage() {
      and one invoice a month for the retainer. Then straight to Invoices. */
   const raiseInvoice = async (p) => {
     if (p.status !== "Accepted") return toast.error("Only an accepted proposal can be invoiced");
-    const adv = Math.round(((p.amount || 0) * (p.advPct || 0)) / 100);
-    const line = p.term === "Retainer"
-      ? `advance ${inr(adv)} + ${p.months || 1} monthly invoice${(p.months || 1) === 1 ? "" : "s"}`
-      : `advance ${inr(adv)} + the balance`;
-    if (!(await confirmDialog(`Raise the invoices for ${propCode(p)} — ${line}?`))) return;
+    if (p.invCount) return router.push(`/dashboard/website/invoices?lead=${p.leadId}`);
+    if (!(await confirmDialog(`Raise the invoices for ${propCode(p)} — ${invoicePlan(p)}?`))) return;
     setBusy(true);
     try {
       const r = await fetch("/api/admin/invoices", {
@@ -372,7 +383,17 @@ export default function ProposalsPage() {
         );
       case "contact": return p.contact || "—";
       case "em":      return p.em || "—";
-      case "svc":     return p.svc || "—";
+      case "svc": {
+        // Several services fit badly in one cell, so the extras become a count.
+        const list = (p.items || []).map((x) => x.svc).filter(Boolean);
+        if (list.length > 1) return (
+          <span title={list.join(", ")}>
+            {list[0]}
+            <span style={{ ...s.tag, background: "#EEF2FF", color: "#4338CA", marginLeft: 6 }}>+{list.length - 1}</span>
+          </span>
+        );
+        return p.svc || "—";
+      }
       case "amount":  return <b style={{ fontWeight: 900, color: "#0F172A" }}>{inr(p.amount || 0)}</b>;
       case "term":    return <span style={{ ...s.tag, background: "#F1F5F9", color: "#475569" }}>{p.term}</span>;
       case "months":  return p.term === "Retainer" && p.months ? `${p.months}` : "—";
@@ -538,7 +559,7 @@ export default function ProposalsPage() {
               </div>
 
               <div className="lp-scroll" style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: shown.reduce((a, c) => a + c.w, 60) }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: shown.reduce((a, c) => a + c.w, 180) }}>
                   <thead>
                     <tr>
                       {shown.map((c) => (
@@ -549,7 +570,7 @@ export default function ProposalsPage() {
                              style={{ fontSize: 8.5, marginLeft: 4, opacity: sort.k === c.k ? 1 : .35 }} />
                         </th>
                       ))}
-                      <th style={{ ...s.th, width: 96, minWidth: 96 }}>Actions</th>
+                      <th style={{ ...s.th, width: 180, minWidth: 180 }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -573,18 +594,32 @@ export default function ProposalsPage() {
                                   style={{ ...s.iconBtn, marginRight: 4, borderColor: "#C7D2FE", color: "#4338CA" }} title="Preview / PDF">
                             <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} />
                           </button>
-                          {/* Accepted means the money can be asked for — that button lives here. */}
+                          {/* Sending is the whole point of a proposal, so it belongs here and
+                             not three clicks deep. Once it has gone, the same button resends. */}
+                          <button onClick={() => setModal({ type: "mail", p, kind: "proposal", markSent: !p.sent })}
+                                  style={{ ...s.iconBtn, marginRight: 4, borderColor: p.sent ? "#C7D2FE" : "#6366F1",
+                                           background: p.sent ? "#fff" : "#6366F1", color: p.sent ? "#4338CA" : "#fff" }}
+                                  title={p.sent ? `Sent ${fmtD(p.sent)} — send it again` : "Send the proposal"}>
+                            <i className={`bi ${p.sent ? "bi-arrow-repeat" : "bi-send-fill"}`} style={{ fontSize: 12 }} />
+                          </button>
+                          <button onClick={() => setModal({ type: "panel", p, panel: "record" })}
+                                  style={{ ...s.iconBtn, marginRight: 4 }} title="Open the record">
+                            <i className="bi bi-card-list" style={{ fontSize: 12 }} />
+                          </button>
+                          {/* Accepted means the money can be asked for — that button lives here.
+                             Once the invoices exist it stops raising and starts showing them. */}
                           {p.status === "Accepted" ? (
                             <button onClick={() => raiseInvoice(p)} disabled={busy}
-                                    style={{ ...s.iconBtn, marginRight: 4, borderColor: "#6366F1", background: "#6366F1", color: "#fff" }}
-                                    title="Raise the invoices">
-                              <i className="bi bi-receipt" style={{ fontSize: 12 }} />
+                                    style={{ ...s.iconBtn, marginRight: 4, borderColor: "#6366F1",
+                                             background: p.invCount ? "#fff" : "#6366F1", color: p.invCount ? "#4338CA" : "#fff" }}
+                                    title={p.invCount ? `${p.invCount} invoice${p.invCount === 1 ? "" : "s"} raised — open them` : "Raise the invoices"}>
+                              <i className={`bi ${p.invCount ? "bi-receipt-cutoff" : "bi-receipt"}`} style={{ fontSize: 12 }} />
                             </button>
                           ) : null}
                           <button onClick={() => setModal({ type: "panel", p, panel: "approval" })} style={s.iconBtn} title="Approval">
                             <i className="bi bi-shield-check" style={{ fontSize: 12 }} />
                           </button>
-                          <button onClick={() => remove(p)} style={{ ...s.iconBtn, marginLeft: 4, color: "#C42525" }} title="Delete">
+                          <button onClick={() => remove(p)} disabled={busy} style={{ ...s.iconBtn, marginLeft: 4, color: "#C42525" }} title="Delete">
                             <i className="bi bi-trash3-fill" style={{ fontSize: 12 }} />
                           </button>
                         </td>
@@ -681,7 +716,12 @@ function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement, isSales,
             <Link href={`/dashboard/website/leads?lead=${p.leadId}&panel=after`} style={{ ...s.miniBtn, textDecoration: "none" }}>
               <i className="bi bi-box-arrow-up-right" style={{ fontSize: 11 }} /> Open the lead
             </Link>
-            {p.em ? <a href={`mailto:${p.em}`} style={{ ...s.miniBtn, textDecoration: "none" }}><i className="bi bi-envelope-fill" style={{ fontSize: 11 }} /> Mail them</a> : null}
+            {p.em ? (
+              <button onClick={() => mail?.("proposal", !p.sent)} style={s.miniBtn}>
+                <i className={`bi ${p.sent ? "bi-arrow-repeat" : "bi-send-fill"}`} style={{ fontSize: 11 }} />
+                {p.sent ? " Send it again" : " Send the proposal"}
+              </button>
+            ) : null}
             {p.ph ? <a href={`tel:${p.ph}`} style={{ ...s.miniBtn, textDecoration: "none" }}><i className="bi bi-telephone-fill" style={{ fontSize: 11 }} /> Call</a> : null}
             <button onClick={() => go("commercials")} style={s.miniBtn}>Commercials</button>
             <button onClick={() => pdf?.()} style={s.primaryBtn}>
@@ -717,14 +757,18 @@ function Panel({ which, p, busy, patch, go, invoice, pdf, pdfAgreement, isSales,
 function Commercials({ p, busy, patch, go }) {
   const svcList = useList("services", SERVICES);
   const [f, setF] = useState({
-    svc: p.svc || "", amount: String(p.amount || ""), term: p.term || "Retainer",
+    term: p.term || "Retainer",
     months: String(p.months || 1), advPct: String(p.advPct || 0), validTill: p.validTill || "",
   });
+  const [items, setItems] = useState(() => docItems(p));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const locked = p.status === "Sent" || p.status === "Accepted";
 
   return (
     <>
+      {docItems(p).map((it, i) => (
+        <KV key={i} k={it.svc || "Service"} v={inr(it.amount || 0)} />
+      ))}
       <KV k="Total value" v={inr(p.amount || 0)} />
       <KV k="Term" v={`${p.term}${p.term === "Retainer" && p.months ? ` · ${p.months} months` : ""}`} />
       {perMonth(p) ? <KV k="Per month" v={inr(perMonth(p))} /> : null}
@@ -740,17 +784,8 @@ function Commercials({ p, busy, patch, go }) {
         </div>
       ) : (
         <div style={{ marginTop: 14 }}>
+          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Services on this proposal" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Service">
-              <select className="lp-in" style={s.input} value={f.svc} onChange={(e) => set("svc", e.target.value)}>
-                <option value="">—</option>
-                {svcList.map((x) => <option key={x} value={x}>{x}</option>)}
-              </select>
-            </Field>
-            <Field label="Deal value (₹)">
-              <input className="lp-in" style={s.input} inputMode="numeric" value={f.amount}
-                     onChange={(e) => set("amount", e.target.value.replace(/\D/g, ""))} />
-            </Field>
             <Field label="Payment term">
               <select className="lp-in" style={s.input} value={f.term} onChange={(e) => set("term", e.target.value)}>
                 {TERMS.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -769,7 +804,7 @@ function Commercials({ p, busy, patch, go }) {
                      onChange={(e) => set("validTill", e.target.value)} />
             </Field>
           </div>
-          <button onClick={() => patch(p._id, f)} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
+          <button onClick={() => patch(p._id, { ...f, items })} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
             <i className="bi bi-check2" style={{ fontSize: 12 }} /> Save the numbers
           </button>
         </div>
@@ -1069,17 +1104,17 @@ function Status({ p, busy, patch, go, invoice, mail }) {
           ) : null}
           {p.status === "Accepted" ? (
             <>
-              <button onClick={() => invoice?.(p)} disabled={busy} style={s.primaryBtnSm}>
-                <i className="bi bi-receipt" style={{ fontSize: 12 }} /> Raise the invoices
+              <button onClick={() => invoice?.(p)} disabled={busy} style={p.invCount ? s.miniBtn : s.primaryBtnSm}>
+                <i className="bi bi-receipt" style={{ fontSize: 12 }} />
+                {p.invCount ? ` Open its ${p.invCount} invoice${p.invCount === 1 ? "" : "s"}` : " Raise the invoices"}
               </button>
-              <Link href={`/dashboard/website/invoices?lead=${p.leadId}`} style={{ ...s.miniBtn, textDecoration: "none" }}>
-                See its invoices
-              </Link>
               <button onClick={() => go("agreement")} style={s.miniBtn}>
                 <i className="bi bi-file-earmark-check-fill" style={{ fontSize: 12 }} /> Agreement
               </button>
               <div style={{ width: "100%", fontSize: 12, color: "#0F8A54", fontWeight: 700, marginTop: 4 }}>
-                Won — the lead has been marked Won too. The advance goes out now, then one invoice a month.
+                Accepted — the lead moves to Won once the advance is received.
+                {p.invCount ? " Its invoices are already raised; each one is still a draft until you send it."
+                  : ` Raising the invoices makes ${invoicePlan(p)} — all as drafts, nothing goes out on its own.`}
               </div>
             </>
           ) : null}
@@ -1169,25 +1204,29 @@ function Owner({ p, busy, patch }) {
 function NewProposal({ leads, leadId, onClose, onDone }) {
   const svcList = useList("services", SERVICES);
   const [f, setF] = useState({
-    leadId: leadId || "", svc: "", amount: "", term: "Retainer", months: "3",
+    leadId: leadId || "", term: "Retainer", months: "3",
     advPct: "50", validTill: "", owner: "", notes: "",
   });
+  const [items, setItems] = useState([{ svc: "", amount: 0 }]);
+  const total = itemsTotal(items);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
     const l = leads.find((x) => x._id === f.leadId);
-    if (l && l.service) set("svc", l.service);
+    // The lead already said what it wants — start the first line with that.
+    if (l && l.service) setItems((x) => (x.length === 1 && !x[0].svc ? [{ svc: l.service, amount: 0 }] : x));
   }, [f.leadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     if (!f.leadId) return toast.error("Pick the lead this is for");
-    if (!Number(f.amount)) return toast.error("Put a value on it");
+    if (!items.some((x) => x.svc)) return toast.error("Pick at least one service");
+    if (!total) return toast.error("Put a value on it");
     setSaving(true);
     try {
       const r = await fetch("/api/admin/proposals", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        credentials: "include", body: JSON.stringify(f),
+        credentials: "include", body: JSON.stringify({ ...f, items }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message);
@@ -1224,17 +1263,9 @@ function NewProposal({ leads, leadId, onClose, onDone }) {
         </div>
       ) : null}
 
+      <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Services on this proposal" />
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Field label="Service">
-          <select className="lp-in" style={s.input} value={f.svc} onChange={(e) => set("svc", e.target.value)}>
-            <option value="">—</option>
-            {svcList.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
-        </Field>
-        <Field label="Deal value (₹)">
-          <input className="lp-in" style={s.input} inputMode="numeric" value={f.amount}
-                 onChange={(e) => set("amount", e.target.value.replace(/\D/g, ""))} />
-        </Field>
         <Field label="Payment term">
           <select className="lp-in" style={s.input} value={f.term} onChange={(e) => set("term", e.target.value)}>
             {TERMS.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -1254,11 +1285,12 @@ function NewProposal({ leads, leadId, onClose, onDone }) {
         </Field>
       </div>
 
-      {Number(f.amount) ? (
+      {total ? (
         <div style={{ ...s.softBox, marginBottom: 12 }}>
-          <KV k="Advance on signing" v={inr(Math.round((Number(f.amount) * Number(f.advPct || 0)) / 100))} />
+          <KV k="Deal value" v={inr(total)} />
+          <KV k="Advance on signing" v={inr(Math.round((total * Number(f.advPct || 0)) / 100))} />
           {f.term === "Retainer" && Number(f.months) ? (
-            <KV k="Per month" v={inr(Math.round(Number(f.amount) / Number(f.months)))} />
+            <KV k="Per month" v={inr(Math.round(total / Number(f.months)))} />
           ) : null}
         </div>
       ) : null}

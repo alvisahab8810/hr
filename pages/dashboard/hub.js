@@ -49,12 +49,12 @@ const CARDS = [
     key: "sales",
     href: "/dashboard/website/leads",
     title: "Sales",
-    desc: "Leads, proposals, invoices and lead profiles for the sales team.",
+    desc: "Leads, proposals and lead profiles for the sales team.",
     icon: "bi-graph-up-arrow",
     accent: "#15803D",
     accentSoft: "#F0FDF4",
     gradient: "linear-gradient(135deg,#22C55E,#15803D)",
-    chips: ["Leads", "Proposals", "Invoices", "Profiles"],
+    chips: ["Leads", "Proposals", "Profiles", "Clients"],
   },
   {
     key: "marketing",
@@ -69,15 +69,14 @@ const CARDS = [
   },
   {
     key: "finance",
-    href: "",
-    soon: true,
+    href: "/dashboard/finance",
     title: "Finance",
-    desc: "Coming soon — this section is still being planned.",
+    desc: "Invoices, collections and the sender that mails them and chases what is due.",
     icon: "bi-cash-coin",
     accent: "#7C3AED",
     accentSoft: "#F5F3FF",
     gradient: "linear-gradient(135deg,#A78BFA,#7C3AED)",
-    chips: ["Coming soon"],
+    chips: ["Invoices", "Collections", "Auto-send", "Reminders"],
   },
 ];
 

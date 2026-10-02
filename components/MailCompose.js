@@ -3,6 +3,7 @@
 // the subject and the body, shows the PDF that will ride along, and sends.
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import MailAttach from "@/components/MailAttach";
 
 export default function MailCompose({ url, kind, markSent, title, extra, onPreview, onClose, onSent }) {
   const [f, setF] = useState({ to: "", subject: "", body: "" });
@@ -10,6 +11,7 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [files, setFiles] = useState([]);
 
   // Anything the caller needs the server to know about — an invoice's payment
   // record, say — rides along on the draft request and on the send.
@@ -50,7 +52,7 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ kind, markSent: !!markSent, ...(extra || {}), ...f }),
+        body: JSON.stringify({ kind, markSent: !!markSent, ...(extra || {}), ...f, files }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "The mail did not go out");
@@ -124,6 +126,8 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
                   ) : null}
                 </div>
               ) : null}
+
+              <MailAttach files={files} setFiles={setFiles} />
             </>
           )}
         </div>

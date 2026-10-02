@@ -3,10 +3,13 @@
 import mongoose from "mongoose";
 import dbConnect from "@/utils/dbConnect";
 import Query from "@/models/Query";
+import Proposal from "@/models/Proposal";
+import Invoice from "@/models/Invoice";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { salesId } from "@/utils/salesAuth";
 import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
+import { advanceReceived, WON_RULE } from "@/utils/leadWon";
 
 // Anything not on this list can't be written from the browser.
 const PLAIN = [
@@ -104,6 +107,11 @@ export default async function handler(req, res) {
         set.salespersonId = mongoose.Types.ObjectId.isValid(b.salespersonId) ? b.salespersonId : null;
       }
 
+      // Won is not a status anyone types — it is what the advance makes true.
+      if (set.status === "Won" && current.status !== "Won" && !(await advanceReceived(id))) {
+        return res.status(400).json({ success: false, code: "NO_ADVANCE", message: WON_RULE });
+      }
+
       // Journey entries the UI shouldn't have to spell out every time.
       if ("status" in set && set.status !== current.status) {
         events.push({ at: new Date(), type: "status", text: `Status moved to “${set.status}”` });
@@ -177,8 +185,17 @@ export default async function handler(req, res) {
       if (salesId(req)) {
         return res.status(403).json({ success: false, message: "Only an admin can delete a lead" });
       }
+      // The proposals and invoices only exist because of this lead; leaving
+      // them behind put rows on both boards that point at nothing.
+      const [props, invs] = await Promise.all([
+        Proposal.deleteMany({ leadId: id }),
+        Invoice.deleteMany({ leadId: id }),
+      ]);
       await Query.findByIdAndDelete(id);
-      return res.status(200).json({ success: true });
+      return res.status(200).json({
+        success: true,
+        alsoDeleted: { proposals: props?.deletedCount || 0, invoices: invs?.deletedCount || 0 },
+      });
     }
 
     return res.status(405).json({ success: false, message: "Method not allowed" });

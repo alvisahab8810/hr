@@ -16,7 +16,11 @@ export default async function handler(req, res) {
   await dbConnect();
 
   try {
-    // A salesperson sees their own numbers, not the whole company's.
+    // A salesperson sees their own numbers, not the whole company's — and not
+    // the money at all. What the company bills and collects is the admin's
+    // business, so the invoices are never sent to a sales session and the
+    // proposal amounts are left off: the figures cannot be shown on a screen
+    // they were never given.
     const mine = salesId(req);
     const own = mine
       ? (await Query.find({ salespersonId: mine }).select("_id").lean()).map((l) => l._id)
@@ -27,13 +31,18 @@ export default async function handler(req, res) {
       Query.find(mine ? { salespersonId: mine } : {})
         .select("name businessName status budget source formType service salespersonId meetingDate held score prep lostReason createdAt")
         .lean(),
-      Proposal.find(docScope).select("leadId status approval sent amount term owner createdAt").lean(),
-      Invoice.find(docScope).select("leadId proposalId amount gstPct status issued due paidOn kind").lean(),
+      Proposal.find(docScope)
+        .select(`leadId status approval sent term owner createdAt${mine ? "" : " amount"}`)
+        .lean(),
+      mine ? Promise.resolve([]) : Invoice.find(docScope).select("leadId proposalId amount gstPct status issued due paidOn kind").lean(),
       mine ? Promise.resolve([]) : Salesperson.find({}).select("name role active").lean().catch(() => []),
     ]);
 
     return res.status(200).json({
       success: true,
+      // What the page is allowed to draw: the money panels are the admin's.
+      scope: mine ? "own" : "all",
+      money: !mine,
       leads: leads.map((l) => ({ ...l, _id: String(l._id), salespersonId: l.salespersonId ? String(l.salespersonId) : "" })),
       proposals: proposals.map((p) => ({ ...p, _id: String(p._id), leadId: String(p.leadId) })),
       invoices: invoices.map((i) => ({ ...i, _id: String(i._id), leadId: String(i.leadId) })),

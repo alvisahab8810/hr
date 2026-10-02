@@ -2,6 +2,7 @@
 // the server with jsPDF (already a dependency, and it needs no browser, so it
 // works the same on the box as it does here).
 import { jsPDF } from "jspdf";
+import { docItems } from "@/utils/proposalItems";
 
 const COMPANY = {
   name: "Viralon",
@@ -113,6 +114,35 @@ function itemBar(k, left, mid, right) {
   k.rule(4);
 }
 
+// The same bar, but one row per service — a proposal can carry several.
+function itemBars(k, rows, mid) {
+  const { doc, st, set } = k;
+  doc.setFillColor(238, 242, 255);
+  doc.rect(M, st.y, RIGHT - M, 9, "F");
+  set(8, true, INDIGO);
+  doc.text("ENGAGEMENT", M + 3, st.y + 6);
+  doc.text("VALUE", RIGHT - 3, st.y + 6, { align: "right" });
+  st.y += 13;
+  rows.forEach((r, i) => {
+    set(11, true, INK);
+    doc.text(String(r.svc || "Service"), M + 3, st.y);
+    doc.text(money(r.amount), RIGHT - 3, st.y, { align: "right" });
+    st.y += 5;
+    set(9, false, GREY);
+    doc.text(String(r.note || (i === 0 ? mid : "") || ""), M + 3, st.y);
+    st.y += rows.length > 1 && i < rows.length - 1 ? 7 : 4;
+  });
+  k.rule(4);
+}
+
+// Same state as ours means CGST + SGST; anywhere else in India means IGST.
+function sameState(inv) {
+  const ours = String(COMPANY.state || COMPANY.place || "").split(",").pop().trim().toLowerCase();
+  const theirs = String(inv?.billTo?.state || "").trim().toLowerCase();
+  if (!ours || !theirs) return true;
+  return ours === theirs;
+}
+
 function kvTable(k, rows, grandRow) {
   const { doc, st, set } = k;
   for (const [a, b] of rows) {
@@ -192,7 +222,7 @@ function proposalPdf(p) {
     ["Valid till", p.validTill ? dstr(p.validTill) : "—"],
   ]);
   party(k, "Prepared for", p.co || p.contact || "—", [p.contact, p.em, p.ph]);
-  itemBar(k, p.svc || "Service", term, money(p.amount));
+  itemBars(k, docItems(p), term);
   kvTable(
     k,
     [
@@ -226,7 +256,7 @@ function agreementPdf(p) {
   ]);
   party(k, "Between", COMPANY.name, [COMPANY.place, COMPANY.email]);
   party(k, "And", p.co || p.contact || "—", [p.contact, p.em, p.ph]);
-  itemBar(k, p.svc || "Service", term, money(p.amount));
+  itemBars(k, docItems(p), term);
   clauseList(k, (g.clauses && g.clauses.length ? g.clauses : defaultClauses(p)));
   if (g.note) {
     k.st.y += 2;
@@ -249,15 +279,27 @@ function invoicePdf(inv) {
     ["Due by", inv.due ? dstr(inv.due) : "—"],
     ["Status", inv.status || "Sent"],
   ]);
-  party(k, "Billed to", inv.co || inv.contact || "—", [inv.contact, inv.em, inv.ph]);
-  itemBar(k, inv.svc || "Service", inv.kind || "Invoice", money(inv.amount));
+  const b = inv.billTo || {};
+  const town = [b.city, b.state, b.pincode].filter(Boolean).join(", ");
+  party(k, "Billed to", inv.co || inv.contact || "—", [
+    inv.contact, inv.em, inv.ph, b.address, town,
+    b.gstin ? `GSTIN ${b.gstin}` : "",
+    inv.poRef ? `PO / Ref ${inv.poRef}` : "",
+  ]);
+  itemBars(k, docItems(inv), inv.kind || "Invoice");
   const paid = (inv.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0);
   const left = Math.max(0, total - paid);
   kvTable(
     k,
     [
       ["Amount", money(inv.amount)],
-      ...(inv.gstPct ? [[`GST (${inv.gstPct}%)`, money(gst)]] : []),
+      ...(inv.gstPct
+        // Billed inside our own state it splits in two; outside it is IGST.
+        ? (sameState(inv)
+            ? [[`CGST (${inv.gstPct / 2}%)`, money(Math.round(gst / 2))],
+               [`SGST (${inv.gstPct / 2}%)`, money(gst - Math.round(gst / 2))]]
+            : [[`IGST (${inv.gstPct}%)`, money(gst)]])
+        : []),
       ["Invoice total", money(total)],
       ...(paid ? [["Received so far", money(paid)]] : []),
     ],

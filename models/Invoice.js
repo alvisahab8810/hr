@@ -16,11 +16,25 @@ const InvoiceSchema = new mongoose.Schema(
     em: { type: String, default: "" },
     ph: { type: String, default: "" },
 
+    // Where the bill actually goes. A lead only carries a name and a phone
+    // number, so the billing details are typed in when the invoice is raised.
+    billTo: {
+      address: { type: String, default: "" },
+      city:    { type: String, default: "" },
+      state:   { type: String, default: "" },
+      pincode: { type: String, default: "" },
+      gstin:   { type: String, default: "" },
+    },
+    // The client's own purchase order or reference, printed on the invoice.
+    poRef: { type: String, default: "" },
+
     // Advance | Monthly | Balance | One time
     kind: { type: String, default: "Advance" },
     monthNo: { type: Number, default: 0 },     // which month of the retainer
     ofMonths: { type: Number, default: 0 },
 
+    // One line per thing billed; `svc` and `amount` summarise them.
+    items: { type: [{ svc: String, note: String, amount: Number }], default: [] },
     svc: { type: String, default: "" },
     amount: { type: Number, default: 0 },      // before tax
     gstPct: { type: Number, default: 18 },
@@ -48,6 +62,26 @@ const InvoiceSchema = new mongoose.Schema(
 
     owner: { type: String, default: "" },
     notes: { type: String, default: "" },
+
+    // A client who has raised a dispute must not keep getting chased. While
+    // this is on, the invoice sender skips the invoice altogether: the money is
+    // still owed and still counted everywhere, but no further mail goes out
+    // until somebody clears the hold (utils/invoiceAutomation.js).
+    disputed:    { type: Boolean, default: false },
+    disputeNote: { type: String, default: "" },
+    disputedAt:  { type: Date, default: null },
+
+    // Which of the sender's mails have already gone out for this invoice, by
+    // rung key ("invoice", "due-b3", "due-0", "due-a7"…). The scheduled sender
+    // reads it before every mail, exactly as a lead reads remindersSent, so a
+    // run that catches up after downtime can never mail the same thing twice.
+    mailsSent: {
+      type: [{
+        key: { type: String, default: "" },
+        at:  { type: Date, default: Date.now },
+      }],
+      default: [],
+    },
   },
   { timestamps: true, collection: "crminvoices" }
 );

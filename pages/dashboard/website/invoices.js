@@ -15,6 +15,8 @@ import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import DocPreview from "@/components/DocPreview";
 import MailCompose from "@/components/MailCompose";
+import ServiceLines from "@/components/ServiceLines";
+import { docItems, itemsTotal } from "@/utils/proposalItems";
 import { SERVICES, inr, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList, useCrmSettings } from "@/utils/crmSettings";
 import { confirmDialog } from "../../../components/ConfirmDialog";
@@ -91,6 +93,8 @@ const PANEL_OF = {
 
 const PANEL_META = {
   record:  { t: "Invoice record",  i: "bi-receipt" },
+  edit:    { t: "Edit this invoice", i: "bi-pencil-square" },
+  billto:  { t: "Billing details", i: "bi-geo-alt-fill" },
   amounts: { t: "What it is for",  i: "bi-cash-stack" },
   dates:   { t: "Dates",           i: "bi-calendar-event-fill" },
   payment: { t: "Payment",         i: "bi-bank" },
@@ -159,7 +163,7 @@ function Modal({ title, icon, wide, onClose, children }) {
           <span style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", flex: 1 }}>{title}</span>
           <button onClick={onClose} style={s.iconBtn}><i className="bi bi-x-lg" style={{ fontSize: 12 }} /></button>
         </div>
-        <div className="lp-scroll" style={{ padding: 20, maxHeight: "calc(100vh - 220px)", overflowY: "auto" }}>{children}</div>
+        <div className="lp-scroll" style={{ padding: 20, maxHeight: "calc(100vh - 150px)", overflowY: "auto" }}>{children}</div>
       </div>
     </div>
   );
@@ -234,7 +238,8 @@ export default function InvoicesPage() {
       const j = await r.json();
       if (!j.success) throw new Error(j.message);
       setRows((prev) => prev.map((i) => (i._id === id ? j.data : i)));
-      if (!quiet) toast.success("Saved");
+      // A payment is the one edit here that moves something outside this page.
+      if (!quiet) toast.success(j.leadStatus === "Won" ? "Payment recorded — the lead is now Won" : "Saved");
       setBusy(false);
       return j.data;
     } catch (e) { toast.error(e.message || "Could not save that"); setBusy(false); return null; }
@@ -248,6 +253,8 @@ export default function InvoicesPage() {
     setRows((prev) => prev.filter((x) => x._id !== i._id));
     setModal(null);
     toast.success("Deleted");
+    // Deleting the invoice may have taken the lead's win with it.
+    load();
   };
 
   const sortVal = (i, k) => {
@@ -349,9 +356,15 @@ export default function InvoicesPage() {
       }
       case "issued": return i.issued ? fmtD(i.issued) : "—";
       case "due":
-        return i.due
-          ? <span style={{ color: isLate(i) ? "#C42525" : "#334155", fontWeight: isLate(i) ? 800 : 600 }}>{fmtD(i.due)}</span>
-          : "—";
+        if (!i.due) return "—";
+        return (
+          <>
+            <span style={{ color: isLate(i) ? "#C42525" : "#334155", fontWeight: isLate(i) ? 800 : 600 }}>{fmtD(i.due)}</span>
+            {/* A row that has stopped being chased has to say so, or the silence
+                looks like the sender is broken. */}
+            {i.disputed ? <div style={{ fontSize: 10.5, color: "#B4690E", fontWeight: 700 }}>reminders on hold</div> : null}
+          </>
+        );
       case "status": {
         const st = liveStatus(i);
         const m = statusMeta(st);
@@ -500,6 +513,10 @@ export default function InvoicesPage() {
                                     style={{ ...s.iconBtn, borderColor: "#C7D2FE", color: "#4338CA" }} title="Preview / PDF">
                               <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} />
                             </button>
+                            <button onClick={() => setModal({ type: "panel", inv: i, panel: "edit" })}
+                                    style={s.iconBtn} title="Edit this invoice">
+                              <i className="bi bi-pencil-square" style={{ fontSize: 12 }} />
+                            </button>
                             <button onClick={() => setModal({ type: "records", inv: i })} style={s.iconBtn} title="Payment records">
                               <i className="bi bi-journal-check" style={{ fontSize: 12 }} />
                             </button>
@@ -507,7 +524,7 @@ export default function InvoicesPage() {
                                     style={s.iconBtn} title="Send the invoice by mail">
                               <i className="bi bi-envelope-fill" style={{ fontSize: 12 }} />
                             </button>
-                            <button onClick={() => remove(i)} style={{ ...s.iconBtn, color: "#C42525" }} title="Delete">
+                            <button onClick={() => remove(i)} disabled={busy} style={{ ...s.iconBtn, color: "#C42525" }} title="Delete">
                               <i className="bi bi-trash3-fill" style={{ fontSize: 12 }} />
                             </button>
                           </div>
@@ -531,6 +548,7 @@ export default function InvoicesPage() {
 
       {modal?.type === "new" ? (
         <NewInvoice proposals={proposals} leads={leads} proposalId={modal.proposalId}
+                    billed={new Set(rows.filter((i) => i.proposalId).map((i) => String(i.proposalId)))}
                     onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} />
       ) : null}
 
@@ -538,7 +556,8 @@ export default function InvoicesPage() {
         const live = rows.find((x) => x._id === modal.inv._id) || modal.inv;
         const meta = PANEL_META[modal.panel] || PANEL_META.record;
         return (
-          <Modal title={`${meta.t} · ${invCode(live)}`} icon={meta.i} onClose={() => setModal(null)}>
+          <Modal title={`${meta.t} · ${invCode(live)}`} icon={meta.i} wide={modal.panel === "edit"}
+                 onClose={() => setModal(null)}>
             <Panel which={modal.panel} i={live} busy={busy} patch={patch}
                    mail={(markSent) => setModal({ type: "mail", inv: live, markSent })}
                    records={() => setModal({ type: "records", inv: live })}
@@ -611,6 +630,11 @@ function Panel({ which, i, busy, patch, go, pdf, mail, records }) {
           <KV k="Contact" v={i.contact || "—"} />
           <KV k="Email" v={i.em || "—"} />
           <KV k="Phone" v={i.ph || "—"} />
+          {i.billTo?.address ? <KV k="Address" v={i.billTo.address} /> : null}
+          {[i.billTo?.city, i.billTo?.state, i.billTo?.pincode].filter(Boolean).length
+            ? <KV k="City" v={[i.billTo?.city, i.billTo?.state, i.billTo?.pincode].filter(Boolean).join(", ")} /> : null}
+          {i.billTo?.gstin ? <KV k="Their GSTIN" v={i.billTo.gstin} /> : null}
+          {i.poRef ? <KV k="PO / reference" v={i.poRef} /> : null}
           <KV k="Raised on" v={fmtDT(i.createdAt)} />
           {i.notes ? (
             <div style={{ ...s.softBox, marginTop: 12, fontSize: 12, color: "#475569", lineHeight: 1.55 }}>{i.notes}</div>
@@ -621,6 +645,7 @@ function Panel({ which, i, busy, patch, go, pdf, mail, records }) {
             </Link>
             <Link href="/dashboard/website/proposals" style={{ ...s.miniBtn, textDecoration: "none" }}>Proposals</Link>
             {i.em ? <a href={`mailto:${i.em}`} style={{ ...s.miniBtn, textDecoration: "none" }}>Mail them</a> : null}
+            <button onClick={() => go("billto")} style={s.miniBtn}>Edit the billing details</button>
             <button onClick={() => go("payment")} style={s.miniBtn}>Payment</button>
             <button onClick={() => pdf?.()} style={s.primaryBtn}>
               <i className="bi bi-file-earmark-pdf-fill" style={{ fontSize: 12 }} /> Preview / PDF
@@ -629,6 +654,19 @@ function Panel({ which, i, busy, patch, go, pdf, mail, records }) {
         </>
       );
 
+    // Everything that can be changed on an invoice, in one panel, so nothing
+    // has to be hunted down cell by cell.
+    case "edit":
+      return (
+        <>
+          <EditPart t="Who it is billed to"><BillTo i={i} busy={busy} patch={patch} /></EditPart>
+          <EditPart t="What it is for"><Amounts i={i} busy={busy} patch={patch} /></EditPart>
+          <EditPart t="Dates"><Dates i={i} busy={busy} patch={patch} /></EditPart>
+          <EditPart t="Who is chasing it"><Owner i={i} busy={busy} patch={patch} /></EditPart>
+        </>
+      );
+    case "billto":
+      return <BillTo i={i} busy={busy} patch={patch} />;
     case "amounts": {
       return <Amounts i={i} busy={busy} patch={patch} />;
     }
@@ -643,17 +681,93 @@ function Panel({ which, i, busy, patch, go, pdf, mail, records }) {
   }
 }
 
+/* One titled block inside the edit panel; each part saves on its own. */
+function EditPart({ t, children }) {
+  return (
+    <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: "1px solid #F0F0F8" }}>
+      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: .4, textTransform: "uppercase",
+                    color: "#818CF8", marginBottom: 10 }}>{t}</div>
+      {children}
+    </div>
+  );
+}
+
+// Who the bill is addressed to, and where it goes. A lead only ever carries a
+// name and a number, so this is the one place the real details are kept.
+function BillTo({ i, busy, patch }) {
+  const b = i.billTo || {};
+  const [f, setF] = useState({
+    co: i.co || "", contact: i.contact || "", em: i.em || "", ph: i.ph || "", poRef: i.poRef || "",
+    address: b.address || "", city: b.city || "", state: b.state || "", pincode: b.pincode || "", gstin: b.gstin || "",
+  });
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const save = () => patch(i._id, {
+    co: f.co, contact: f.contact, em: f.em, ph: f.ph, poRef: f.poRef,
+    billTo: { address: f.address, city: f.city, state: f.state, pincode: f.pincode, gstin: f.gstin },
+  });
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label="Company">
+          <input className="lp-in" style={s.input} value={f.co} onChange={(e) => set("co", e.target.value)} />
+        </Field>
+        <Field label="Contact person">
+          <input className="lp-in" style={s.input} value={f.contact} onChange={(e) => set("contact", e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <input className="lp-in" style={s.input} type="email" value={f.em} onChange={(e) => set("em", e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <input className="lp-in" style={s.input} value={f.ph} onChange={(e) => set("ph", e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Billing address">
+        <input className="lp-in" style={s.input} value={f.address} onChange={(e) => set("address", e.target.value)}
+               placeholder="Street, building, floor" />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <Field label="City">
+          <input className="lp-in" style={s.input} value={f.city} onChange={(e) => set("city", e.target.value)} />
+        </Field>
+        <Field label="State" hint="Decides CGST + SGST or IGST.">
+          <input className="lp-in" style={s.input} value={f.state} onChange={(e) => set("state", e.target.value)} />
+        </Field>
+        <Field label="Pincode">
+          <input className="lp-in" style={s.input} inputMode="numeric" value={f.pincode}
+                 onChange={(e) => set("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))} />
+        </Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label="Their GSTIN">
+          <input className="lp-in" style={s.input} value={f.gstin}
+                 onChange={(e) => set("gstin", e.target.value.toUpperCase().slice(0, 15))} placeholder="Optional" />
+        </Field>
+        <Field label="PO / reference">
+          <input className="lp-in" style={s.input} value={f.poRef} onChange={(e) => set("poRef", e.target.value)} />
+        </Field>
+      </div>
+      <button onClick={save} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
+        <i className="bi bi-check2" style={{ fontSize: 12 }} /> Save the billing details
+      </button>
+    </>
+  );
+}
+
 function Amounts({ i, busy, patch }) {
   const svcList = useList("services", SERVICES);
-  const [f, setF] = useState({ kind: i.kind, svc: i.svc || "", amount: String(i.amount || ""), gstPct: String(i.gstPct ?? 18) });
+  const [f, setF] = useState({ kind: i.kind, gstPct: String(i.gstPct ?? 18) });
+  const [items, setItems] = useState(() => docItems(i));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const locked = i.status === "Paid" || i.status === "Partly paid";
-  const amt = Number(f.amount || 0), g = Math.round((amt * Number(f.gstPct || 0)) / 100);
+  const amt = itemsTotal(items), g = Math.round((amt * Number(f.gstPct || 0)) / 100);
 
   return (
     <>
       <KV k="For" v={`${i.kind}${i.kind === "Monthly" && i.monthNo ? ` — month ${i.monthNo} of ${i.ofMonths}` : ""}`} />
-      <KV k="Service" v={i.svc || "—"} />
+      {docItems(i).map((it, n) => (
+        <KV key={n} k={it.svc || "Service"} v={inr(it.amount || 0)} />
+      ))}
       <KV k="Amount" v={inr(i.amount || 0)} />
       <KV k="GST" v={i.gstPct ? `${i.gstPct}% · ${inr(gstAmt(i))}` : "—"} />
       <KV k="Total" v={inr(grand(i))} />
@@ -664,21 +778,12 @@ function Amounts({ i, busy, patch }) {
         </div>
       ) : (
         <div style={{ marginTop: 14 }}>
+          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="For">
               <select className="lp-in" style={s.input} value={f.kind} onChange={(e) => set("kind", e.target.value)}>
                 {KINDS.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
-            </Field>
-            <Field label="Service">
-              <select className="lp-in" style={s.input} value={f.svc} onChange={(e) => set("svc", e.target.value)}>
-                <option value="">—</option>
-                {svcList.map((x) => <option key={x} value={x}>{x}</option>)}
-              </select>
-            </Field>
-            <Field label="Amount (₹)">
-              <input className="lp-in" style={s.input} inputMode="numeric" value={f.amount}
-                     onChange={(e) => set("amount", e.target.value.replace(/\D/g, ""))} />
             </Field>
             <Field label="GST %">
               <input className="lp-in" style={s.input} inputMode="numeric" value={f.gstPct}
@@ -689,7 +794,7 @@ function Amounts({ i, busy, patch }) {
             <KV k="GST on it" v={inr(g)} />
             <KV k="Client pays" v={inr(amt + g)} />
           </div>
-          <button onClick={() => patch(i._id, f)} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
+          <button onClick={() => patch(i._id, { ...f, items })} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
             <i className="bi bi-check2" style={{ fontSize: 12 }} /> Save
           </button>
         </div>
@@ -723,6 +828,49 @@ function Dates({ i, busy, patch }) {
   );
 }
 
+/* The dispute hold. If the client has raised something, the last thing anyone
+   wants is an automatic reminder landing on top of it — so this one switch
+   stops the invoice sender dead for this invoice. Nothing else changes: the
+   money is still owed, still outstanding, still on every figure. */
+function Hold({ i, busy, patch }) {
+  const [why, setWhy] = useState(i.disputeNote || "");
+  const on = !!i.disputed;
+  return (
+    <div style={{ ...s.softBox, marginTop: 14,
+                  background: on ? "#FFF8EC" : "#FAFAFD",
+                  border: on ? "1px solid #F3DFBA" : "1px solid #EFEFF7" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <i className={`bi ${on ? "bi-pause-circle-fill" : "bi-bell-fill"}`}
+           style={{ color: on ? "#B4690E" : "#94A3B8", fontSize: 14 }} />
+        <b style={{ fontSize: 12.5, color: "#0F172A" }}>
+          {on ? "Reminders are on hold" : "Reminders are running"}
+        </b>
+      </div>
+      <p style={{ fontSize: 11.5, color: "#6B7280", margin: "6px 0 0", lineHeight: 1.6 }}>
+        {on
+          ? `No further mail goes out for this invoice until the hold is lifted.${i.disputeNote ? ` Reason: ${i.disputeNote}` : ""}`
+          : "The invoice sender will keep chasing this one until it is paid. Hold it if the client has raised a dispute."}
+      </p>
+      {on ? (
+        <button onClick={() => patch(i._id, { disputed: false })} disabled={busy}
+                style={{ ...s.miniBtn, marginTop: 10 }}>
+          <i className="bi bi-play-fill" style={{ fontSize: 11 }} /> Dispute settled — resume reminders
+        </button>
+      ) : (
+        <>
+          <input className="lp-in" style={{ ...s.input, marginTop: 10 }}
+                 placeholder="What is the dispute? (optional)"
+                 value={why} onChange={(e) => setWhy(e.target.value)} />
+          <button onClick={() => patch(i._id, { disputed: true, disputeNote: why })} disabled={busy}
+                  style={{ ...s.miniBtn, marginTop: 8 }}>
+            <i className="bi bi-pause-fill" style={{ fontSize: 11 }} /> Hold reminders — in dispute
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Payment({ i, busy, patch, mail, records }) {
   const [f, setF] = useState({ method: i.method || "", ref: i.ref || "", paidOn: i.paidOn || todayStr(), amount: "" });
   const st = liveStatus(i);
@@ -746,13 +894,17 @@ function Payment({ i, busy, patch, mail, records }) {
         </button>
       </div>
 
+      {i.status !== "Paid" ? <Hold i={i} busy={busy} patch={patch} /> : null}
+
       {i.status === "Paid" ? (
         <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: "#0F8A54", fontWeight: 700, alignSelf: "center" }}>Settled.</span>
           <button onClick={() => mail?.(false)} disabled={busy} style={s.primaryBtnSm}>
             <i className="bi bi-envelope-paper-fill" style={{ fontSize: 12 }} /> Mail the final invoice
           </button>
-          <button onClick={() => patch(i._id, { clearPayments: true, status: "Sent" })} disabled={busy} style={s.miniBtn}>Undo</button>
+          {/* Wiping the payments is the same button as the one in the records
+              modal, and it belongs there, next to the records it destroys. */}
+          <button onClick={() => records?.()} disabled={busy} style={s.miniBtn}>Entered this by mistake?</button>
         </div>
       ) : (
         <>
@@ -986,9 +1138,14 @@ function PayRecords({ i, busy, patch, mail, preview }) {
             {editId ? " Save the record" : " Add the record"}
           </button>
           {rows.length ? (
-            <button onClick={() => patch(i._id, { clearPayments: true, status: "Sent" })} disabled={busy}
-                    style={{ ...s.miniBtn, height: 36, color: "#C42525", borderColor: "#F6D0D0" }}
-                    title="Removes every payment record on this invoice">
+            <button
+              onClick={async () => {
+                if (!(await confirmDialog(`Remove all ${rows.length} payment record${rows.length === 1 ? "" : "s"} on this invoice? With no payment left the lead goes back to Negotiation.`))) return;
+                patch(i._id, { clearPayments: true, status: "Sent" });
+              }}
+              disabled={busy}
+              style={{ ...s.miniBtn, height: 36, color: "#C42525", borderColor: "#F6D0D0" }}
+              title="Removes every payment record on this invoice">
               Clear all records
             </button>
           ) : null}
@@ -1052,17 +1209,32 @@ function Owner({ i, busy, patch }) {
 
 /* ── raise one, or the whole schedule ───────────────────────────────────── */
 
-function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
+// A long form reads better in named blocks than as one run of fields.
+function Section({ n }) {
+  return (
+    <div style={{ fontSize: 11, fontWeight: 900, color: "#4338CA", letterSpacing: ".04em",
+                  textTransform: "uppercase", margin: "16px 0 8px" }}>{n}</div>
+  );
+}
+
+function NewInvoice({ proposals, leads, proposalId, billed, onClose, onDone }) {
   const svcList = useList("services", SERVICES);
   const st = useCrmSettings();
-  const accepted = proposals.filter((p) => p.status === "Accepted");
-  const [mode, setMode] = useState(proposalId ? "schedule" : "schedule");
+  const accepted = proposals.filter((p) => p.status === "Accepted" && !billed?.has(String(p._id)));
+  const [mode, setMode] = useState("schedule");
   const [pid, setPid] = useState(proposalId || "");
   const [gstPct, setGst] = useState("18");
   const [issued, setIssued] = useState(todayStr());
   const [saving, setSaving] = useState(false);
 
-  const [f, setF] = useState({ leadId: "", kind: "One time", svc: "", amount: "", gstPct: "18", issued: todayStr(), due: "", owner: "", notes: "" });
+  const [f, setF] = useState({
+    leadId: "", kind: "One time", gstPct: "18", issued: todayStr(), due: "", owner: "", notes: "",
+    co: "", contact: "", em: "", ph: "", poRef: "",
+    address: "", city: "", state: "", pincode: "", gstin: "",
+  });
+  const [items, setItems] = useState([{ svc: "", note: "", amount: 0 }]);
+  const sub = itemsTotal(items);
+  const tax = Math.round((sub * Number(f.gstPct || 0)) / 100);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
 
   // Settings → Invoices & proposals decides the GST rate and how many days a
@@ -1078,18 +1250,46 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
     }));
   }, [dGst, dDue]);
 
+  useEffect(() => {
+    const l = leads.find((x) => x._id === f.leadId);
+    if (!l) return;
+    setF((x) => ({
+      ...x,
+      co: x.co || l.businessName || l.name || "",
+      contact: x.contact || l.name || "",
+      em: x.em || l.email || "",
+      ph: x.ph || l.phone || "",
+      city: x.city || l.city || "",
+    }));
+  }, [f.leadId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const p = proposals.find((x) => x._id === pid);
   const adv = p ? Math.round(((p.amount || 0) * (p.advPct || 0)) / 100) : 0;
   const months = p && p.term === "Retainer" ? Math.max(1, Number(p.months || 1)) : 0;
   const per = p && months ? Math.round(((p.amount || 0) - adv) / months) : 0;
+  const rest = p ? (p.amount || 0) - adv : 0;
+  // A one off deal with an advance on it would otherwise come out as two
+   // bills, which is rarely what was meant, so a single bill is the default
+  // there. A retainer still bills month by month unless that is turned off.
+  const [howMany, setHowMany] = useState(null);
+  const one = howMany === null ? !months : howMany === "one";
+  const count = one ? 1 : (adv > 0 ? 1 : 0) + (months || (rest > 0 ? 1 : 0));
 
   const save = async () => {
     setSaving(true);
     try {
       const body = mode === "schedule"
-        ? { schedule: true, proposalId: pid, gstPct, issued }
-        : f;
+        ? { schedule: true, proposalId: pid, gstPct, issued, single: one }
+        : {
+            ...f, items,
+            billTo: { address: f.address, city: f.city, state: f.state, pincode: f.pincode, gstin: f.gstin },
+          };
       if (mode === "schedule" && !pid) throw new Error("Pick the proposal");
+      if (mode === "one") {
+        if (!f.leadId) throw new Error("Pick the lead this is for");
+        if (!items.some((x) => x.svc)) throw new Error("Pick at least one service");
+        if (!sub) throw new Error("Put an amount on it");
+      }
       const r = await fetch("/api/admin/invoices", {
         method: "POST", headers: { "Content-Type": "application/json" },
         credentials: "include", body: JSON.stringify(body),
@@ -1122,7 +1322,9 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
 
           {!accepted.length ? (
             <div style={{ ...s.softBox, fontSize: 12, color: "#64748B", lineHeight: 1.55 }}>
-              Nothing to bill yet — no proposal has been accepted. Mark one accepted on the Proposals board first.
+              {proposals.some((x) => x.status === "Accepted")
+                ? "Every accepted proposal has already been billed. Raise a one off invoice by hand instead."
+                : "Nothing to bill yet — no proposal has been accepted. Mark one accepted on the Proposals board first."}
             </div>
           ) : null}
 
@@ -1131,9 +1333,29 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
               <KV k="Company" v={p.co} />
               <KV k="Deal value" v={inr(p.amount || 0)} />
               <KV k="Advance" v={p.advPct ? `${p.advPct}% · ${inr(adv)}` : "none"} />
-              {months ? <KV k="Then" v={`${months} monthly invoices of ${inr(per)}`} /> : <KV k="Then" v="one balance invoice" />}
-              <KV k="Invoices to raise" v={(adv > 0 ? 1 : 0) + (months || 1)} />
+              <KV k="Then"
+                  v={one ? "nothing — it is all on this one invoice"
+                     : months ? `${months} monthly invoice${months === 1 ? "" : "s"} of ${inr(per)}`
+                     : rest > 0 ? (adv > 0 ? `one balance invoice of ${inr(rest)}` : `one invoice of ${inr(rest)}`)
+                     : "nothing — the advance is the whole deal"} />
+              <KV k="Invoices to raise" v={count} />
+              <KV k="All of them" v="raised as drafts — nothing is mailed on its own" />
             </div>
+          ) : null}
+
+          {p && (adv > 0 || months) ? (
+            <Field label="How to bill it">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => setHowMany("one")}
+                        style={one ? s.miniBtnOn : s.miniBtn}>
+                  One invoice for {inr(p.amount || 0)}
+                </button>
+                <button type="button" onClick={() => setHowMany("split")}
+                        style={!one ? s.miniBtnOn : s.miniBtn}>
+                  Split it as the proposal says
+                </button>
+              </div>
+            </Field>
           ) : null}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1148,7 +1370,7 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
         </>
       ) : (
         <>
-          <Field label="Lead">
+          <Field label="Lead" hint="Picking one fills the billing details in; all of them can be typed over.">
             <select className="lp-in" style={s.input} value={f.leadId} onChange={(e) => set("leadId", e.target.value)}>
               <option value="">— pick a lead —</option>
               {leads.map((l) => (
@@ -1156,21 +1378,57 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
               ))}
             </select>
           </Field>
+
+          <Section n="Billed to" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Company">
+              <input className="lp-in" style={s.input} value={f.co} onChange={(e) => set("co", e.target.value)} placeholder="Who the bill is addressed to" />
+            </Field>
+            <Field label="Contact person">
+              <input className="lp-in" style={s.input} value={f.contact} onChange={(e) => set("contact", e.target.value)} />
+            </Field>
+            <Field label="Email">
+              <input className="lp-in" style={s.input} type="email" value={f.em} onChange={(e) => set("em", e.target.value)} />
+            </Field>
+            <Field label="Phone">
+              <input className="lp-in" style={s.input} value={f.ph} onChange={(e) => set("ph", e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Billing address">
+            <input className="lp-in" style={s.input} value={f.address} onChange={(e) => set("address", e.target.value)}
+                   placeholder="Street, building, floor" />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <Field label="City">
+              <input className="lp-in" style={s.input} value={f.city} onChange={(e) => set("city", e.target.value)} />
+            </Field>
+            <Field label="State" hint="Decides CGST + SGST or IGST.">
+              <input className="lp-in" style={s.input} value={f.state} onChange={(e) => set("state", e.target.value)} />
+            </Field>
+            <Field label="Pincode">
+              <input className="lp-in" style={s.input} inputMode="numeric" value={f.pincode}
+                     onChange={(e) => set("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))} />
+            </Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Their GSTIN">
+              <input className="lp-in" style={s.input} value={f.gstin}
+                     onChange={(e) => set("gstin", e.target.value.toUpperCase().slice(0, 15))} placeholder="Optional" />
+            </Field>
+            <Field label="PO / reference">
+              <input className="lp-in" style={s.input} value={f.poRef} onChange={(e) => set("poRef", e.target.value)}
+                     placeholder="Their purchase order, if there is one" />
+            </Field>
+          </div>
+
+          <Section n="What is being billed" />
+          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" />
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="For">
               <select className="lp-in" style={s.input} value={f.kind} onChange={(e) => set("kind", e.target.value)}>
                 {KINDS.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
-            </Field>
-            <Field label="Service">
-              <select className="lp-in" style={s.input} value={f.svc} onChange={(e) => set("svc", e.target.value)}>
-                <option value="">—</option>
-                {svcList.map((x) => <option key={x} value={x}>{x}</option>)}
-              </select>
-            </Field>
-            <Field label="Amount (₹)">
-              <input className="lp-in" style={s.input} inputMode="numeric" value={f.amount}
-                     onChange={(e) => set("amount", e.target.value.replace(/\D/g, ""))} />
             </Field>
             <Field label="GST %">
               <input className="lp-in" style={s.input} inputMode="numeric" value={f.gstPct}
@@ -1183,8 +1441,22 @@ function NewInvoice({ proposals, leads, proposalId, onClose, onDone }) {
               <input className="lp-in" style={s.input} type="date" value={f.due} onChange={(e) => set("due", e.target.value)} />
             </Field>
           </div>
+
+          {sub ? (
+            <div style={{ ...s.softBox, marginBottom: 12 }}>
+              <KV k="Subtotal" v={inr(sub)} />
+              <KV k={`GST ${f.gstPct || 0}%`} v={inr(tax)} />
+              <KV k="Invoice total" v={inr(sub + tax)} />
+            </div>
+          ) : null}
+
           <Field label="Owner">
             <input className="lp-in" style={s.input} value={f.owner} onChange={(e) => set("owner", e.target.value)} />
+          </Field>
+          <Field label="Notes on the invoice">
+            <textarea className="lp-in" style={{ ...s.input, height: 70, padding: "9px 11px", resize: "vertical" }}
+                      value={f.notes} onChange={(e) => set("notes", e.target.value)}
+                      placeholder="Anything the client should read on the bill" />
           </Field>
         </>
       )}

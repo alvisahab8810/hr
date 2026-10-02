@@ -8,6 +8,10 @@ import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
+import mailFiles from "@/utils/mailFiles";
+// Attachments ride along in the body as base64, so the default 1 MB is too tight.
+export const config = { api: { bodyParser: { sizeLimit: "16mb" } } };
+
 
 const LABEL = {
   invite:   "“We'll call you” note",
@@ -78,18 +82,31 @@ export default async function handler(req, res) {
 
     // Awaited on purpose — the team needs to know the mail actually left.
     const cc = String(req.body?.cc || "").trim();
-    await sendLeadMail({ to: lead.email, cc, subject: mail.subject, html: mail.html });
+    await sendLeadMail({ to: lead.email, cc, subject: mail.subject, html: mail.html,
+                         attachments: await mailFiles(req.body?.files) });
 
     const label = LABEL[template] || "Message";
+    const set = {
+      // A lead we have mailed is no longer untouched.
+      ...(lead.status === "New" ? { status: "Contacted" } : {}),
+      // The material pack is a milestone on the lead, not just one more mail
+      // in the ladder — the board reads this flag, so it is set here.
+      ...(template === "material" ? { matSent: true, matSentAt: new Date() } : {}),
+    };
+    // Whatever this mail changed has to read the same on the timeline as it
+    // would had the board been used — the history cannot depend on the button.
+    const events = [{ at: new Date(), type: "mail", text: `${label} sent to ${lead.email}` }];
+    if (set.status) events.push({ at: new Date(), type: "status", text: `Status moved to “${set.status}”` });
+    if (set.matSent && !lead.matSent) events.push({ at: new Date(), type: "material", text: "Material pack marked as sent" });
+
     const saved = await Query.findByIdAndUpdate(
       id,
       {
         $push: {
           remindersSent: { key: template, at: new Date() },
-          events: { at: new Date(), type: "mail", text: `${label} sent to ${lead.email}` },
+          events: { $each: events },
         },
-        // A lead we've mailed is no longer untouched.
-        ...(lead.status === "New" ? { $set: { status: "Contacted" } } : {}),
+        ...(Object.keys(set).length ? { $set: set } : {}),
       },
       { new: true }
     ).lean();

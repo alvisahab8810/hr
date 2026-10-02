@@ -5,6 +5,7 @@
 // markup to a clean window and calls print — no PDF library, no new dependency,
 // and the browser's own Save-as-PDF does the rest.
 import { inr, fmtD } from "@/utils/leadsMeta";
+import { docItems } from "@/utils/proposalItems";
 
 // Mutable on purpose: Settings pushes the saved branding in through
 // applyDocBranding before anything is printed.
@@ -24,6 +25,7 @@ export function applyDocBranding(company, terms) {
       if (company[k]) COMPANY[k] = company[k];
     }
     COMPANY.gstin = company.gstin || "";
+    COMPANY.state = company.state || "";
     COMPANY.bankLine = [company.bank, company.ifsc].filter(Boolean).join(" · ");
     COMPANY.upi = company.upi || "";
   }
@@ -114,7 +116,7 @@ function agreementHtml(d) {
   <table class="vp-items">
     <thead><tr><th>Engagement</th><th>Details</th><th class="r">Value</th></tr></thead>
     <tbody>
-      <tr><td><b>${esc(d.svc || "Service")}</b></td><td>${esc(term)}</td><td class="r">${esc(inr(d.amount || 0))}</td></tr>
+      ${docItems(d).map((it, i) => `<tr><td><b>${esc(it.svc || "Service")}</b></td><td>${esc(it.note || (i === 0 ? term : ""))}</td><td class="r">${esc(inr(it.amount || 0))}</td></tr>`).join("")}
     </tbody>
   </table>
 
@@ -135,6 +137,21 @@ function agreementHtml(d) {
 }
 
 /* ── the sheet, as an HTML string so it can be printed as-is ──────────────── */
+// The billing address, as the lines it should print on.
+function addrLines(d) {
+  const b = d.billTo || {};
+  const town = [b.city, b.state, b.pincode].filter(Boolean).join(", ");
+  return [b.address, town, b.gstin ? `GSTIN ${b.gstin}` : "", d.poRef ? `PO / Ref ${d.poRef}` : ""].filter(Boolean);
+}
+
+// Same state as ours means CGST + SGST; anywhere else in India means IGST.
+function taxSplit(d) {
+  const ours = String(COMPANY.state || COMPANY.place || "").split(",").pop().trim().toLowerCase();
+  const theirs = String(d?.billTo?.state || "").trim().toLowerCase();
+  if (!ours || !theirs) return "intra";
+  return ours === theirs ? "intra" : "inter";
+}
+
 export function docHtml(kind, d) {
   if (kind === "agreement") return agreementHtml(d);
   const isInv = kind === "invoice";
@@ -153,15 +170,17 @@ export function docHtml(kind, d) {
     ? [["Invoice no.", code], ["Issued", fmtD(d.issued)], ["Due", fmtD(d.due)], ["Status", d.status || "Draft"]]
     : [["Proposal no.", code], ["Raised", fmtD(d.createdAt)], ["Valid till", d.validTill ? fmtD(d.validTill) : "—"], ["Status", d.status || "Draft"]];
 
-  const rows = isInv
-    ? [[d.svc || "Service", forLine, inr(d.amount || 0)]]
-    : [[d.svc || "Service", forLine, inr(d.amount || 0)]];
+  const rows = docItems(d).map((it, i) => [it.svc || "Service", it.note || (i === 0 ? forLine : ""), inr(it.amount || 0)]);
 
   const paid = isInv ? (d.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0) : 0;
+  const half = Math.round(gst / 2);
+  const split = taxSplit(d);
   const totals = isInv
     ? [
         ["Subtotal", inr(d.amount || 0)],
-        [`GST ${d.gstPct || 0}%`, inr(gst)],
+        ...(split === "intra"
+          ? [[`CGST ${(d.gstPct || 0) / 2}%`, inr(half)], [`SGST ${(d.gstPct || 0) / 2}%`, inr(gst - half)]]
+          : [[`IGST ${d.gstPct || 0}%`, inr(gst)]]),
         ["Total", inr(total)],
         ...(paid ? [["Received", inr(paid)], ["Balance due", inr(Math.max(0, total - paid))]] : []),
       ]
@@ -192,6 +211,7 @@ export function docHtml(kind, d) {
     <div class="vp-co">${esc(d.co || "—")}</div>
     <div class="vp-small">
       ${esc(d.contact || "")}${d.contact && (d.em || d.ph) ? "<br/>" : ""}${esc(d.em || "")}${d.em && d.ph ? " · " : ""}${esc(d.ph || "")}
+      ${addrLines(d).map((x) => `<br/>${esc(x)}`).join("")}
     </div>
   </div>
 

@@ -1,12 +1,15 @@
 // pages/api/admin/invoices/[id]/index.js — edit one invoice.
 import mongoose from "mongoose";
+import { cleanItems, itemsTotal, itemsLabel } from "@/utils/proposalItems";
 import dbConnect from "@/utils/dbConnect";
 import Invoice from "@/models/Invoice";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
+import { winLeadOnPayment, unwinLeadIfUnpaid } from "@/utils/leadWon";
 
-const FIELDS = ["kind", "svc", "amount", "gstPct", "issued", "due", "status", "paidOn", "method", "ref", "owner", "notes"];
+const FIELDS = ["kind", "svc", "amount", "gstPct", "issued", "due", "status", "paidOn", "method", "ref", "owner", "notes",
+  "co", "contact", "em", "ph", "poRef", "billTo"];
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -24,6 +27,13 @@ export default async function handler(req, res) {
   try {
     if (req.method === "DELETE") {
       await Invoice.findByIdAndDelete(id);
+      // The invoice held the advance, so the lead's win went with it.
+      if (parent?.leadId) {
+        await Query.findByIdAndUpdate(parent.leadId, {
+          $push: { events: { at: new Date(), type: "invoice", text: "Invoice deleted" } },
+        }).catch(() => {});
+        await unwinLeadIfUnpaid(parent.leadId);
+      }
       return res.status(200).json({ success: true });
     }
     if (req.method !== "PATCH") {
@@ -55,8 +65,16 @@ export default async function handler(req, res) {
         $push: { events: { at: new Date(), type: "invoice", text: `${done ? "Payment received" : "Part payment received"} — ₹${amt.toLocaleString("en-IN")}` } },
       }).catch(() => {});
 
+      // Money in is what wins the lead — nothing else does.
+      await winLeadOnPayment(out.leadId, `Advance received — ₹${amt.toLocaleString("en-IN")}`);
+
+      // The board has to be able to say so; the rep recorded a payment, not a
+      // status change, and would otherwise never learn the lead just won.
+      const after = await Query.findById(out.leadId).select("status").lean();
+
       return res.status(200).json({
         success: true,
+        leadStatus: after?.status || "",
         data: { ...out, _id: String(out._id), leadId: String(out.leadId), proposalId: out.proposalId ? String(out.proposalId) : "" },
       });
     }
@@ -102,6 +120,9 @@ export default async function handler(req, res) {
       doc.markModified("payments");
       const saved0 = await doc.save();
       const out = saved0.toObject();
+      // Money corrected downwards can take the win with it.
+      if (paid > 0) await winLeadOnPayment(out.leadId);
+      else await unwinLeadIfUnpaid(out.leadId);
       return res.status(200).json({
         success: true,
         data: { ...out, _id: String(out._id), leadId: String(out.leadId), proposalId: out.proposalId ? String(out.proposalId) : "" },
@@ -114,6 +135,40 @@ export default async function handler(req, res) {
         $set: { payments: [], status: b.status || "Sent", paidOn: "", method: "", ref: "" },
       }, { new: true }).lean();
       if (!out) return res.status(404).json({ success: false, message: "Invoice not found" });
+      // Nothing was received after all, so the lead cannot stay Won.
+      await Query.findByIdAndUpdate(out.leadId, {
+        $push: { events: { at: new Date(), type: "invoice", text: "Payment records cleared" } },
+      }).catch(() => {});
+      await unwinLeadIfUnpaid(out.leadId);
+      return res.status(200).json({
+        success: true,
+        data: { ...out, _id: String(out._id), leadId: String(out.leadId), proposalId: out.proposalId ? String(out.proposalId) : "" },
+      });
+    }
+
+    // The dispute hold is its own little transaction: the flag, the reason and
+    // a line on the lead's timeline, so a silence nobody can explain later is
+    // never the result of this.
+    if (b.disputed !== undefined) {
+      const inv = await Invoice.findById(id).select("leadId disputed").lean();
+      if (!inv) return res.status(404).json({ success: false, message: "Invoice not found" });
+      const on = !!b.disputed;
+      const why = String(b.disputeNote || "").trim();
+      const out = await Invoice.findByIdAndUpdate(id, {
+        $set: {
+          disputed: on,
+          disputeNote: on ? why : "",
+          disputedAt: on ? new Date() : null,
+        },
+      }, { new: true }).lean();
+      if (inv.leadId && on !== !!inv.disputed) {
+        await Query.findByIdAndUpdate(inv.leadId, {
+          $push: { events: { at: new Date(), type: "invoice",
+            text: on
+              ? `Invoice in dispute — reminders held${why ? `: ${why}` : ""}`
+              : "Dispute settled — reminders resumed" } },
+        }).catch(() => {});
+      }
       return res.status(200).json({
         success: true,
         data: { ...out, _id: String(out._id), leadId: String(out.leadId), proposalId: out.proposalId ? String(out.proposalId) : "" },
@@ -121,7 +176,14 @@ export default async function handler(req, res) {
     }
 
     const set = {};
-    for (const k of FIELDS) {
+    // Lines rule the total, exactly as they do on a proposal.
+    if (b.items !== undefined) {
+      const items = cleanItems(b.items);
+      b.items = items;
+      b.amount = itemsTotal(items);
+      b.svc = itemsLabel(items);
+    }
+    for (const k of FIELDS.concat(b.items !== undefined ? ["items"] : [])) {
       if (b[k] === undefined) continue;
       set[k] = ["amount", "gstPct"].includes(k) ? Number(b[k] || 0) : b[k];
     }
@@ -145,6 +207,7 @@ export default async function handler(req, res) {
       await Query.findByIdAndUpdate(saved.leadId, {
         $push: { events: { at: new Date(), type: "invoice", text: `Payment received — ₹${Math.round(saved.amount || 0).toLocaleString("en-IN")}` } },
       }).catch(() => {});
+      await winLeadOnPayment(saved.leadId, `Advance received — ₹${Math.round(saved.amount || 0).toLocaleString("en-IN")}`);
     }
 
     return res.status(200).json({

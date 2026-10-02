@@ -65,15 +65,27 @@ const querySchema = new mongoose.Schema(
     meetingDate:  { type: String, default: "" },   // "2026-09-04"
     meetingTime:  { type: String, default: "" },   // "16:30", IST
     meetLink:     { type: String, default: "" },   // the Meet / Zoom URL
+
+    // When the meeting came out of a published slot rather than a phone call,
+    // this is which slot it was — the meeting itself still reads off the
+    // meeting* fields above, so the board needs no special case.
+    slotId:   { type: mongoose.Schema.Types.ObjectId, ref: "BookingSlot", default: null },
+    slotDate: { type: String, default: "" },
+    slotTime: { type: String, default: "" },
     meetingPlace: { type: String, default: "" },   // where to go, for an in-person meeting
 
-    held: { type: String, enum: ["", "held", "noshow"], default: "" },
+    held: { type: String, enum: ["", "held", "noshow", "rescheduled", "cancelled"], default: "" },
 
     // Follow-up material pack.
     matSent:   { type: Boolean, default: false },
     matSentAt: { type: Date, default: null },
 
     lostReason: { type: String, default: "" },
+
+    // Won and handed over: the client record Operations builds brands against.
+    // Set once, by Website → Leads → "Convert to client".
+    clientId:    { type: mongoose.Schema.Types.ObjectId, ref: "Client", default: null },
+    convertedAt: { type: Date, default: null },
 
     // Pre-call homework: which checklist items are ticked.
     prep:      { type: [String], default: [] },

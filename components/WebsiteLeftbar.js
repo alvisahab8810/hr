@@ -92,11 +92,40 @@ const MENU = [
     match: ["/dashboard/website/proposals"],
   },
   {
+    href: "/dashboard/finance",
+    perm: "financeHome",
+    label: "Financial Hub",
+    biIcon: "bi-cash-coin",
+    match: ["/dashboard/finance"],
+    exact: true,
+  },
+  {
     href: "/dashboard/website/invoices",
     perm: "invoices",
     label: "Invoices",
     biIcon: "bi-receipt",
     match: ["/dashboard/website/invoices"],
+  },
+  {
+    href: "/dashboard/finance/sender",
+    perm: "invoiceSender",
+    label: "Invoice sender",
+    biIcon: "bi-send-check-fill",
+    match: ["/dashboard/finance/sender"],
+  },
+  {
+    href: "/dashboard/website/clients",
+    perm: "clients",
+    label: "Clients",
+    biIcon: "bi-people-fill",
+    match: ["/dashboard/website/clients"],
+  },
+  {
+    href: "/dashboard/admin/tasks/brands",
+    perm: "brands",
+    label: "Brands",
+    biIcon: "bi-bookmark-star-fill",
+    match: ["/dashboard/admin/tasks/brands"],
   },
   {
     href: "/dashboard/website/lead-profile",
@@ -190,7 +219,7 @@ export default function WebsiteLeftbar() {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "#3730A3", lineHeight: 1.2 }}>{deptName(dept) || "Website"} Panel</div>
-              <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>{dept === "marketing" ? "Content & campaigns" : dept === "sales" ? "Pipeline & revenue" : "viralon.in Management"}</div>
+              <div style={{ fontSize: 11, color: "#6366F1", fontWeight: 600, opacity: 0.8 }}>{dept === "marketing" ? "Content & campaigns" : dept === "sales" ? "Pipeline & proposals" : dept === "finance" ? "Billing & collections" : "viralon.in Management"}</div>
             </div>
             <i className="bi bi-grid-fill" style={{ fontSize: 13, color: "#818CF8", flexShrink: 0 }} />
           </div>

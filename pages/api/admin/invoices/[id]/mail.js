@@ -7,6 +7,10 @@ import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { docDraft, sendDocMail } from "@/utils/docMail";
+import mailFiles from "@/utils/mailFiles";
+// Attachments ride along in the body as base64, so the default 1 MB is too tight.
+export const config = { api: { bodyParser: { sizeLimit: "16mb" } } };
+
 
 // A mail can be sent for one payment record — the client then sees the invoice
 // as it stood at that point, with the payments up to and including that row.
@@ -40,10 +44,10 @@ export default async function handler(req, res) {
       return res.status(405).json({ success: false, message: "Method not allowed" });
     }
 
-    const { to, subject, body, markSent, paymentId } = req.body || {};
+    const { to, subject, body, markSent, paymentId, files } = req.body || {};
     if (!to) return res.status(400).json({ success: false, message: "There is no address to send it to" });
 
-    await sendDocMail("invoice", asOfPayment(inv, paymentId), { to, subject, body });
+    await sendDocMail("invoice", asOfPayment(inv, paymentId), { to, subject, body, attachments: await mailFiles(files) });
 
     // Never walk a paid or part-paid invoice back to Sent.
     if (markSent && inv.status === "Draft") {

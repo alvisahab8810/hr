@@ -6,12 +6,7 @@ import dbConnect from "@/utils/dbConnect";
 import Client from "@/models/clients/Client";
 import Brand from "@/models/tasks/Brand";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
-
-async function generateClientId() {
-  const last = await Client.findOne({ clientId: /^CLT-/ }).sort({ clientId: -1 }).select("clientId").lean();
-  const num = last ? (parseInt(last.clientId.replace("CLT-", ""), 10) || 0) : 0;
-  return `CLT-${String(num + 1).padStart(4, "0")}`;
-}
+import { nextClientId } from "@/utils/clientId";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -64,7 +59,7 @@ export default async function handler(req, res) {
       client.status      = "Active";
       await client.save();
     } else {
-      const clientId = await generateClientId();
+      const clientId = await nextClientId();
       client = await Client.create({
         clientId,
         name:        name.trim(),

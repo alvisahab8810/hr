@@ -39,7 +39,8 @@ export default async function handler(req, res) {
       const saved = await Query.findByIdAndUpdate(
         id,
         {
-          $set: { slotDate: "", slotTime: "", slotId: null, held: "" },
+          $set: { slotDate: "", slotTime: "", slotId: null, held: "",
+                   meetingDate: "", meetingTime: "", meetingMode: "" },
           $push: { events: { at: new Date(), type: "meeting", text: "Call slot cancelled" } },
         },
         { new: true }
@@ -93,6 +94,11 @@ export default async function handler(req, res) {
           slotDate: slot.date,
           slotTime: slot.time,
           slotId: slot._id,
+          // The board, the reminder ladder and the mails all read meeting*;
+          // writing only slot* booked a call nothing else could see.
+          meetingDate: slot.date,
+          meetingTime: slot.time,
+          meetingMode: lead.meetingMode || "Google Meet",
           held: "",
           status: ["Won", "Lost", "Not qualified"].includes(lead.status) ? lead.status : "Meeting booked",
         },

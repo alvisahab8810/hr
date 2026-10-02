@@ -28,6 +28,20 @@ export const DEFAULTS = {
     ifsc: "",
     upi: "",
   },
+  // The invoice sender, set once in Finance -> Invoice sender and then left
+  // alone: the pass in utils/invoiceAutomation.js reads nothing else.
+  billing: {
+    autoSend: false,       // mail a new invoice by itself once it is raised
+    sendHour: 10,          // IST hour the day's run is allowed to mail from
+    sendMinute: 0,
+    sendDays: [1, 2, 3, 4, 5],  // 0 = Sunday. Nothing goes out on a day left off
+    dueReminders: true,
+    beforeDays: [3, 1],    // reminders this many days ahead of the due date
+    onDue: true,           // and one on the due date itself
+    afterEvery: 7,         // then a chase every N days while it stays unpaid
+    afterMax: 4,           // stopping after this many chases
+    cc: "",                // accounts copy, on every mail the sender sends
+  },
   docs: {
     gstPct: 18,
     dueDays: 10,

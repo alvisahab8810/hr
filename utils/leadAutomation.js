@@ -37,6 +37,14 @@ function meetingAt(lead) {
   return Number.isNaN(ms) ? 0 : ms;
 }
 
+// Meetings are written and read in IST, so the calendar day has to be IST too
+// — at 01:00 IST a UTC date is still yesterday, and "tomorrow" would be wrong.
+const IST = 5.5 * 3600000;
+const istDay = (ms) => new Date(ms + IST).toISOString().slice(0, 10);
+const istHour = (ms) => new Date(ms + IST).getUTCHours();
+const daysApart = (from, to) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
+
 // The day the auto-reply went live. Nothing older than this is ever mailed.
 const LIVE_FROM = Date.parse("2026-09-03T00:00:00+05:30");
 
@@ -82,7 +90,7 @@ async function autoReply(sent, skipped) {
 /* The reminder ladder for meetings still ahead. Meeting times are IST. */
 async function reminders(sent, skipped) {
   const now = Date.now();
-  const today = new Date(now).toISOString().slice(0, 10);
+  const today = istDay(now);
 
   const leads = await Query.find({
     meetingDate: { $gte: today },
@@ -100,11 +108,25 @@ async function reminders(sent, skipped) {
     if (!at || now > at + 30 * 60000) continue;
 
     const already = new Set((lead.remindersSent || []).map((r) => r.key));
-    // A rung is due once we are inside its window; "confirm" is due the
-    // moment a meeting exists. Tightest first.
-    const due = LADDER.filter(
-      (r) => !already.has(r.k) && (r.off === null || now >= at - r.off * 3600000)
-    ).sort((a, b) => (a.off === null ? 1e9 : a.off) - (b.off === null ? 1e9 : b.off));
+    const left = at - now;                          // still to go, in ms
+    const days = daysApart(today, lead.meetingDate); // 0 = today, 1 = tomorrow
+    const hour = istHour(now);
+
+    // Each rung has to be true when the lead reads it. "2 days before" and
+    // "tomorrow" are claims about the calendar, so they go by the date, never
+    // by hours left — a meeting booked for today must not get either of them,
+    // only the hour rungs that actually fit the time it was set for. Those two
+    // also keep office hours; nobody wants a reminder at 3am.
+    const isDue = (r) => {
+      if (r.k === "confirm") return true;
+      if (r.k === "d2") return days === 2 && hour >= 9 && hour < 21;
+      if (r.k === "d1") return days === 1 && hour >= 9 && hour < 21;
+      return left <= r.off * 3600000;
+    };
+
+    // Tightest first.
+    const due = LADDER.filter((r) => !already.has(r.k) && isDue(r))
+      .sort((a, b) => (a.off === null ? 1e9 : a.off) - (b.off === null ? 1e9 : b.off));
     if (!due.length) continue;
 
     // Catching up (a cron that was down, or a meeting booked at short notice)

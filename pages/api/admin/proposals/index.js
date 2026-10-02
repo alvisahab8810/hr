@@ -4,9 +4,11 @@
 import dbConnect from "@/utils/dbConnect";
 import Proposal from "@/models/Proposal";
 import Query from "@/models/Query";
+import Invoice from "@/models/Invoice";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { salesId } from "@/utils/salesAuth";
 import { ownsLead } from "@/utils/leadScope";
+import { cleanItems, itemsTotal, itemsLabel } from "@/utils/proposalItems";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -23,9 +25,17 @@ export default async function handler(req, res) {
         Proposal.find(own ? { leadId: { $in: own } } : {}).sort({ createdAt: -1 }).lean(),
         Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone budget runningAds service status salespersonId").lean(),
       ]);
+      // How many invoices each proposal has already thrown off, so the board
+      // can offer "raise" or "view" instead of failing on the second click.
+      const counts = new Map();
+      for (const r of await Invoice.aggregate([
+        { $match: { proposalId: { $in: props.map((p) => p._id) } } },
+        { $group: { _id: "$proposalId", n: { $sum: 1 } } },
+      ])) counts.set(String(r._id), r.n);
+
       return res.status(200).json({
         success: true,
-        data: props.map((p) => ({ ...p, _id: String(p._id), leadId: String(p.leadId) })),
+        data: props.map((p) => ({ ...p, _id: String(p._id), leadId: String(p.leadId), invCount: counts.get(String(p._id)) || 0 })),
         leads: leads.map((l) => ({ ...l, _id: String(l._id) })),
       });
     }
@@ -38,7 +48,9 @@ export default async function handler(req, res) {
       const lead = await Query.findById(b.leadId).lean();
       if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
-      const amount = Number(b.amount || 0);
+      // A proposal may carry several services; the total is their sum.
+      const items = cleanItems(b.items);
+      const amount = items.length ? itemsTotal(items) : Number(b.amount || 0);
       if (!amount || amount < 0) {
         return res.status(400).json({ success: false, message: "Put a value on it" });
       }
@@ -49,7 +61,8 @@ export default async function handler(req, res) {
         contact: lead.name || "",
         em: lead.email || "",
         ph: lead.phone || "",
-        svc: String(b.svc || lead.service || "").trim(),
+        items,
+        svc: items.length ? itemsLabel(items) : String(b.svc || lead.service || "").trim(),
         amount,
         term: b.term || "Retainer",
         months: Number(b.months || 1),

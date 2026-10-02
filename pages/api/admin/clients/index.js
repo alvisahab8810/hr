@@ -6,11 +6,7 @@ import Client from "@/models/clients/Client";
 import "@/models/projects/Project";
 import bcrypt from "bcryptjs";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
-
-async function generateClientId() {
-  const count = await Client.countDocuments();
-  return `CLT-${String(count + 1).padStart(4, "0")}`;
-}
+import { nextClientId } from "@/utils/clientId";
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -53,7 +49,7 @@ export default async function handler(req, res) {
       const existing = await Client.findOne({ email: email.toLowerCase().trim() });
       if (existing) return res.status(409).json({ success: false, message: "Client with this email already exists" });
 
-      const clientId = await generateClientId();
+      const clientId = await nextClientId();
 
       const clientData = {
         clientId,

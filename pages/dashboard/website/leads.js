@@ -14,17 +14,22 @@ import toast, { Toaster } from "react-hot-toast";
 import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
+import MailAttach from "@/components/MailAttach";
+import * as XLSX from "xlsx";
+import { parseSheet, templateRows, buildHeaderMap } from "@/utils/leadsImport";
 import { useList } from "@/utils/crmSettings";
 import { confirmDialog } from "../../../components/ConfirmDialog";
 import {
   statusMeta, statusOptions, isManualStatus, RAIL, RUNNING_ADS, SERVICES, INDUSTRIES, SOURCES,
-  LOST_REASONS, CONNECT_VIA, CONNECT_OUTCOME, LADDER, PREP, PREP_GROUPS, SCOREQ,
-  BASE_COLS, MEETING_MODES, modeMeta, leadCode, inr, inrShort, budgetValue,
+  CONNECT_VIA, CONNECT_OUTCOME, LADDER, rungGone, PREP, PREP_GROUPS, SCOREQ, BUDGETS, WON_RULE,
+  BASE_COLS, MEETING_MODES, MEETING_OUTCOMES, modeMeta, leadCode, inr, inrShort, budgetValue, matDone,
   srcOf, scoreCol, prepPct, initials, tintFor, prettyTime, prettyDate,
   prettyDateLong, fmtDT, fmtD, daysAgo, todayStr, thisMonthStr, meetingIsPast,
 } from "@/utils/leadsMeta";
 
 const COLS_KEY = "viralon.leads.hiddenCols.v2";
+/* Brands live in Operations and stay there — the hand-over just goes to them. */
+const BRANDS_URL = "/dashboard/admin/tasks/brands";
 const DENSITY_KEY = "viralon.leads.density";
 
 /* ───────────────────────────── little pieces ───────────────────────────── */
@@ -112,6 +117,7 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
   const industryList = useList("industries", INDUSTRIES);
   const serviceList  = useList("services", SERVICES);
   const runAdsList   = useList("runningAds", RUNNING_ADS);
+  const budgetList   = useList("budgets", BUDGETS);
   const sourceList   = useList("sources", SOURCES);
   const [f, setF] = useState(() => ({
     name: initial?.name || "",
@@ -122,6 +128,8 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
     industry: initial?.industry || "",
     service: initial?.service || "",
     runningAds: initial?.runningAds || "",
+    budget: initial?.budget || "",
+    lostReason: initial?.lostReason || "",
     salespersonId: initial?.salespersonId ? String(initial.salespersonId) : "",
     status: initial?.status || "New",
     website: initial?.website || "",
@@ -191,6 +199,14 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
             {runAdsList.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </Field>
+        {/* Every pipeline figure on this board is the sum of these, so a lead
+            added by hand has to be able to answer it too. */}
+        <Field label="Budget">
+          <select className="lp-in" style={s.input} value={f.budget} onChange={(e) => set("budget", e.target.value)}>
+            <option value="">—</option>
+            {budgetList.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </Field>
         {/* The admin hands the lead out; a salesperson keeps their own. */}
         {!isSales && (
         <Field label="Owner">
@@ -206,6 +222,15 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
             {statusOptions().map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </Field>
+        {/* "Won" is not on the list, so the form has to say why not. */}
+        <div style={{ ...s.fieldHint, gridColumn: "1 / -1", lineHeight: 1.6 }}>{WON_RULE}</div>
+        {/* A lost deal is only worth recording if it says why. */}
+        {(f.status === "Lost" || f.status === "Not qualified") && (
+        <Field label="Why?" hint="What killed it — price, timing, a competitor">
+          <input className="lp-in" style={s.input} value={f.lostReason}
+                 onChange={(e) => set("lostReason", e.target.value)} placeholder="Went with a cheaper agency" />
+        </Field>
+        )}
       </div>
 
       <div style={s.formSection}>Meeting</div>
@@ -318,8 +343,8 @@ function MeetingPanel({ lead, busy, onSave, onClear }) {
     <>
       <div style={{ ...s.softBox, marginBottom: 15, fontSize: 12.5, color: "#475569", fontWeight: 600, lineHeight: 1.6 }}>
         {lead.meetingDate
-          ? "Change how or when you're meeting. The lead isn't mailed automatically — send the confirmation yourself once it's right."
-          : "Ring them first, agree what suits them, then put it down here. Nothing goes out to the lead until you send the confirmation mail."}
+          ? "Change how or when you're meeting. Saving mails the lead the new details straight away, and the reminders start again from the new date."
+          : "Ring them first, agree what suits them, then put it down here. Saving mails them the confirmation, and the reminders follow on their own."}
       </div>
 
       <label style={s.fieldLabel}>How will you meet?</label>
@@ -594,6 +619,7 @@ function MailModal({ lead, preset, busy, onSend, onClose }) {
   const [tpl, setTpl] = useState(first);
   const [cc, setCc] = useState("");
   const [draft, setDraft] = useState(() => mailDraft(first, lead));
+  const [files, setFiles] = useState([]);
 
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
@@ -695,13 +721,19 @@ function MailModal({ lead, preset, busy, onSend, onClose }) {
                                padding: "13px 15px", fontSize: 13, lineHeight: 1.75, color: "#0F172A",
                                resize: "vertical", outline: "none", fontFamily: "inherit" }} />
 
+            <div style={{ marginTop: 12 }}>
+              <MailAttach files={files} setFiles={setFiles} />
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, padding: "10px 12px",
                           borderRadius: 12, border: "1px solid #F0F0F8", background: "#FBFBFE" }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: "#6366F1", color: "#fff",
                             display: "grid", placeItems: "center", fontSize: 13, fontWeight: 900 }}>V</div>
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 900, color: "#0F172A" }}>Team Viralon</div>
-                <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600 }}>info@viralon.in · viralon.in</div>
+                {/* The mail's own footer is "Team Viralon · viralon.in" — showing a
+                    second address here promised the lead an inbox that is not on it. */}
+                <div style={{ fontSize: 11, color: "#94A3B8", fontWeight: 600 }}>viralon.in</div>
               </div>
             </div>
           </div>
@@ -714,7 +746,7 @@ function MailModal({ lead, preset, busy, onSend, onClose }) {
             The wording here is what gets sent — edit it before it goes.
           </span>
           <button onClick={onClose} style={s.miniBtn}>Discard</button>
-          <button onClick={() => onSend({ template: tpl, subject: draft.subject, body: draft.body, cc })}
+          <button onClick={() => onSend({ template: tpl, subject: draft.subject, body: draft.body, cc, files })}
                   disabled={busy || !lead.email || !draft.subject.trim() || !draft.body.trim()}
                   style={{ ...s.primaryBtn, opacity: busy || !lead.email || !draft.subject.trim() || !draft.body.trim() ? 0.5 : 1 }}>
             <i className="bi bi-send-fill" style={{ fontSize: 12 }} /> {busy ? "Sending…" : "Send and log it"}
@@ -792,9 +824,238 @@ function FieldPanel({ fields, busy, onAdd, onDelete }) {
 
 /* ═══════════════════════════════ the page ═══════════════════════════════ */
 
+/* ───────────────────────────── bulk import ─────────────────────────────── */
+/* The other half of Export: a spreadsheet of leads goes in the same shape it
+   comes out. The file is read here in the browser (the team's sheets are a few
+   hundred rows, not worth an upload), and only the rows it parsed are posted —
+   the API is what decides which of those are fit to keep. */
+
+function ImportPanel({ fields, onClose, onDone }) {
+  const [file, setFile]       = useState(null);
+  const [rows, setRows]       = useState([]);
+  const [unknown, setUnknown] = useState([]);
+  const [noName, setNoName]   = useState(0);
+  const [onDupe, setOnDupe]   = useState("skip");
+  const [busy, setBusy]       = useState(false);
+  const [result, setResult]   = useState(null);
+  const [drag, setDrag]       = useState(false);
+  const pick = useRef(null);
+
+  const template = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(templateRows(fields)), "Leads");
+    XLSX.writeFile(wb, "viralon-leads-template.xlsx");
+  };
+
+  const read = async (f) => {
+    if (!f) return;
+    setResult(null);
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      // `header: 1` keeps the sheet as rows of cells, which is what the parser
+      // matches the header row with; `raw: false` hands dates and numbers over
+      // as the text the team typed, so a phone keeps its shape.
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+      const parsed = parseSheet(aoa, fields);
+
+      // Headings nobody recognised — worth saying so before the import runs,
+      // because the column is simply dropped.
+      const known = new Set(buildHeaderMap(aoa[0] || [], fields).map((m) => m.i));
+      const spare = (aoa[0] || [])
+        .map((h, i) => (known.has(i) ? null : String(h || "").trim()))
+        .filter(Boolean);
+
+      setFile(f);
+      setRows(parsed);
+      setUnknown(spare);
+      setNoName(parsed.filter((r) => !String(r.name || "").trim()).length);
+      if (!parsed.length) toast.error("That sheet has no rows under its header");
+    } catch {
+      toast.error("Could not read that file — save it as .xlsx or .csv and try again");
+    }
+  };
+
+  const run = async () => {
+    if (!rows.length) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/leads/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ rows, onDupe }),
+      });
+      const j = await r.json();
+      if (!j.success) { toast.error(j.message || "Import failed"); setBusy(false); return; }
+      setResult(j);
+      if (j.created) toast.success(`${j.created} lead${j.created === 1 ? "" : "s"} imported`);
+      else toast("Nothing new to add from that file");
+      onDone();
+    } catch { toast.error("Import failed"); }
+    setBusy(false);
+  };
+
+  const preview = rows.slice(0, 5);
+
+  return (
+    <Modal
+      wide
+      title="Import leads from a spreadsheet"
+      icon="bi-upload"
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose} style={s.ghostBtn}>{result ? "Done" : "Cancel"}</button>
+          {!result && (
+            <button onClick={run} disabled={busy || !rows.length}
+                    style={{ ...s.primaryBtn, opacity: busy || !rows.length ? 0.6 : 1 }}>
+              <i className="bi bi-upload" style={{ fontSize: 13 }} />
+              {busy ? "Importing…" : `Import ${rows.length || ""} lead${rows.length === 1 ? "" : "s"}`}
+            </button>
+          )}
+        </>
+      }
+    >
+      {result ? (
+        /* ── what came of it ── */
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              { n: result.created, l: "imported", c: "#15803D", bg: "#DCFCE7" },
+              { n: result.duplicates, l: "already in the list", c: "#B45309", bg: "#FEF3C7" },
+              { n: result.errorCount || 0, l: "skipped", c: "#B91C1C", bg: "#FEE2E2" },
+            ].map((x) => (
+              <div key={x.l} style={{ flex: "1 1 150px", background: x.bg, borderRadius: 12, padding: "12px 14px" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: x.c }}>{x.n}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: x.c }}>{x.l}</div>
+              </div>
+            ))}
+          </div>
+
+          {(result.errors || []).length ? (
+            <div style={s.softBox}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: "#B91C1C", marginBottom: 6 }}>Rows that were skipped</div>
+              {result.errors.map((e, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#475569", padding: "2px 0" }}>Row {e.line}: {e.message}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {(result.dupeRows || []).length ? (
+            <div style={s.softBox}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: "#B45309", marginBottom: 6 }}>Already on the board</div>
+              {result.dupeRows.map((d, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#475569", padding: "2px 0" }}>Row {d.line}: {d.name} — {d.where}</div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 14 }}>
+          {/* ── the file ── */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); read(e.dataTransfer.files?.[0]); }}
+            onClick={() => pick.current?.click()}
+            style={{
+              border: `1.5px dashed ${drag ? "#6366F1" : "#D7DBEA"}`, borderRadius: 14,
+              background: drag ? "#EEF2FF" : "#FBFBFE", padding: "26px 18px",
+              textAlign: "center", cursor: "pointer",
+            }}
+          >
+            <i className="bi bi-file-earmark-spreadsheet" style={{ fontSize: 26, color: "#6366F1" }} />
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#0F172A", marginTop: 8 }}>
+              {file ? file.name : "Drop an .xlsx or .csv here, or click to choose"}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#94A3B8", fontWeight: 600, marginTop: 3 }}>
+              {file
+                ? `${rows.length} row${rows.length === 1 ? "" : "s"} read`
+                : "The first row must be the column headings"}
+            </div>
+            <input ref={pick} type="file" accept=".xlsx,.xls,.csv" hidden
+                   onChange={(e) => { read(e.target.files?.[0]); e.target.value = ""; }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={template} style={s.ghostBtn}>
+              <i className="bi bi-download" style={{ fontSize: 13 }} /> Download the template
+            </button>
+            <span style={s.fieldHint}>
+              Use the template, or any sheet whose headings match it — only Name is required.
+            </span>
+          </div>
+
+          {/* ── what the file says ── */}
+          {rows.length ? (
+            <>
+              {unknown.length ? (
+                <div style={{ ...s.softBox, borderColor: "#FDE68A", background: "#FFFBEB" }}>
+                  <span style={{ fontSize: 12, color: "#92400E", fontWeight: 600 }}>
+                    These columns match nothing on the board and will be ignored:{" "}
+                    <b>{unknown.join(", ")}</b>. Add them with &ldquo;Add a column of your own&rdquo; first if you need them.
+                  </span>
+                </div>
+              ) : null}
+
+              {noName ? (
+                <div style={{ ...s.softBox, borderColor: "#FECACA", background: "#FEF2F2" }}>
+                  <span style={{ fontSize: 12, color: "#B91C1C", fontWeight: 600 }}>
+                    {noName} row{noName === 1 ? " has" : "s have"} no name and will be skipped.
+                  </span>
+                </div>
+              ) : null}
+
+              <div>
+                <div style={{ ...s.fieldLabel, marginBottom: 7 }}>First few rows</div>
+                <div style={{ border: "1px solid #EEF0F7", borderRadius: 11, overflow: "hidden" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "#FBFBFE" }}>
+                        {["Name", "Business", "Phone", "Email", "Status"].map((h) => (
+                          <th key={h} style={{ textAlign: "left", padding: "8px 10px", color: "#64748B", fontWeight: 800, fontSize: 11 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.map((r, i) => (
+                        <tr key={i} style={{ borderTop: "1px solid #F4F4FD" }}>
+                          <td style={{ padding: "8px 10px", fontWeight: 700, color: "#0F172A" }}>{r.name || "—"}</td>
+                          <td style={{ padding: "8px 10px", color: "#475569" }}>{r.businessName || "—"}</td>
+                          <td style={{ padding: "8px 10px", color: "#475569" }}>{r.phone || "—"}</td>
+                          <td style={{ padding: "8px 10px", color: "#475569" }}>{r.email || "—"}</td>
+                          <td style={{ padding: "8px 10px", color: "#475569" }}>{r.status || "New"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {rows.length > preview.length ? (
+                  <div style={{ ...s.fieldHint, marginTop: 6 }}>…and {rows.length - preview.length} more.</div>
+                ) : null}
+              </div>
+
+              <div>
+                <div style={{ ...s.fieldLabel, marginBottom: 6 }}>Someone already on the board</div>
+                <select value={onDupe} onChange={(e) => setOnDupe(e.target.value)} style={s.input}>
+                  <option value="skip">Skip them — leave the lead that is already there</option>
+                  <option value="add">Import anyway — I know there are two of them</option>
+                </select>
+                <div style={{ ...s.fieldHint, marginTop: 5 }}>
+                  Matched on email and phone, against the board and against the file itself.
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function LeadsPage() {
   // Settings owns the drop out reasons.
-  const lostList = useList("lostReasons", LOST_REASONS);
   const [leads, setLeads]   = useState([]);
   const [owners, setOwners] = useState([]);
   const [fields, setFields] = useState([]);
@@ -924,10 +1185,9 @@ export default function LeadsPage() {
       case "ladder":   return (l.remindersSent || []).length;
       case "prep":     return prepPct(l);
       case "held":     return l.held || "";
-      // sorts the ones needing work to one end: nothing done → material → scored
-      case "after":    return (l.matSent ? 1 : 0) + (l.score === null || l.score === undefined ? 0 : 2);
-      case "matSent":  return l.matSent ? 1 : 0;
+      case "matSent":  return matDone(l) ? 1 : 0;
       case "prop":     return l.status === "Proposal sent" || l.status === "Won" ? 1 : 0;
+      case "client":   return l.clientId ? 1 : 0;
       case "connects": return (l.connects || []).length;
       case "created":  return new Date(l.createdAt || 0).getTime();
       default:
@@ -1009,7 +1269,32 @@ export default function LeadsPage() {
     } catch { toast.error("Could not save"); return null; }
   }, []);
 
-  const saveLead = async (form) => {
+  /* Won lead → client record → straight into Brands with the create form open.
+     The brand itself is still set up on the Brands screen, exactly as before;
+     this only makes the client it hangs off and carries the details across. */
+  const convertToClient = async (l) => {
+    if (!l.email) return toast.error("Add an email address to this lead first — a client record needs one.");
+    if (!(await confirmDialog(
+      `Make ${l.businessName || l.name || "this lead"} a client? This only works once the advance is in — the lead is then marked Won and you go straight to Brands to set their brand up.`
+    ))) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/leads/${l._id}/convert`, { method: "POST", credentials: "include" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.message || "Could not convert this lead");
+      toast.success(j.already ? "Already a client — opening Brands" : `Client ${j.client.clientId} created`);
+      const q = new URLSearchParams({
+        newBrand: "1",
+        clientId: String(j.client._id),
+        name: l.businessName || l.name || "",
+        email: l.email || "",
+      });
+      window.location.href = `${BRANDS_URL}?${q.toString()}`;
+    } catch (e) { toast.error(e.message); }
+    setBusy(false);
+  };
+
+  const saveLead = async (form, force) => {
     setBusy(true);
     const editing = modal?.lead?._id;
     try {
@@ -1017,9 +1302,17 @@ export default function LeadsPage() {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(form),
+        body: JSON.stringify(force ? { ...form, force: true } : form),
       });
       const j = await r.json();
+      // The same person can legitimately come in twice — a second enquiry, a
+      // second branch. Saying no and stopping there left the rep with nowhere
+      // to go, so the duplicate is named and they decide.
+      if (j.code === "DUPLICATE") {
+        setBusy(false);
+        if (await confirmDialog(`${j.message} Add this one anyway?`)) return saveLead(form, true);
+        return;
+      }
       if (!j.success) { toast.error(j.message || "Could not save"); setBusy(false); return; }
       toast.success(editing ? "Lead updated" : "Lead added");
       setModal(null);
@@ -1029,7 +1322,7 @@ export default function LeadsPage() {
   };
 
   const removeLead = async (l) => {
-    if (!(await confirmDialog(`Delete ${l.name || "this lead"} for good? Their call slot, if any, opens back up.`))) return;
+    if (!(await confirmDialog(`Delete ${l.name || "this lead"} for good? Any proposals and invoices raised for them go too.`))) return;
     try {
       const r = await fetch(`/api/admin/leads/${l._id}`, { method: "DELETE", credentials: "include" });
       const j = await r.json();
@@ -1062,7 +1355,10 @@ export default function LeadsPage() {
     setBusy(true);
     const saved = await patch(l._id, meeting, true);
     if (saved) {
-      toast.success("Meeting set — send the confirmation mail when you're ready");
+      // The API mails the lead itself and writes the mail event; read it back
+      // rather than telling the rep something different from what happened.
+      const mailed = (saved.events || []).slice(-4).some((e) => e.type === "mail");
+      toast.success(mailed ? "Meeting set — the lead has been mailed the details" : "Meeting set");
       setModal(null);
     }
     setBusy(false);
@@ -1153,58 +1449,6 @@ export default function LeadsPage() {
     }
     setBusy(false);
     toast.success(`${ok} of ${targets.length} mails sent`);
-  };
-
-  /* ── CSV of what's on screen ──────────────────────────────────────────── */
-  const exportCSV = () => {
-    const heads = cols.filter((c) => c.k !== "act").map((c) => c.n);
-    const line = (arr) => arr.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
-    const body = rows.map((l) =>
-      line(cols.filter((c) => c.k !== "act").map((c) => csvValue(l, c, ownerName)))
-    );
-    const csv = [line(heads), ...body].join("\n");
-    const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `viralon-leads-${todayStr()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success(`${rows.length} lead${rows.length === 1 ? "" : "s"} exported`);
-  };
-
-  const csvValue = (l, c, on) => {
-    switch (c.k) {
-      case "id":       return leadCode(l);
-      case "nm":       return l.name || "";
-      case "co":       return l.businessName || "";
-      case "ph":       return l.phone || "";
-      case "em":       return l.email || "";
-      case "city":     return l.city || "";
-      case "ind":      return l.industry || "";
-      case "src":      return srcOf(l);
-      case "campNm":   return l.source?.utmCampaign || "";
-      case "campId":   return l.source?.campaignId || "";
-      case "adset":    return l.source?.adset || "";
-      case "ad":       return l.source?.adName || "";
-      case "content":  return l.source?.utmContent || "";
-      case "svc":      return l.service || "";
-      case "runAds":   return l.runningAds || "";
-      case "owner":    return on(l) || "Unassigned";
-      case "status":   return l.status || "";
-      case "score":    return l.score ?? "";
-      case "meeting":  return l.meetingDate ? `${prettyDate(l.meetingDate)} ${prettyTime(l.meetingTime)}` : "Not fixed";
-      case "mode":     return l.meetingMode || "";
-      case "ladder":   return (l.remindersSent || []).map((r) => r.key).join(" | ");
-      case "prep":     return `${prepPct(l)}%`;
-      case "held":     return l.held === "held" ? "Held" : l.held === "noshow" ? (l.lostReason || "No show") : "";
-      case "after":    return `Material ${l.matSent ? "sent" : "pending"} | Score ${l.score ?? "none"}`;
-      case "matSent":  return l.matSent ? "Sent" : "";
-      case "prop":     return l.status === "Proposal sent" || l.status === "Won" ? "Raised" : "";
-      case "connects": return (l.connects || []).length;
-      case "created":  return fmtDT(l.createdAt);
-      default:
-        return c.k.startsWith("cf:") ? (l.customFields?.[c.k.slice(3)] || "") : "";
-    }
   };
 
   /* ── sorting header ───────────────────────────────────────────────────── */
@@ -1370,41 +1614,46 @@ export default function LeadsPage() {
         );
       }
 
-      case "held":
-        if (l.held === "held")   return <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Held</span>;
-        if (l.held === "noshow") return (
-          <span style={{ ...s.tag, background: "#FEE2E2", color: "#B91C1C" }} title="No show">
-            {l.lostReason || "No show"}
-          </span>
-        );
+      case "held": {
+        const o = MEETING_OUTCOMES.find((x) => x.k === l.held);
+        if (o) return <span style={{ ...s.tag, background: o.bg, color: o.fg }}>{o.n}</span>;
         return <span style={{ ...s.tag, background: "#F1F5F9", color: "#94A3B8" }}>{l.meetingDate ? "Pending" : "—"}</span>;
+      }
 
-      /* One glance at where the lead stands once the meeting is done — the
-         panel behind it carries the material pack, the score and the mails. */
-      case "after": {
-        const scored = !(l.score === null || l.score === undefined);
+      case "matSent": {
+        const done = matDone(l);
         return (
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            {l.held === "held"   ? <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Held</span> : null}
-            {l.held === "noshow" ? <span style={{ ...s.tag, background: "#FEE2E2", color: "#B91C1C" }}>No show</span> : null}
-            {/* Only worth a badge once it has actually gone out. */}
-            {l.matSent ? <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Material sent</span> : null}
-            <span style={{ ...s.tag, background: scored ? "#EEF2FF" : "#F1F5F9", color: scored ? "#4338CA" : "#94A3B8" }}>
-              {scored ? `${l.score}/10` : "Not scored"}
-            </span>
-          </div>
+          <button onClick={() => setModal({ type: "mail", lead: l, preset: "material" })}
+                  style={{ ...s.miniBtn, height: "auto", padding: "4px 9px",
+                           ...(done ? { background: "#DCFCE7", borderColor: "#BBF7D0", color: "#15803D" } : {}) }}
+                  title={done ? "Material pack sent — send it again" : "Send the material pack"}>
+            <i className={`bi ${done ? "bi-check2-circle" : "bi-box-seam-fill"}`} style={{ fontSize: 11 }} />
+            {done ? "Sent" : "Send material"}
+          </button>
         );
       }
 
-      case "matSent":
-        return l.matSent ? (
-          <span style={{ ...s.tag, background: "#DCFCE7", color: "#15803D" }}>Sent</span>
-        ) : (
-          <button onClick={() => setModal({ type: "mail", lead: l, preset: "material" })}
-                  style={{ ...s.miniBtn, height: "auto", padding: "4px 9px" }} title="Send the material pack">
-            <i className="bi bi-box-seam-fill" style={{ fontSize: 11 }} /> Send material
+      /* The hand-over to Operations. Once converted the cell stops being a
+         button and becomes the way into that client's brands. */
+      case "client": {
+        if (l.clientId) {
+          return (
+            <a href={`${BRANDS_URL}?client=${l.clientId}`}
+               style={{ ...s.miniBtn, height: "auto", padding: "4px 9px", textDecoration: "none",
+                        background: "#DCFCE7", borderColor: "#BBF7D0", color: "#15803D" }}
+               title="Open this client's brands">
+              <i className="bi bi-bookmark-star-fill" style={{ fontSize: 11 }} /> Brands
+            </a>
+          );
+        }
+        return (
+          <button onClick={() => convertToClient(l)} disabled={busy}
+                  style={{ ...s.miniBtn, height: "auto", padding: "4px 9px" }}
+                  title="Make a client record and set its brand up">
+            <i className="bi bi-person-check-fill" style={{ fontSize: 11 }} /> Convert
           </button>
         );
+      }
 
       /* Hands over to Website → Proposals with this lead already picked. */
       case "prop": {
@@ -1460,7 +1709,7 @@ export default function LeadsPage() {
     // Campaign carries nothing worth a panel, so it stays plain text.
     src: "attribution", campId: "attribution",
     adset: "attribution", ad: "attribution", content: "attribution",
-    ladder: "mails", prep: "prep", after: "after",
+    ladder: "mails", prep: "prep", held: "after",
     connects: "connects", created: "journey",
   };
 
@@ -1617,20 +1866,17 @@ export default function LeadsPage() {
         return (
           <div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <button onClick={() => patch(l._id, { held: l.held === "held" ? "" : "held", status: l.held === "held" ? l.status : "Consultation done" }, true)}
-                      style={l.held === "held" ? s.miniBtnOn : s.miniBtn}>It happened</button>
-              <button onClick={() => patch(l._id, { held: l.held === "noshow" ? "" : "noshow" }, true)}
-                      style={l.held === "noshow" ? s.miniBtnOn : s.miniBtn}>No show</button>
+              {MEETING_OUTCOMES.map((o) => (
+                <button key={o.k}
+                        onClick={() => patch(l._id, o.k === "held"
+                          ? { held: l.held === "held" ? "" : "held", status: l.held === "held" ? l.status : "Consultation done" }
+                          : { held: l.held === o.k ? "" : o.k }, true)}
+                        style={l.held === o.k ? s.miniBtnOn : s.miniBtn}>{o.n}</button>
+              ))}
             </div>
 
-            <div style={{ marginTop: 12 }}>
-              <Field label="If it's lost, why">
-                <select className="lp-in" style={{ ...s.input, height: 36 }} value={l.lostReason || ""}
-                        onChange={(e) => patch(l._id, { lostReason: e.target.value })}>
-                  <option value="">—</option>
-                  {lostList.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </Field>
+            <div style={{ marginTop: 10, fontSize: 11.5, color: "#94A3B8", fontWeight: 600 }}>
+              Why a deal was lost belongs on the lead's status, not here.
             </div>
           </div>
         );
@@ -1681,14 +1927,18 @@ export default function LeadsPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {LADDER.map((r) => {
                   const at = sent.get(r.k);
+                  // This meeting is too close for that rung to be true.
+                  const gone = !at && rungGone(r.k, l.meetingDate);
                   return (
                     <div key={r.k} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ width: 9, height: 9, borderRadius: 3, background: at ? "#6366F1" : "#E9EAF5", flexShrink: 0 }} />
                       <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: at ? "#0F172A" : "#94A3B8" }}>{r.n}</span>
                       {at ? (
                         <span style={{ fontSize: 10.5, color: "#94A3B8", fontWeight: 600 }}>{fmtDT(at)}</span>
+                      ) : gone ? (
+                        <span style={{ fontSize: 10.5, color: "#94A3B8", fontWeight: 600 }}>too close now</span>
                       ) : (
-                        <button onClick={() => sendMail(l, { template: r.k })} style={s.tinyBtn}>Send now</button>
+                        <button onClick={() => sendMail(l, { template: r.k })} disabled={busy} style={s.tinyBtn}>Send now</button>
                       )}
                     </div>
                   );
@@ -1705,7 +1955,7 @@ export default function LeadsPage() {
                         {i === 0 ? "“We'll call you” note" : "Follow-up nudge"}
                       </span>
                       {at ? <span style={{ fontSize: 10.5, color: "#94A3B8", fontWeight: 600 }}>{fmtDT(at)}</span>
-                          : <button onClick={() => sendMail(l, { template: k })} style={s.tinyBtn}>Send now</button>}
+                          : <button onClick={() => sendMail(l, { template: k })} disabled={busy} style={s.tinyBtn}>Send now</button>}
                     </div>
                   );
                 })}
@@ -1942,8 +2192,10 @@ export default function LeadsPage() {
                   </button>
                 )}
 
-                <button onClick={exportCSV} style={s.ghostBtn}>
-                  <i className="bi bi-download" style={{ fontSize: 13 }} /> Export
+                {/* Leads come in by the sheet; there is no way out by
+                    design -- the board is not a list anyone downloads. */}
+                <button onClick={() => setModal({ type: "import" })} style={s.ghostBtn}>
+                  <i className="bi bi-upload" style={{ fontSize: 13 }} /> Import
                 </button>
               </div>
 
@@ -2059,6 +2311,10 @@ export default function LeadsPage() {
           </Modal>
         );
       })()}
+      {modal?.type === "import" && (
+        <ImportPanel fields={fields} onClose={() => setModal(null)} onDone={() => load(true)} />
+      )}
+
       {modal?.type === "fields" && (
         <Modal title="Your own columns" icon="bi-layout-three-columns" onClose={() => setModal(null)}>
           <FieldPanel fields={fields} busy={busy} onAdd={addField} onDelete={deleteField} />

@@ -29,11 +29,14 @@ function shell(bodyHtml) {
 const row = (k, v) =>
   `<tr><td style="padding:9px 14px;color:#6b6880;">${k}</td><td style="padding:9px 14px;font-weight:700;text-align:right;">${v}</td></tr>`;
 
-function send({ to, subject, html, name, attachments }) {
+function send({ to, cc, subject, html, name, attachments }) {
   if (!to) return Promise.resolve(null);
   return mailTransport().sendMail({
     from: `"${name}" <${MAIL_USER}>`,
     to,
+    // Accounts keeps a copy of whatever the scheduled sender sends, so an
+    // unattended mail is not invisible to the people who have to chase it.
+    ...(cc ? { cc } : {}),
     subject,
     html: shell(html),
     ...(attachments && attachments.length ? { attachments } : {}),
@@ -146,14 +149,15 @@ export function docDraft(kind, doc) {
 }
 
 /* Send what the compose box holds, with the document attached. */
-export function sendDocMail(kind, doc, { to, subject, body } = {}) {
+export function sendDocMail(kind, doc, { to, cc, subject, body, attachments } = {}) {
   const d = docDraft(kind, doc);
   return send({
     to: to || d.to,
+    cc,
     name: SENDER[kind] || "Viralon",
     subject: subject || d.subject,
     html: body || d.body,
-    attachments: docAttachment(kind, doc, d.fileName),
+    attachments: [...docAttachment(kind, doc, d.fileName), ...(attachments || [])],
   });
 }
 

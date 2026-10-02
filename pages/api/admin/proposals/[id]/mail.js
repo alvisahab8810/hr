@@ -8,6 +8,10 @@ import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { docDraft, sendDocMail } from "@/utils/docMail";
+import mailFiles from "@/utils/mailFiles";
+// Attachments ride along in the body as base64, so the default 1 MB is too tight.
+export const config = { api: { bodyParser: { sizeLimit: "16mb" } } };
+
 
 export default async function handler(req, res) {
   if (!adminGuard(req, res)) return;
@@ -33,21 +37,32 @@ export default async function handler(req, res) {
       return res.status(405).json({ success: false, message: "Method not allowed" });
     }
 
-    const { to, subject, body, markSent } = req.body || {};
+    const { to, subject, body, markSent, files } = req.body || {};
     if (!to) return res.status(400).json({ success: false, message: "There is no address to send it to" });
 
     if (kind === "proposal" && markSent && p.approval !== "Approved") {
       return res.status(400).json({ success: false, message: "This one still needs approval before it can go out" });
     }
 
-    await sendDocMail(kind, p, { to, subject, body });
+    await sendDocMail(kind, p, { to, subject, body, attachments: await mailFiles(files) });
 
-    if (markSent) {
-      const set = kind === "agreement"
-        ? { "agreement.status": "Sent", "agreement.sentOn": new Date() }
-        : { status: "Sent", ...(p.sent ? {} : { sent: new Date() }) };
-      await Proposal.findByIdAndUpdate(id, { $set: set });
-    }
+    // Every send leaves a line on the proposal itself, so a resend is not
+    // invisible just because the "Sent on" date is already filled in.
+    const set = markSent
+      ? (kind === "agreement"
+          ? { "agreement.status": "Sent", "agreement.sentOn": new Date() }
+          : { status: "Sent", ...(p.sent ? {} : { sent: new Date() }) })
+      : {};
+    await Proposal.findByIdAndUpdate(id, {
+      $set: set,
+      $push: {
+        followups: {
+          at: new Date(),
+          type: "mail",
+          text: `${kind === "agreement" ? "Agreement" : "Proposal"} ${markSent ? "sent" : "resent"} to ${to}`,
+        },
+      },
+    });
 
     await Query.findByIdAndUpdate(p.leadId, {
       $push: {
