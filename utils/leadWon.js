@@ -35,9 +35,9 @@ export async function advanceReceived(leadId) {
 export async function winLeadOnPayment(leadId, note) {
   if (!leadId) return;
   await Query.findOneAndUpdate(
-    { _id: leadId, status: { $ne: "Won" } },
+    { _id: leadId, stage: { $ne: "Won" } },
     {
-      $set: { status: "Won" },
+      $set: { stage: "Won" },
       $push: { events: { at: new Date(), type: "status", text: note || "Advance received — lead won" } },
     }
   ).catch(() => {});
@@ -52,9 +52,9 @@ export async function unwinLeadIfUnpaid(leadId) {
   if (!leadId) return;
   if (await advanceReceived(leadId)) return;
   await Query.findOneAndUpdate(
-    { _id: leadId, status: "Won", clientId: { $in: [null, undefined] } },
+    { _id: leadId, stage: "Won", clientId: { $in: [null, undefined] } },
     {
-      $set: { status: "Negotiation" },
+      $set: { stage: "Negotiation" },
       $push: {
         events: {
           at: new Date(),

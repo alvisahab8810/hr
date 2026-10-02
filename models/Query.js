@@ -43,9 +43,15 @@ const querySchema = new mongoose.Schema(
 
     /* ── CRM fields (filled in by the team, not by the website form) ───────── */
 
-    // New → Contacted → Meeting booked → Consultation done → Qualified →
-    // Proposal sent → Negotiation → Won, with NPC / Not qualified / Lost as exits.
+    // What the salesperson says about the lead, and the only thing they pick:
+    // New → Contacted → Qualified, with Not qualified / Lost as the two exits.
     status: { type: String, default: "New" },
+
+    // What the CRM itself has seen happen — a meeting booked, a consultation
+    // held, a proposal sent, an advance landed. Nobody types this one, and it
+    // never touches `status`: "" | Meeting booked | Consultation done |
+    // Proposal sent | Negotiation | Won.
+    stage: { type: String, default: "" },
 
     // Extra detail the form doesn't ask for.
     city:      { type: String, default: "" },

@@ -77,8 +77,8 @@ export default async function handler(req, res) {
     // Sending the proposal moves the lead along, unless it is already ahead.
     if (kind === "proposal" && markSent) {
       await Query.findOneAndUpdate(
-        { _id: p.leadId, status: { $in: ["New", "Contacted", "NPC", "Meeting booked", "Consultation done", "Qualified"] } },
-        { $set: { status: "Proposal sent" } }
+        { _id: p.leadId, stage: { $in: ["", "Meeting booked", "Consultation done"] } },
+        { $set: { stage: "Proposal sent" } }
       ).catch(() => {});
     }
 

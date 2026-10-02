@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     }
 
     await Query.findByIdAndUpdate(id, {
-      $set: { clientId: client._id, convertedAt: new Date(), status: "Won" },
+      $set: { clientId: client._id, convertedAt: new Date(), stage: "Won" },
       $push: { events: { at: new Date(), type: "client", text: `Converted to client ${client.clientId}` } },
     });
 

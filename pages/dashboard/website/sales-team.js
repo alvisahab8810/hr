@@ -12,10 +12,11 @@ import "react-toastify/dist/ReactToastify.css";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
 import Dashnav from "@/components/Dashnav";
-import { inr, initials, budgetValue, statusMeta, prepPct, fmtDT } from "@/utils/leadsMeta";
+import { inr, initials, budgetValue, statusMeta, prepPct, fmtDT, isClosed } from "@/utils/leadsMeta";
 import { confirmDialog } from "../../../components/ConfirmDialog";
 
-const OPEN_OUT = ["Won", "Lost", "Not qualified", "NPC"];
+/* A lead is out of play once the CRM has won it or a person has dropped it. */
+const inPlay = (l) => !isClosed(l);
 
 const MENU_ORDER = ["home", "blogs", "careers", "positions", "pages", "faqs",
   "leads", "newsletter", "proposals", "invoices", "leadProfile", "salesTeam", "reports", "slots", "settings"];
@@ -66,8 +67,8 @@ export default function SalesTeamPage() {
         conv: Math.round((won.length / Math.max(1, props.length)) * 100),
         showRate: Math.round((held / Math.max(1, booked)) * 100),
         prepAvg: booked ? prepAvg : 0,
-        pipeline: mine.filter((l) => !OPEN_OUT.includes(l.status)).reduce((a, l) => a + budgetValue(l.budget), 0),
-        open: mine.filter((l) => !OPEN_OUT.includes(l.status)).slice(0, 4),
+        pipeline: mine.filter(inPlay).reduce((a, l) => a + budgetValue(l.budget), 0),
+        open: mine.filter(inPlay).slice(0, 4),
       };
     });
   }, [data]);
@@ -81,7 +82,7 @@ export default function SalesTeamPage() {
     return {
       target, rev,
       pctOfTarget: target ? Math.round((rev / target) * 100) : 0,
-      inPlay: (data.leads || []).filter((l) => !OPEN_OUT.includes(l.status)).length,
+      inPlay: (data.leads || []).filter(inPlay).length,
       held: stats.reduce((a, x) => a + x.held, 0),
       winRate: Math.round((won / Math.max(1, props)) * 100),
       best,

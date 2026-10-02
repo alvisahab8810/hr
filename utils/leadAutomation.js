@@ -67,7 +67,8 @@ async function autoReply(sent, skipped) {
   const leads = await Query.find({
     createdAt: { $gte: since },
     email: { $nin: ["", null] },
-    status: { $nin: ["Lost", "Won", "Not qualified"] },
+    status: { $nin: ["Lost", "Not qualified"] },
+    stage: { $ne: "Won" },
   })
     .select("name businessName phone email remindersSent createdAt")
     .lean();
@@ -96,7 +97,8 @@ async function reminders(sent, skipped) {
     meetingDate: { $gte: today },
     email: { $nin: ["", null] },
     held: { $in: ["", null] },
-    status: { $nin: ["Lost", "Won"] },
+    status: { $nin: ["Lost", "Not qualified"] },
+    stage: { $ne: "Won" },
   })
     .select("name email meetingDate meetingTime meetingMode remindersSent status")
     .lean();

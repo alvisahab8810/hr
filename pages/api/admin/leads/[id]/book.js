@@ -100,7 +100,7 @@ export default async function handler(req, res) {
           meetingTime: slot.time,
           meetingMode: lead.meetingMode || "Google Meet",
           held: "",
-          status: ["Won", "Lost", "Not qualified"].includes(lead.status) ? lead.status : "Meeting booked",
+          stage: lead.stage === "Won" ? "Won" : "Meeting booked",
         },
         $push: {
           events: {

@@ -13,7 +13,7 @@ import Query from "@/models/Query";
 import Salesperson from "@/models/Salesperson";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { salesId } from "@/utils/salesAuth";
-import { STATUSES } from "@/utils/leadsMeta";
+import { MANUAL_STATUSES } from "@/utils/leadsMeta";
 
 // A file of a few thousand rows is well past Next's 1mb default.
 export const config = { api: { bodyParser: { sizeLimit: "8mb" } } };
@@ -56,11 +56,10 @@ export default async function handler(req, res) {
     }
 
     const mySales = salesId(req);
-    // Any status the board itself uses is accepted, not just the four a human
-    // picks -- a sheet put together by hand can carry "Lost" or "Negotiation"
-    // too. "Won" is the one nobody gets to type: it is the advance that wins a
-    // lead (utils/leadWon.js), and a spreadsheet cannot prove money came in.
-    const statuses = STATUSES.map((s) => s.k).filter((k) => k !== "Won");
+    // Only the statuses a human picks. Where the CRM has put a lead is its own
+    // field now, and a spreadsheet cannot prove a meeting happened or that
+    // money came in, so anything else in the sheet lands as New.
+    const statuses = MANUAL_STATUSES;
 
     // "Assign to" is typed as a name or an email, so the team list is read
     // once and matched on both.
@@ -93,7 +92,7 @@ export default async function handler(req, res) {
       }
 
       const asked  = str(r?.status);
-      const status = statuses.includes(asked) ? asked : asked === "Won" ? "Negotiation" : "New";
+      const status = statuses.includes(asked) ? asked : "New";
       const owner  = mySales || repBy.get(str(r?.owner).toLowerCase()) || null;
 
       const custom = {};

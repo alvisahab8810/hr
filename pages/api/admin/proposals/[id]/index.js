@@ -141,9 +141,9 @@ export default async function handler(req, res) {
     if (b.status === "Sent" && current.status !== "Sent") {
       // Only forward: a lead already in negotiation or won stays where it is.
       await Query.findOneAndUpdate(
-        { _id: saved.leadId, status: { $in: ["New", "Contacted", "NPC", "Meeting booked", "Consultation done", "Qualified"] } },
+        { _id: saved.leadId, stage: { $in: ["", "Meeting booked", "Consultation done"] } },
         {
-          $set: { status: "Proposal sent" },
+          $set: { stage: "Proposal sent" },
           $push: { events: { at: new Date(), type: "proposal", text: "Proposal sent to the client" } },
         }
       ).catch(() => {});
@@ -157,9 +157,9 @@ export default async function handler(req, res) {
       await Query.findOneAndUpdate(
         paid
           ? { _id: saved.leadId }
-          : { _id: saved.leadId, status: { $nin: ["Won", "Lost", "Not qualified"] } },
+          : { _id: saved.leadId, stage: { $ne: "Won" }, status: { $nin: ["Lost", "Not qualified"] } },
         {
-          $set: { status: paid ? "Won" : "Negotiation" },
+          $set: { stage: paid ? "Won" : "Negotiation" },
           $push: {
             events: {
               at: new Date(),

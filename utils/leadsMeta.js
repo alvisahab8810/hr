@@ -17,17 +17,35 @@ export const STATUSES = [
   { k: "Lost",              stage: 9, bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
 ];
 
-/* The only statuses a human picks. Everything else on the list above is set by
-   the CRM itself (a booked meeting, a sent proposal, a paid invoice), so it is
-   shown when a lead is already there but never offered in the dropdown. */
+/* Where the CRM itself has put the lead. This is deliberately NOT a status:
+   a booked meeting, a sent proposal or a landed advance is something that
+   happened, not a judgement somebody made. It lives in its own `stage` field
+   and its own column, so the Status column only ever shows the words below. */
+export const STAGES = ["Meeting booked", "Consultation done", "Proposal sent", "Negotiation", "Won"];
+export const stageMeta = (k) => STATUSES.find((s) => s.k === k) || null;
+
+/* Won is a stage, never a status — the advance wins the deal, nobody types it.
+   Lost and Not qualified are the two endings a person does decide. */
+/* Leads saved before the split still carry the stage inside `status`. Both
+   fields are read through these two, so an unmigrated board reads correctly
+   and a migrated one reads exactly the same. */
+const LEGACY_STATUS = {
+  "Meeting booked": "Contacted", "Consultation done": "Contacted", NPC: "Contacted",
+  "Proposal sent": "Qualified", Negotiation: "Qualified", Won: "Qualified",
+};
+export const stageOf  = (l) => l.stage || (STAGES.includes(l.status) ? l.status : "");
+export const statusOf = (l) => LEGACY_STATUS[l.status] || l.status || "New";
+
+export const isWon    = (l) => stageOf(l) === "Won";
+export const isClosed = (l) => isWon(l) || ["Lost", "Not qualified"].includes(l.status);
+
+/* The only statuses there are, and a human picks every one of them. */
 // "Lost" is here and "Won" is not, and that is the whole shape of the thing:
 // losing a deal is a judgement somebody makes, winning one is a payment that
-// lands (utils/leadWon.js).
+// lands (utils/leadWon.js) — and that lands in `stage`.
 export const MANUAL_STATUSES = ["New", "Contacted", "Qualified", "Not qualified", "Lost"];
 
-// The dropdown for one lead is always just the four manual choices. Where the
-// automation has put the lead is carried by a hidden option, so the closed
-// select still reads "Consultation done" without offering it as a choice.
+// The dropdown and the cell now show the same five words, always.
 export const statusOptions = () => MANUAL_STATUSES;
 export const isManualStatus = (k) => !k || MANUAL_STATUSES.includes(k);
 
@@ -37,13 +55,13 @@ export const statusMeta = (k) =>
 /* ── The pipeline rail above the table ────────────────────────────────────── */
 export const RAIL = [
   { k: "all",    n: "All leads",      m: () => true },
-  { k: "nobook", n: "No meeting yet", m: (l) => !l.meetingDate && !["Won", "Lost", "Not qualified"].includes(l.status) },
-  { k: "new",    n: "New",            m: (l) => l.status === "New" },
-  { k: "cont",   n: "Contacted",      m: (l) => l.status === "Contacted" || l.status === "NPC" },
-  { k: "booked", n: "Meeting booked", m: (l) => l.status === "Meeting booked" },
-  { k: "cons",   n: "Consulted",      m: (l) => l.status === "Consultation done" || l.status === "Qualified" },
-  { k: "prop",   n: "Proposal",       m: (l) => l.status === "Proposal sent" },
-  { k: "won",    n: "Won",            m: (l) => l.status === "Won" },
+  { k: "nobook", n: "No meeting yet", m: (l) => !l.meetingDate && !isClosed(l) },
+  { k: "new",    n: "New",            m: (l) => statusOf(l) === "New" && !stageOf(l) },
+  { k: "cont",   n: "Contacted",      m: (l) => statusOf(l) === "Contacted" && !stageOf(l) },
+  { k: "booked", n: "Meeting booked", m: (l) => stageOf(l) === "Meeting booked" },
+  { k: "cons",   n: "Consulted",      m: (l) => stageOf(l) === "Consultation done" || statusOf(l) === "Qualified" },
+  { k: "prop",   n: "Proposal",       m: (l) => ["Proposal sent", "Negotiation"].includes(stageOf(l)) },
+  { k: "won",    n: "Won",            m: isWon },
   { k: "drop",   n: "Dropped",        m: (l) => l.status === "Lost" || l.status === "Not qualified" },
 ];
 
@@ -197,6 +215,8 @@ export const BASE_COLS = [
   { k: "owner",    n: "Assign to",   on: true,  w: 145 },
   { k: "connects", n: "Connects",    on: true,  w: 95 },
   { k: "status",   n: "Status",      on: true,  w: 150 },
+  // Where the CRM put it, beside where the salesperson put it.
+  { k: "stage",    n: "Stage",       on: true,  w: 150 },
   { k: "meeting",  n: "Meeting",     on: true,  w: 175 },
   { k: "mode",     n: "How",         on: true,  w: 125 },
   { k: "ladder",   n: "Reminders",   on: true,  w: 120 },

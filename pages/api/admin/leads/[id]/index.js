@@ -107,10 +107,12 @@ export default async function handler(req, res) {
         set.salespersonId = mongoose.Types.ObjectId.isValid(b.salespersonId) ? b.salespersonId : null;
       }
 
-      // Won is not a status anyone types — it is what the advance makes true.
-      if (set.status === "Won" && current.status !== "Won" && !(await advanceReceived(id))) {
+      // Won is not a status at all any more — it is a stage the advance sets.
+      if (set.status === "Won") {
         return res.status(400).json({ success: false, code: "NO_ADVANCE", message: WON_RULE });
       }
+      // Nobody edits the stage by hand either; the CRM owns it end to end.
+      delete set.stage;
 
       // Journey entries the UI shouldn't have to spell out every time.
       if ("status" in set && set.status !== current.status) {
@@ -128,9 +130,9 @@ export default async function handler(req, res) {
               : { at: new Date(), type: "meeting", text: "Meeting cleared" }
           );
           // A fixed meeting moves the lead along, unless it's already past that.
-          if (date && mode && ["New", "Contacted", "NPC"].includes(current.status) && !("status" in set)) {
-            set.status = "Meeting booked";
-            events.push({ at: new Date(), type: "status", text: "Status moved to “Meeting booked”" });
+          if (date && mode && !current.stage) {
+            set.stage = "Meeting booked";
+            events.push({ at: new Date(), type: "status", text: "Stage moved to “Meeting booked”" });
           }
 
           // The client hears about it straight away — a confirmation the first
@@ -160,6 +162,9 @@ export default async function handler(req, res) {
         }
       }
       if ("held" in set && set.held !== current.held) {
+        if (set.held === "held" && ["", "Meeting booked"].includes(current.stage || "")) {
+          set.stage = "Consultation done";
+        }
         if (set.held === "held")   events.push({ at: new Date(), type: "meeting", text: "Consultation happened" });
         if (set.held === "noshow") events.push({ at: new Date(), type: "meeting", text: "Lead did not show up" });
       }

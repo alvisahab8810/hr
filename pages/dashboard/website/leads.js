@@ -20,7 +20,7 @@ import { parseSheet, templateRows, buildHeaderMap } from "@/utils/leadsImport";
 import { useList } from "@/utils/crmSettings";
 import { confirmDialog } from "../../../components/ConfirmDialog";
 import {
-  statusMeta, statusOptions, isManualStatus, RAIL, RUNNING_ADS, SERVICES, INDUSTRIES, SOURCES,
+  statusMeta, statusOptions, isWon, isClosed, stageOf, statusOf, RAIL, RUNNING_ADS, SERVICES, INDUSTRIES, SOURCES,
   CONNECT_VIA, CONNECT_OUTCOME, LADDER, rungGone, PREP, PREP_GROUPS, SCOREQ, BUDGETS, WON_RULE,
   BASE_COLS, MEETING_MODES, MEETING_OUTCOMES, modeMeta, leadCode, inr, inrShort, budgetValue, matDone,
   srcOf, scoreCol, prepPct, initials, tintFor, prettyTime, prettyDate,
@@ -218,7 +218,6 @@ function LeadForm({ initial, owners, fields, busy, isSales, onSave, onCancel }) 
         )}
         <Field label="Status">
           <select className="lp-in" style={s.input} value={f.status} onChange={(e) => set("status", e.target.value)}>
-            {isManualStatus(f.status) ? null : <option value={f.status} hidden>{f.status}</option>}
             {statusOptions().map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </Field>
@@ -1178,7 +1177,8 @@ export default function LeadsPage() {
       case "svc":      return (l.service || "").toLowerCase();
       case "runAds":   return (l.runningAds || "").toLowerCase();
       case "owner":    return ownerName(l).toLowerCase();
-      case "status":   return statusMeta(l.status).stage;
+      case "status":   return statusMeta(statusOf(l)).stage;
+      case "stage":    return statusMeta(stageOf(l)).stage;
       case "score":    return l.score === null || l.score === undefined ? -1 : Number(l.score);
       case "meeting":  return l.meetingDate ? `${l.meetingDate} ${l.meetingTime}` : "";
       case "mode":     return l.meetingMode || "";
@@ -1186,7 +1186,7 @@ export default function LeadsPage() {
       case "prep":     return prepPct(l);
       case "held":     return l.held || "";
       case "matSent":  return matDone(l) ? 1 : 0;
-      case "prop":     return l.status === "Proposal sent" || l.status === "Won" ? 1 : 0;
+      case "prop":     return ["Proposal sent", "Negotiation", "Won"].includes(stageOf(l)) ? 1 : 0;
       case "client":   return l.clientId ? 1 : 0;
       case "connects": return (l.connects || []).length;
       case "created":  return new Date(l.createdAt || 0).getTime();
@@ -1210,7 +1210,7 @@ export default function LeadsPage() {
   const stats = useMemo(() => {
     const today = todayStr();
     const month = thisMonthStr();
-    const live = leads.filter((l) => !["Won", "Lost", "Not qualified"].includes(l.status));
+    const live = leads.filter((l) => !isClosed(l));
     const scored = leads.filter((l) => l.score !== null && l.score !== undefined);
     return {
       pipeline: live.reduce((sum, l) => sum + budgetValue(l.budget), 0),
@@ -1219,7 +1219,7 @@ export default function LeadsPage() {
       notBooked: live.filter((l) => !l.meetingDate).length,
       awaiting: leads.filter((l) => l.meetingDate && meetingIsPast(l) && !l.held).length,
       avgScore: scored.length ? (scored.reduce((sm, l) => sm + Number(l.score), 0) / scored.length).toFixed(1) : "—",
-      wonMonth: leads.filter((l) => l.status === "Won" && String(l.updatedAt || "").slice(0, 7) === month).length,
+      wonMonth: leads.filter((l) => isWon(l) && String(l.updatedAt || "").slice(0, 7) === month).length,
     };
   }, [leads]);
 
@@ -1239,7 +1239,7 @@ export default function LeadsPage() {
   const alerts = useMemo(() => {
     const today = todayStr();
     const stale = leads.filter((l) =>
-      !l.meetingDate && !["Won", "Lost", "Not qualified"].includes(l.status) &&
+      !l.meetingDate && !isClosed(l) &&
       Date.now() - new Date(l.createdAt || 0).getTime() > 24 * 3600 * 1000
     );
     return {
@@ -1520,18 +1520,27 @@ export default function LeadsPage() {
         );
       }
 
+      // Read only on purpose: the CRM sets the stage, nobody types it.
+      case "stage": {
+        const st = stageOf(l);
+        if (!st) return <span style={{ color: "#CBD5E1" }}>—</span>;
+        const g = statusMeta(st);
+        return (
+          <span style={{ ...s.tag, background: g.bg, color: g.fg, border: `1px solid ${g.bd}` }}>{st}</span>
+        );
+      }
+
       case "status": {
-        const m = statusMeta(l.status);
+        const m = statusMeta(statusOf(l));
         return (
           <select
-            value={l.status || "New"}
+            value={statusOf(l)}
             onChange={(e) => patch(l._id, { status: e.target.value }, true)}
             style={{
               ...s.inlineSelect, background: m.bg, color: m.fg,
               border: `1px solid ${m.bd}`, fontWeight: 800, borderRadius: 999, padding: "4px 8px",
             }}
           >
-            {isManualStatus(l.status) ? null : <option value={l.status} hidden>{l.status}</option>}
             {statusOptions().map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         );
@@ -1657,7 +1666,7 @@ export default function LeadsPage() {
 
       /* Hands over to Website → Proposals with this lead already picked. */
       case "prop": {
-        const raised = l.status === "Proposal sent" || l.status === "Won";
+        const raised = ["Proposal sent", "Negotiation", "Won"].includes(stageOf(l));
         return (
           <a href={`/dashboard/website/proposals?${raised ? "lead" : "new"}=${l._id}`}
              style={{ ...s.miniBtn, height: "auto", padding: "4px 9px", textDecoration: "none" }}
@@ -1869,7 +1878,7 @@ export default function LeadsPage() {
               {MEETING_OUTCOMES.map((o) => (
                 <button key={o.k}
                         onClick={() => patch(l._id, o.k === "held"
-                          ? { held: l.held === "held" ? "" : "held", status: l.held === "held" ? l.status : "Consultation done" }
+                          ? { held: l.held === "held" ? "" : "held" }
                           : { held: l.held === o.k ? "" : o.k }, true)}
                         style={l.held === o.k ? s.miniBtnOn : s.miniBtn}>{o.n}</button>
               ))}
