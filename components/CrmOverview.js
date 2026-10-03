@@ -4,7 +4,7 @@
 // from the live leads, proposals and invoices — nothing is stored for it.
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { inr, inrShort, srcOf, todayStr, isWon } from "@/utils/leadsMeta";
+import { inr, inrShort, srcOf, todayStr, isWon, statusOf } from "@/utils/leadsMeta";
 
 const SRC_COLORS = ["#6366F1", "#4338CA", "#0F8A54", "#F59E0B", "#0E7490", "#B45309", "#7C3AED", "#DC2626"];
 
@@ -71,7 +71,7 @@ export default function CrmOverview() {
     const n = (f) => leads.filter(f).length;
     return [
       { n: "Leads captured", v: leads.length },
-      { n: "Contacted", v: n((l) => l.status !== "New") },
+      { n: "Contacted", v: n((l) => statusOf(l) !== "New") },
       { n: "Meetings booked", v: n((l) => !!l.meetingDate) },
       { n: "Consultations held", v: n((l) => l.held === "held") },
       { n: "Qualified", v: n((l) => Number(l.score || 0) >= 6) },

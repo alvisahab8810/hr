@@ -9,6 +9,7 @@ import Salesperson from "@/models/Salesperson";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { salesId, scopeLeadFilter } from "@/utils/salesAuth";
 import { startLeadAutomation } from "@/utils/leadAutomation";
+import { isManualStatus } from "@/utils/leadsMeta";
 
 const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -91,7 +92,8 @@ export default async function handler(req, res) {
         formType: b.formType || "Added manually",
         budget: b.budget || "",
         runningAds: b.runningAds || "",
-        status: b.status || "New",
+        // Only the five a person can pick; a stage can never arrive as a status.
+        status: isManualStatus(b.status) ? (b.status || "New") : "New",
         city: b.city || "",
         industry: b.industry || "",
         service: b.service || "",

@@ -15,6 +15,8 @@ import LeftbarMobile from "@/components/LeftbarMobile";
 import {
   LADDER, PREP, SCOREQ, srcOf, prepPct, leadCode,
   inr, fmtD, fmtDT, prettyTime, budgetValue, todayStr,
+  stageOf,
+  statusOf,
 } from "@/utils/leadsMeta";
 
 const propCode = (p) => `VP-${String(p?._id || "").slice(-4).toUpperCase()}`;
@@ -262,7 +264,8 @@ export default function LeadProfile() {
                 <div style={{ ...s.panel, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", margin: "16px 0 14px" }}>
                   <M k="Lead ID" v={<span style={{ fontSize: 17 }}>{leadCode(l)}</span>} d={l.businessName || "—"} />
                   <M k="Age" v={`${daysBetween(l.createdAt, Date.now())} days`} d={`captured ${fmtD(l.createdAt)}`} />
-                  <M k="Stage" v={<span style={{ fontSize: 15 }}>{l.status}</span>} d={`owner ${ownerName}`} />
+                  <M k="Status" v={<span style={{ fontSize: 15 }}>{statusOf(l)}</span>}
+                     d={stageOf(l) ? `stage ${stageOf(l)} · owner ${ownerName}` : `owner ${ownerName}`} />
                   <M k="Score" v={l.score != null ? `${l.score} /10` : "—"} tone={l.score >= 8 ? "pos" : ""}
                      d={l.score >= 8 ? "priority" : `stated budget ${l.budget || "—"}`} />
                   <M k="Touches" v={touches} d="mails, calls and replies" />
