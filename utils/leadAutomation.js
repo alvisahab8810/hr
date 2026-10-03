@@ -14,7 +14,7 @@
 // cron stays a safe backup rather than the only trigger.
 import dbConnect from "@/utils/dbConnect";
 import Query from "@/models/Query";
-import { LADDER } from "@/utils/leadsMeta";
+import { LADDER, rungGone } from "@/utils/leadsMeta";
 import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
 
 const LABEL = {
@@ -123,7 +123,10 @@ async function reminders(sent, skipped) {
       if (r.k === "confirm") return true;
       if (r.k === "d2") return days === 2 && hour >= 9 && hour < 21;
       if (r.k === "d1") return days === 1 && hour >= 9 && hour < 21;
-      return left <= r.off * 3600000;
+      // Past its offset, but not so far past that the mail would name a time
+      // that has already gone -- rungGone draws that line, and the board reads
+      // it from the same place.
+      return left <= r.off * 3600000 && !rungGone(r.k, lead.meetingDate, lead.meetingTime);
     };
 
     // Tightest first.

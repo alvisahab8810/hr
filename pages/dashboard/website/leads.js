@@ -1937,7 +1937,7 @@ export default function LeadsPage() {
                 {LADDER.map((r) => {
                   const at = sent.get(r.k);
                   // This meeting is too close for that rung to be true.
-                  const gone = !at && rungGone(r.k, l.meetingDate);
+                  const gone = !at && rungGone(r.k, l.meetingDate, l.meetingTime);
                   return (
                     <div key={r.k} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ width: 9, height: 9, borderRadius: 3, background: at ? "#6366F1" : "#E9EAF5", flexShrink: 0 }} />

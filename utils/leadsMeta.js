@@ -149,18 +149,57 @@ export const LADDER = [
 export const WON_RULE =
   "A lead is won once the advance is received. Record the payment against its invoice — the lead moves to Won by itself.";
 
+// "2026-09-04" + "16:30" (IST) -> epoch ms. Missing time means 10:00 IST, the
+// same reading utils/leadAutomation.js takes.
+export function meetingAtMs(meetingDate, meetingTime) {
+  if (!meetingDate) return 0;
+  const t = /^\d{2}:\d{2}$/.test(meetingTime || "") ? meetingTime : "10:00";
+  const ms = Date.parse(`${meetingDate}T${t}:00+05:30`);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+// Every rung names a time, and a rung that goes out long after the time it
+// names is simply wrong: a meeting booked at 8pm for 9:11pm was getting the
+// "3 hours before" mail an hour beforehand, because the rung stayed due for
+// everything under three hours.
+//
+// So each rung is live for a third of its own offset and no longer -- "3 hours
+// before" from 3h down to 2h left, "45 mins before" from 45m down to 30m --
+// and is gone after that. A rung whose window was missed stays unsent rather
+// than arriving with the wrong number on it; the next one down still fires,
+// and the board offers Send now right up to the moment the window closes.
+const LIVE_FOR = 1 / 3;
+
 // "2 days before" and "1 day before" are claims about the calendar, not about
 // hours left — a meeting fixed for today can never truthfully get either, so
 // the board stops offering them instead of letting someone send a mail that
 // says "tomorrow" about this afternoon. utils/leadAutomation.js skips them for
 // the same reason.
-export function rungGone(k, meetingDate) {
-  if (!meetingDate || (k !== "d2" && k !== "d1")) return false;
-  const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
-  const days = Math.round(
-    (Date.parse(`${meetingDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000
-  );
-  return !Number.isNaN(days) && days < (k === "d2" ? 2 : 1);
+export function rungGone(k, meetingDate, meetingTime) {
+  if (!meetingDate) return false;
+
+  if (k === "d2" || k === "d1") {
+    const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+    const days = Math.round(
+      (Date.parse(`${meetingDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000
+    );
+    return !Number.isNaN(days) && days < (k === "d2" ? 2 : 1);
+  }
+
+  // The confirmation names no time, so it is never too late for it.
+  if (k === "confirm") return false;
+
+  const at = meetingAtMs(meetingDate, meetingTime);
+  if (!at) return false;
+  const left = at - Date.now();
+
+  // "At start time" is the one rung that is still true after the fact, for the
+  // half hour a late run might take to reach it.
+  if (k === "start") return left < -30 * 60000;
+
+  const rung = LADDER.find((r) => r.k === k);
+  if (!rung || rung.off == null) return false;
+  return left <= rung.off * (1 - LIVE_FOR) * 3600000;
 }
 
 /* ── Homework before the call ─────────────────────────────────────────────── */
