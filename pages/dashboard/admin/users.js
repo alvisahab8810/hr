@@ -9,7 +9,7 @@ import { toast } from "react-toastify";
 const ROLES = ["Manager", "HR", "Accountant", "Viewer"];
 
 const PERMISSIONS = [
-  { key: "dashboard",    label: "Dashboard",     icon: "bi-house-fill"          },
+  { key: "dashboard",    label: "Dashboard",     icon: "bi-house-fill",         group: "Payroll & teams" },
   { key: "employees",    label: "Employees",     icon: "bi-people-fill"         },
   { key: "attendance",   label: "Attendance",    icon: "bi-calendar-check-fill" },
   { key: "leaves",       label: "Leaves",        icon: "bi-calendar-minus-fill" },
@@ -23,6 +23,32 @@ const PERMISSIONS = [
   { key: "clients",      label: "Clients",       icon: "bi-briefcase-fill"      },
   { key: "blogs",        label: "Blogs",         icon: "bi-file-earmark-text-fill" },
   { key: "community",   label: "Community",     icon: "bi-chat-dots-fill"      },
+
+  // The website hub's own menus. The keys are the ones WebsiteLeftbar already
+  // uses for a salesperson (components/WebsiteLeftbar.js), so one tick here
+  // means the same menu everywhere, and "blogs" and "clients" are not repeated
+  // -- they are already on the list above and open the same screens.
+  { key: "websiteHome",  label: "Website Home",  icon: "bi-house-door-fill",    group: "Website hub" },
+  { key: "careers",      label: "Careers",       icon: "bi-briefcase-fill"      },
+  { key: "positions",    label: "Job Positions", icon: "bi-megaphone-fill"      },
+  { key: "pages",        label: "Landing Pages", icon: "bi-window-stack"        },
+  { key: "faqs",         label: "FAQs",          icon: "bi-question-circle-fill" },
+  { key: "caseStudies",  label: "Case Studies",  icon: "bi-trophy-fill"         },
+  { key: "pageSeo",      label: "Pages SEO",     icon: "bi-search"              },
+  { key: "leads",        label: "Leads",         icon: "bi-person-lines-fill"   },
+  { key: "leadProfile",  label: "Lead Profile",  icon: "bi-person-vcard-fill"   },
+  { key: "proposals",    label: "Proposals",     icon: "bi-file-earmark-text-fill" },
+  { key: "brands",       label: "Brands",        icon: "bi-bookmark-star-fill"  },
+  { key: "salesTeam",    label: "Sales Team",    icon: "bi-people-fill"         },
+  { key: "newsletter",   label: "Newsletter",    icon: "bi-envelope-paper-fill" },
+  { key: "reports",      label: "Reports",       icon: "bi-bar-chart-fill"      },
+  { key: "settings",     label: "Website Settings", icon: "bi-gear-fill"        },
+
+  // Finance sits inside the same hub, so it is on the same list -- a user can
+  // be given the billing screens without the rest of the website.
+  { key: "financeHome",  label: "Financial Hub", icon: "bi-cash-coin",          group: "Finance" },
+  { key: "invoices",     label: "Invoices",      icon: "bi-receipt"             },
+  { key: "invoiceSender",label: "Invoice Sender",icon: "bi-send-check-fill"     },
 ];
 
 const ACTION_META = {
@@ -333,6 +359,8 @@ export default function AdminUsers() {
           .um-modal { background:#fff; border-radius:20px; width:100%; max-width:520px;
                       box-shadow:0 24px 64px rgba(0,0,0,.18); overflow:hidden; max-height:90vh; overflow-y:auto; }
           .um-perm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
+          .um-perm-group { grid-column:1/-1; margin:6px 0 0; font-size:11px; font-weight:800; letter-spacing:.04em;
+            text-transform:uppercase; color:#9CA3AF; }
           .um-perm-item { display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:10px;
                           border:1.5px solid #E5E7EB; cursor:pointer; transition:all .15s; user-select:none; }
           .um-perm-item.checked { background:#EEF2FF; border-color:#818CF8; }
@@ -617,7 +645,9 @@ export default function AdminUsers() {
                   {PERMISSIONS.map(p => {
                     const checked = !!form.permissions[p.key];
                     return (
-                      <div key={p.key} className={`um-perm-item ${checked ? "checked" : ""}`}
+                      <React.Fragment key={p.key}>
+                      {p.group && <div className="um-perm-group">{p.group}</div>}
+                      <div className={`um-perm-item ${checked ? "checked" : ""}`}
                         onClick={() => togglePerm(p.key, "form")}>
                         <div className={`um-check ${checked ? "on" : ""}`}>
                           {checked && <i className="bi bi-check" style={{ fontSize:11, color:"#fff", fontWeight:800 }} />}
@@ -627,6 +657,7 @@ export default function AdminUsers() {
                           {p.label}
                         </span>
                       </div>
+                      </React.Fragment>
                     );
                   })}
                 </div>
@@ -685,7 +716,9 @@ export default function AdminUsers() {
                 {PERMISSIONS.map(p => {
                   const checked = !!editUser.permissions?.[p.key];
                   return (
-                    <div key={p.key} className={`um-perm-item ${checked ? "checked" : ""}`}
+                    <React.Fragment key={p.key}>
+                    {p.group && <div className="um-perm-group">{p.group}</div>}
+                    <div className={`um-perm-item ${checked ? "checked" : ""}`}
                       onClick={() => togglePerm(p.key, "edit")}>
                       <div className={`um-check ${checked ? "on" : ""}`}>
                         {checked && <i className="bi bi-check" style={{ fontSize:11, color:"#fff" }} />}
@@ -693,6 +726,7 @@ export default function AdminUsers() {
                       <i className={`bi ${p.icon}`} style={{ fontSize:13, color: checked ? "#6366F1" : "#9CA3AF" }} />
                       <span style={{ fontSize:12, fontWeight:600, color: checked ? "#4338CA" : "#374151" }}>{p.label}</span>
                     </div>
+                    </React.Fragment>
                   );
                 })}
               </div>

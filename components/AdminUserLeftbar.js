@@ -13,6 +13,29 @@ const ALL_MODULES = [
   { key: "deductions",    label: "Deductions",       href: "/dashboard/admin/deduction-waiver",    icon: "bi-shield-check" },
   { key: "holidays",      label: "Holidays",         href: "/dashboard/admin/holidays",            icon: "bi-star-fill" },
   { key: "blogs",         label: "Blogs",            href: "/dashboard/admin/blogs",                icon: "bi-file-earmark-text-fill" },
+
+  // The website hub's menus, so an invited user can be given any one of them on
+  // its own. Keys and hrefs are the same ones WebsiteLeftbar uses, so a menu
+  // ticked in Access Permissions lands on the identical screen either way.
+  { key: "websiteHome",   label: "Website Home",     href: "/dashboard/website",                    icon: "bi-house-door-fill" },
+  { key: "careers",       label: "Careers",          href: "/dashboard/website/careers",            icon: "bi-briefcase-fill" },
+  { key: "positions",     label: "Job Positions",    href: "/dashboard/website/positions",          icon: "bi-megaphone-fill" },
+  { key: "pages",         label: "Landing Pages",    href: "/dashboard/website/pages",              icon: "bi-window-stack" },
+  { key: "faqs",          label: "FAQs",             href: "/dashboard/website/faqs",               icon: "bi-question-circle-fill" },
+  { key: "caseStudies",   label: "Case Studies",     href: "/dashboard/website/case-studies",       icon: "bi-trophy-fill" },
+  { key: "pageSeo",       label: "Pages SEO",        href: "/dashboard/website/page-seo",           icon: "bi-search" },
+  { key: "leads",         label: "Leads",            href: "/dashboard/website/leads",              icon: "bi-person-lines-fill" },
+  { key: "leadProfile",   label: "Lead Profile",     href: "/dashboard/website/lead-profile",       icon: "bi-person-vcard-fill" },
+  { key: "proposals",     label: "Proposals",        href: "/dashboard/website/proposals",          icon: "bi-file-earmark-text-fill" },
+  { key: "brands",        label: "Brands",           href: "/dashboard/admin/tasks/brands",         icon: "bi-bookmark-star-fill" },
+  { key: "salesTeam",     label: "Sales Team",       href: "/dashboard/website/sales-team",         icon: "bi-people-fill" },
+  { key: "newsletter",    label: "Newsletter",       href: "/dashboard/website/newsletter",         icon: "bi-envelope-paper-fill" },
+  { key: "reports",       label: "Reports",          href: "/dashboard/website/reports",            icon: "bi-bar-chart-fill" },
+  { key: "clients",       label: "Clients",          href: "/dashboard/website/clients",            icon: "bi-person-badge-fill" },
+  { key: "settings",      label: "Website Settings", href: "/dashboard/website/settings",           icon: "bi-gear-fill" },
+  { key: "financeHome",   label: "Financial Hub",    href: "/dashboard/finance",                    icon: "bi-cash-coin" },
+  { key: "invoices",      label: "Invoices",         href: "/dashboard/website/invoices",           icon: "bi-receipt" },
+  { key: "invoiceSender", label: "Invoice Sender",   href: "/dashboard/finance/sender",             icon: "bi-send-check-fill" },
 ];
 
 export default function AdminUserLeftbar({ user }) {
