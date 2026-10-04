@@ -34,7 +34,10 @@ const InvoiceSchema = new mongoose.Schema(
     ofMonths: { type: Number, default: 0 },
 
     // One line per thing billed; `svc` and `amount` summarise them.
-    items: { type: [{ svc: String, note: String, amount: Number }], default: [] },
+    // Every line carries the SAC it is billed under: a tax invoice has to show
+    // it, and it is stored on the line rather than looked up at print time so a
+    // reprint years later still says what was actually billed.
+    items: { type: [{ svc: String, note: String, amount: Number, hsn: String }], default: [] },
     svc: { type: String, default: "" },
     amount: { type: Number, default: 0 },      // before tax
     gstPct: { type: Number, default: 18 },

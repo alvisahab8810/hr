@@ -75,6 +75,7 @@ const COLS = [
   { k: "pay",    n: "Payments",    on: true,  w: 195 },
   { k: "issued", n: "Issued",      on: true,  w: 110 },
   { k: "due",    n: "Due",         on: true,  w: 110 },
+  { k: "next",   n: "Next mail",   on: true,  w: 165 },
   { k: "status", n: "Status",      on: true,  w: 115 },
   { k: "paidOn", n: "Paid on",     on: true,  w: 110 },
   { k: "method", n: "How paid",    on: false, w: 130 },
@@ -85,7 +86,7 @@ const COLS = [
 const PANEL_OF = {
   code: "record", prop: "record", lead: "record", co: "record", contact: "record", em: "record",
   svc: "amounts", kind: "amounts", amount: "amounts", gst: "amounts", total: "amounts",
-  issued: "dates", due: "dates",
+  issued: "dates", due: "dates", next: "dates",
   status: "payment", paidOn: "payment", method: "payment", ref: "payment",
   pay: "records",
   owner: "owner",
@@ -156,7 +157,7 @@ function Modal({ title, icon, wide, onClose, children }) {
     <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 2000,
                   display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
-      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: wide ? 720 : 520,
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: wide ? 860 : 520,
                     boxShadow: "0 24px 60px rgba(15,23,42,.28)", overflow: "hidden" }}>
         <div style={{ padding: "15px 20px", borderBottom: "1px solid #F1F1FA", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={s.panelIcon}><i className={`bi ${icon}`} style={{ fontSize: 14 }} /></div>
@@ -177,6 +178,9 @@ export default function InvoicesPage() {
   const [rows, setRows] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [leads, setLeads] = useState([]);
+  // When the Invoice sender next wakes up, so the dates in Next mail read as
+  // a promise with a clock behind it.
+  const [senderNext, setSenderNext] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -214,6 +218,7 @@ export default function InvoicesPage() {
       setRows(j.data || []);
       setProposals(j.proposals || []);
       setLeads(j.leads || []);
+      setSenderNext(j.senderNext || "");
     } catch (e) { toast.error(e.message || "Could not load the invoices"); }
     setLoading(false);
   }, []);
@@ -241,9 +246,13 @@ export default function InvoicesPage() {
       // A payment is the one edit here that moves something outside this page.
       if (!quiet) toast.success(j.leadStatus === "Won" ? "Payment recorded — the lead is now Won" : "Saved");
       setBusy(false);
+      // The saved doc comes back on its own, without the sender's reading of it:
+      // a payment or a new due date changes when the next reminder is due, so the
+      // board asks again rather than keep showing the old date.
+      load();
       return j.data;
     } catch (e) { toast.error(e.message || "Could not save that"); setBusy(false); return null; }
-  }, []);
+  }, [load]);
 
   const remove = async (i) => {
     if (!(await confirmDialog(`Delete ${invCode(i)}? This cannot be undone.`))) return;
@@ -365,6 +374,50 @@ export default function InvoicesPage() {
             {i.disputed ? <div style={{ fontSize: 10.5, color: "#B4690E", fontWeight: 700 }}>reminders on hold</div> : null}
           </>
         );
+      // What the Invoice sender will do with this row next, worked out by the
+      // sender's own ladder (Finance → Invoice sender), plus what it has already
+      // sent — so nobody has to guess whether a client has been chased.
+      case "next": {
+        const nx = i.nextMail;
+        const track = (i.mailTrack || [])
+          .map((r) => `${r.label}${r.at ? ` — ${fmtD(String(r.at).slice(0, 10))}` : ""}`)
+          .join("\n");
+        const sent = (i.mailTrack || []).length;
+        const foot = sent ? (
+          <div style={{ fontSize: 10, color: "#B6BECB", fontWeight: 700 }} title={track}>
+            {sent} already sent
+          </div>
+        ) : null;
+        if (!nx) {
+          return (
+            <>
+              <span style={{ color: "#B6BECB" }}>{sent ? "nothing more due" : "—"}</span>
+              {foot}
+            </>
+          );
+        }
+        if (!nx.on) {
+          return (
+            <>
+              <span style={{ ...s.tag, background: "#FEF3C7", color: "#B4690E" }}>{nx.label}</span>
+              {foot}
+            </>
+          );
+        }
+        const away = Math.round((Date.parse(`${nx.on}T00:00:00Z`) - Date.parse(`${todayStr()}T00:00:00Z`)) / 86400000);
+        const soon = away <= 0;
+        return (
+          <>
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: soon ? "#C42525" : "#334155" }}>
+              {fmtD(nx.on)} <span style={{ fontWeight: 600, color: "#94A3B8" }}>
+                {away <= 0 ? "· today" : away === 1 ? "· tomorrow" : `· in ${away} days`}
+              </span>
+            </div>
+            <div style={{ fontSize: 10.5, color: "#64748B", lineHeight: 1.3 }}>{nx.label}</div>
+            {foot}
+          </>
+        );
+      }
       case "status": {
         const st = liveStatus(i);
         const m = statusMeta(st);
@@ -393,7 +446,8 @@ export default function InvoicesPage() {
               <div>
                 <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#0F172A" }}>Invoices</h2>
                 <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#94A3B8" }}>
-                  Raised off an accepted proposal — the advance first, then one a month for the retainer.
+                  One invoice per deal, with every part payment recorded against it.
+                  {senderNext ? <> The sender runs next at <b style={{ color: "#64748B" }}>{senderNext}</b>.</> : null}
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -555,8 +609,11 @@ export default function InvoicesPage() {
       {modal?.type === "panel" ? (() => {
         const live = rows.find((x) => x._id === modal.inv._id) || modal.inv;
         const meta = PANEL_META[modal.panel] || PANEL_META.record;
+        // The panels that carry the line editor need the wider box — a service,
+        // its note and its amount do not fit on one row at 520.
         return (
-          <Modal title={`${meta.t} · ${invCode(live)}`} icon={meta.i} wide={modal.panel === "edit"}
+          <Modal title={`${meta.t} · ${invCode(live)}`} icon={meta.i}
+                 wide={modal.panel === "edit" || modal.panel === "amounts"}
                  onClose={() => setModal(null)}>
             <Panel which={modal.panel} i={live} busy={busy} patch={patch}
                    mail={(markSent) => setModal({ type: "mail", inv: live, markSent })}
@@ -778,7 +835,7 @@ function Amounts({ i, busy, patch }) {
         </div>
       ) : (
         <div style={{ marginTop: 14 }}>
-          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" />
+          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" withHsn />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="For">
               <select className="lp-in" style={s.input} value={f.kind} onChange={(e) => set("kind", e.target.value)}>
@@ -1422,7 +1479,7 @@ function NewInvoice({ proposals, leads, proposalId, billed, onClose, onDone }) {
           </div>
 
           <Section n="What is being billed" />
-          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" />
+          <ServiceLines items={items} setItems={setItems} svcList={svcList} ui={s} label="Lines on this invoice" withHsn />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="For">

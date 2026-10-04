@@ -207,16 +207,79 @@ export async function runLeadAutomation() {
   return { checked: a + b + c, sent, skipped };
 }
 
-/* The in-process clock. Started once per Node process; the interval keeps
-   running even when nobody has the CRM open. */
-const EVERY = 10 * 60 * 1000;
+/* The exact moment the next unsent rung of any booked meeting comes round.
+   The rungs are times, not periods — "45 mins before" means 20:26 and nothing
+   else — so the clock below aims at this instead of waiting for whatever
+   minute a poll happens to land on. */
+async function nextRungAt() {
+  const now = Date.now();
+  const leads = await Query.find({
+    meetingDate: { $gte: istDay(now) },
+    email: { $nin: ["", null] },
+    held: { $in: ["", null] },
+    status: { $nin: ["Lost", "Not qualified"] },
+    stage: { $ne: "Won" },
+  })
+    .select("meetingDate meetingTime remindersSent")
+    .lean();
+
+  let best = 0;
+  for (const lead of leads) {
+    const at = meetingAt(lead);
+    if (!at) continue;
+    const already = new Set((lead.remindersSent || []).map((r) => r.key));
+    for (const r of LADDER) {
+      // The confirmation has no moment of its own and the two day rungs go by
+      // the calendar; the heartbeat picks those up.
+      if (r.off == null || r.k === "d2" || r.k === "d1" || already.has(r.k)) continue;
+      const when = at - r.off * 3600000;
+      if (when > now && (!best || when < best)) best = when;
+    }
+  }
+  return best;
+}
+
+/* The in-process clock. Started once per Node process; it keeps running even
+   when nobody has the CRM open.
+
+   Two hands. The heartbeat is the safety net — it catches the rungs that are
+   about a day rather than a moment, and anything a failed pass left behind.
+   The aimed timer is the one that matters to the client: it fires on the rung
+   itself, so a mail that says "we start in 45 minutes" goes out 45 minutes
+   before, not up to ten minutes after the sentence stopped being true. */
+const EVERY = 60 * 1000;
+const AIM_WITHIN = 90 * 1000;   // only worth aiming at what the next beat would miss
+
+function aim() {
+  nextRungAt()
+    .then((ms) => {
+      if (!ms) return;
+      const wait = ms - Date.now();
+      if (wait <= 0 || wait > AIM_WITHIN) return;
+      clearTimeout(globalThis.__leadAimTimer);
+      // A second of grace: the rung has to have arrived, not be arriving.
+      globalThis.__leadAimTimer = setTimeout(() => {
+        runLeadAutomation().catch((e) => console.error("lead automation:", e?.message));
+      }, wait + 1000);
+    })
+    .catch(() => {});
+}
+
+async function pass() {
+  await runLeadAutomation().catch((e) => console.error("lead automation:", e?.message));
+  aim();
+}
+
+// The clock outlives a code reload — the interval was started by the module
+// that was loaded before the edit. Tagging it lets a new beat replace an old
+// one instead of the old one quietly winning until someone restarts the server.
+const CLOCK = "beat-60s";
+
 export function startLeadAutomation() {
-  if (globalThis.__leadAutomation) return;
-  globalThis.__leadAutomation = setInterval(() => {
-    runLeadAutomation().catch((e) => console.error("lead automation:", e?.message));
-  }, EVERY);
+  const live = globalThis.__leadAutomation;
+  if (live && live.tag === CLOCK) return;
+  if (live) clearInterval(live.timer || live);
+  globalThis.__leadAutomation = { tag: CLOCK, timer: setInterval(pass, EVERY) };
   // Give the server a moment to finish booting before the first pass.
-  setTimeout(() => {
-    runLeadAutomation().catch((e) => console.error("lead automation:", e?.message));
-  }, 30000);
+  setTimeout(pass, 15000);
 }

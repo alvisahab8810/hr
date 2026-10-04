@@ -90,6 +90,24 @@ export const SERVICES = [
   "Influencer Marketing", "Other",
 ];
 
+/* The SAC code each service is billed under. A tax invoice has to carry one
+   against every line — GST rule 46 asks for it by name — and nobody raising an
+   invoice should have to remember six digits, so the line fills itself in from
+   the service and can still be typed over when a job does not fit the usual
+   code. Services sell under SAC, not HSN; the column is called HSN/SAC because
+   that is what a client's accounts team looks for. */
+export const SAC = {
+  "Performance Marketing": "998365",
+  "Social Media Marketing": "998361",
+  "SEO": "998361",
+  "Website Development": "998314",
+  "Branding & Design": "998391",
+  "Video Production": "999614",
+  "Influencer Marketing": "998361",
+  "Other": "998399",
+};
+export const sacFor = (svc) => SAC[String(svc || "").trim()] || "998399";
+
 export const INDUSTRIES = [
   "D2C / E-commerce", "Real Estate", "Healthcare", "Education", "Food & Beverage",
   "Fashion & Apparel", "Fitness & Wellness", "Travel & Hospitality",

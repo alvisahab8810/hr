@@ -1,0 +1,436 @@
+// utils/pageSchemas/socialContent.js — /social-content, described as data.
+//
+// KEEP IDENTICAL between viralon-new and viralon-payroll: the website renders
+// the page from this file and the CRM draws its form from it.
+//
+// Every `d` here is the copy the page ships with, which is what the editor
+// opens on. Nothing is moved out of the components — each one still carries
+// the same words — so an unsaved page renders exactly as it did before.
+import { pageSchema, borrow } from "../siteSchema";
+
+const WORK = "/assets/others/the-work/social-content/";
+const ICONS = WORK + "icons/";
+
+export default pageSchema([
+  {
+    key: "hero",
+    n: "Hero",
+    about: "The title, the quote, the four figures and the scrolling channel strip.",
+    fields: [
+      { k: "title", n: "Title", t: "text" },
+      { k: "quoteA", n: "Quote — first line", t: "text" },
+      { k: "quoteB", n: "Quote — second line", t: "text" },
+      { k: "attrib", n: "Said by", t: "text" },
+      { k: "note", n: "Line under the quote", t: "area" },
+      { k: "stats", n: "Figures", t: "list", of: [
+        { k: "figure", n: "Figure", t: "text" },
+        { k: "label", n: "What it is", t: "text" },
+      ] },
+      { k: "platforms", n: "Channels in the strip", t: "list", of: [
+        { k: "name", n: "Name", t: "text" },
+        { k: "href", n: "Link", t: "text" },
+      ] },
+    ],
+    d: {
+      title: "Social Content",
+      quoteA: "Marketing is no longer about the stuff you",
+      quoteB: "make, but the stories you tell.",
+      attrib: "Seth Godin",
+      note: "Three quarters of your buyers read those stories long before they ever speak to you.",
+      stats: [
+        { figure: "75%", label: "of buyers research on social before contacting a vendor" },
+        { figure: "41%", label: "watch short form video, the highest return format" },
+        { figure: "72 hrs", label: "how long a LinkedIn post keeps working" },
+        { figure: "3 yrs", label: "how long one YouTube video keeps returning leads" },
+      ],
+      platforms: [
+        { name: "Whatsapp", href: "https://wa.me/9193054 51301?text=Hi%2C%20I%20want%20to%20know%20more%20about%20Viralon" },
+        { name: "Instagram", href: "https://www.instagram.com/viralon_digital_services/" },
+        { name: "Facebook", href: "https://www.facebook.com/people/Viralon-Digital-Services/61551774960535/?mibextid=LQQJ4d" },
+        { name: "Youtube", href: "https://www.youtube.com/@ViralonDigtialServices" },
+        { name: "Linkedin", href: "https://www.linkedin.com/company/viralon-digital-services/" },
+      ],
+    },
+  },
+
+  {
+    key: "thework",
+    n: "The work",
+    about: "The two scrolling strips of work. A slide is one tall image, or two stacked.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading", t: "text" },
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "rowOne", n: "Top strip", t: "list", of: [
+        { k: "tall", n: "Tall image", t: "img" },
+        { k: "stackA", n: "Stacked — top", t: "img" },
+        { k: "stackB", n: "Stacked — bottom", t: "img" },
+      ] },
+      { k: "rowTwo", n: "Bottom strip", t: "list", of: [
+        { k: "tall", n: "Tall image", t: "img" },
+        { k: "stackA", n: "Stacked — top", t: "img" },
+        { k: "stackB", n: "Stacked — bottom", t: "img" },
+      ] },
+    ],
+    d: {
+      eyebrow: "The work",
+      headA: "Start Here. This Is What",
+      accent: "We Actually Make.",
+      rowOne: [
+        { tall: "", stackA: WORK + "first-slider/little.png", stackB: WORK + "first-slider/little1.png" },
+        { tall: WORK + "first-slider/tall.png", stackA: "", stackB: "" },
+        { tall: WORK + "first-slider/tall1.png", stackA: "", stackB: "" },
+        { tall: "", stackA: WORK + "first-slider/little2.png", stackB: WORK + "first-slider/little2.1.png" },
+        { tall: WORK + "first-slider/tall2.png", stackA: "", stackB: "" },
+        { tall: WORK + "first-slider/tall3.png", stackA: "", stackB: "" },
+        { tall: "", stackA: WORK + "first-slider/little3.png", stackB: WORK + "first-slider/little3.1.png" },
+        { tall: WORK + "first-slider/tall4.png", stackA: "", stackB: "" },
+        { tall: "", stackA: WORK + "first-slider/little4.png", stackB: WORK + "first-slider/little4.1.png" },
+        { tall: WORK + "first-slider/tall5.png", stackA: "", stackB: "" },
+      ],
+      rowTwo: [
+        { tall: "", stackA: WORK + "second-slider/little.png", stackB: WORK + "second-slider/little1.png" },
+        { tall: WORK + "second-slider/tall.png", stackA: "", stackB: "" },
+        { tall: WORK + "second-slider/tall1.png", stackA: "", stackB: "" },
+        { tall: "", stackA: WORK + "second-slider/little2.png", stackB: WORK + "second-slider/little2.1.png" },
+        { tall: WORK + "second-slider/tall2.png", stackA: "", stackB: "" },
+        { tall: WORK + "second-slider/tall3.png", stackA: "", stackB: "" },
+        { tall: "", stackA: WORK + "second-slider/little3.png", stackB: WORK + "second-slider/little3.1.png" },
+        { tall: WORK + "second-slider/tall4.png", stackA: "", stackB: "" },
+      ],
+    },
+  },
+
+  {
+    key: "wrongplatform",
+    n: "Where most get it wrong",
+    about: "The single dark panel with the button.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading", t: "text" },
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "body", n: "Body", t: "area" },
+      { k: "ctaText", n: "Button", t: "text" },
+    ],
+    d: {
+      eyebrow: "Where most get it wrong",
+      headA: "Everyone Starts On Instagram.",
+      accent: "Most Should Not.",
+      body: "Your Competitors Being On A Platform Is Not A Reason For You To Be There. The Only Question That Matters Is Where The Person Who Signs The Cheque Already Spends Their Attention.",
+      ctaText: "Let us talk",
+    },
+  },
+
+  {
+    key: "platforms",
+    n: "Platforms we run",
+    about: "The platform cards. Their colours cycle dark, light, purple by position.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading", t: "text" },
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "platforms", n: "Cards", t: "list", of: [
+        { k: "name", n: "Platform", t: "text" },
+        { k: "kicker", n: "The job it does", t: "text" },
+        { k: "body", n: "Body", t: "area" },
+        { k: "tags", n: "Who it suits", t: "area" },
+        { k: "icon", n: "Icon", t: "img" },
+      ] },
+    ],
+    d: {
+      eyebrow: "Platforms we run",
+      headA: "Six Platforms. Each One",
+      accent: "Does A Different Job.",
+      platforms: [
+        {
+          name: "Instagram",
+          kicker: "Discovery",
+          body: "Where A Buyer Checks Whether You Are Real. Reels For Reach, Carousels For Depth, Stories",
+          tags: "Clinics · Retail · Education · Hospitality · D2C",
+          icon: ICONS + "insta.png",
+        },
+        {
+          name: "LinkedIn",
+          kicker: "Pipeline",
+          body: "The Strongest B2B Channel Anywhere, And The One Most Companies Post On Twice A Month Then Abandon.",
+          tags: "B2B · Manufacturing · IT · Finance · Consulting",
+          icon: ICONS + "linkedin.png",
+        },
+        {
+          name: "X",
+          kicker: "The Industry Room",
+          body: "Brand Accounts Have Lost Reach, So Treat It As A Room Rather Than A Stage. For Software, Fintech, AI,",
+          tags: "SaaS · Fintech · AI · Dev Tools · Venture",
+          icon: ICONS + "x.png",
+        },
+        {
+          name: "YouTube",
+          kicker: "Compounding",
+          body: "The Most Under-Used Channel In B2B Worldwide, And The Second Largest Search Engine. A LinkedIn Post Lives",
+          tags: "Education · Healthcare · High Consideration Purchases",
+          icon: ICONS + "youtube.png",
+        },
+        {
+          name: "Facebook",
+          kicker: "Reach And Community",
+          body: "Written Off Too Early By Most Agencies. Still The Cheapest Reach Per Impression Across South Asia,",
+          tags: "Real Estate · Education · Local Services · Travel",
+          icon: ICONS + "facebook.png",
+        },
+        {
+          name: "TikTok",
+          kicker: "Attention",
+          body: "The Fastest Audience Growth Available In The US, UK And Australia, And Increasingly A Search Engine For",
+          tags: "D2C · Hospitality · Consumer Brands, Western Markets",
+          icon: ICONS + "tiktok.png",
+        },
+      ],
+    },
+  },
+
+  {
+    key: "howwework",
+    n: "How we work",
+    about: "The five pinned steps. One step more or fewer re-divides the scroll by itself.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading", t: "text" },
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "img", n: "Picture beside the steps", t: "img" },
+      { k: "steps", n: "Steps", t: "list", of: [
+        { k: "n", n: "Number", t: "text" },
+        { k: "title", n: "Title", t: "text" },
+        { k: "body", n: "Body", t: "area" },
+      ] },
+    ],
+    d: {
+      eyebrow: "How we work",
+      headA: "Five Steps, Every Month,",
+      accent: "In The Same Order.",
+      img: WORK + "steps.webp",
+      steps: [
+        {
+          n: "01",
+          title: "Decide the platform",
+          body: "Where Your Buyer Already Is, Not Where Your Competitor Posts. This Decision Changes Everything After It.",
+        },
+        {
+          n: "02",
+          title: "Plan the month",
+          body: "One Calendar, Built Around The Questions Your Buyer Asks Before They Buy, Not Around What Happens To Be Trending That Week.",
+        },
+        {
+          n: "03",
+          title: "Script before anyone shoots",
+          body: "Hook, Angle And Structure Written First, Calendar Shared For Approval Fifteen Days Ahead. Nobody Points A Camera At Anything Until The Idea Is Signed Off.",
+        },
+        {
+          n: "04",
+          title: "Produce, publish, engage",
+          body: "Edited, Captioned, Scheduled For The Hours Your Audience Is Actually Awake, In Their Timezone. Then A Daily Engagement Window, Because A Page That Never Replies Looks Abandoned.",
+        },
+        {
+          n: "05",
+          title: "Measure, then change something",
+          body: "One Report A Month On What Moved, What Did Not, And What We Are Doing Differently Next Month. Decisions, Not Vanity Numbers.",
+        },
+      ],
+    },
+  },
+
+  {
+    key: "whatwemake",
+    n: "What we make",
+    about: "The five phones. Each one turns through the four formats written into it.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading — first line", t: "text" },
+      { k: "accent", n: "Heading — orange line", t: "text" },
+      { k: "phones", n: "Phones", t: "list", of: [
+        { k: "image", n: "Phone picture", t: "img" },
+        { k: "titleOne", n: "Format 1", t: "text" },
+        { k: "labelOne", n: "Format 1 — under it", t: "text" },
+        { k: "titleTwo", n: "Format 2", t: "text" },
+        { k: "labelTwo", n: "Format 2 — under it", t: "text" },
+        { k: "titleThree", n: "Format 3", t: "text" },
+        { k: "labelThree", n: "Format 3 — under it", t: "text" },
+        { k: "titleFour", n: "Format 4", t: "text" },
+        { k: "labelFour", n: "Format 4 — under it", t: "text" },
+      ] },
+    ],
+    d: {
+      eyebrow: "What we make",
+      headA: "Formats Chosen For The Job.",
+      accent: "Not For The Calendar.",
+      phones: [
+        {
+          image: WORK + "phone1.png",
+          titleOne: "Trend Response", labelOne: "Reach",
+          titleTwo: "Short Reels", labelTwo: "Discovery",
+          titleThree: "Hook Tests", labelThree: "Attention",
+          titleFour: "Culture Posts", labelFour: "Shares",
+        },
+        {
+          image: WORK + "phone2.png",
+          titleOne: "Static Posts", labelOne: "Announcements and offers",
+          titleTwo: "Carousels", labelTwo: "Depth",
+          titleThree: "Quote Cards", labelThree: "Recall",
+          titleFour: "Offer Creatives", labelFour: "Response",
+        },
+        {
+          image: WORK + "phone3.png",
+          titleOne: "Founder Led", labelOne: "Trust",
+          titleTwo: "Talking Head", labelTwo: "Authority",
+          titleThree: "Behind The Scenes", labelThree: "Access",
+          titleFour: "Opinion Posts", labelFour: "Point of view",
+        },
+        {
+          image: WORK + "phone4.png",
+          titleOne: "Customer Stories", labelOne: "Proof",
+          titleTwo: "Case Studies", labelTwo: "Evidence",
+          titleThree: "Testimonials", labelThree: "Credibility",
+          titleFour: "Before And After", labelFour: "Results",
+        },
+        {
+          image: WORK + "phone5.png",
+          titleOne: "Product Demo", labelOne: "Consideration",
+          titleTwo: "Explainers", labelTwo: "Clarity",
+          titleThree: "Feature Walkthrough", labelThree: "Understanding",
+          titleFour: "FAQ Answers", labelFour: "Objections",
+        },
+      ],
+    },
+  },
+
+  {
+    key: "threeways",
+    n: "Three ways we work",
+    about: "The three engagements, each with two groups of up to five bullets.",
+    fields: [
+      { k: "eyebrow", n: "Small line above", t: "text" },
+      { k: "headA", n: "Heading", t: "text" },
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "ctaText", n: "Button under the cards", t: "text" },
+      { k: "ways", n: "Cards", t: "list", of: [
+        { k: "name", n: "Name", t: "text" },
+        { k: "promise", n: "The promise", t: "text" },
+        { k: "forWho", n: "Who it is for", t: "area" },
+        { k: "outcome", n: "What it produces", t: "area" },
+        { k: "intro", n: "Standfirst", t: "area" },
+        { k: "groupOneTitle", n: "First group — title", t: "text" },
+        { k: "oneItemOne", n: "First group — bullet 1", t: "area" },
+        { k: "oneItemTwo", n: "First group — bullet 2", t: "area" },
+        { k: "oneItemThree", n: "First group — bullet 3", t: "area" },
+        { k: "oneItemFour", n: "First group — bullet 4", t: "area" },
+        { k: "oneItemFive", n: "First group — bullet 5", t: "area" },
+        { k: "groupTwoTitle", n: "Second group — title", t: "text" },
+        { k: "twoItemOne", n: "Second group — bullet 1", t: "area" },
+        { k: "twoItemTwo", n: "Second group — bullet 2", t: "area" },
+        { k: "twoItemThree", n: "Second group — bullet 3", t: "area" },
+        { k: "twoItemFour", n: "Second group — bullet 4", t: "area" },
+        { k: "twoItemFive", n: "Second group — bullet 5", t: "area" },
+      ] },
+    ],
+    d: {
+      eyebrow: "Three ways we work",
+      headA: "Not Packages.",
+      accent: "Three Different Jobs.",
+      ctaText: "Let us talk",
+      ways: [
+        {
+          name: "Presence",
+          promise: "Look real",
+          forWho: "For businesses that are invisible when someone checks them up",
+          outcome: "A page that proves you are a serious business.",
+          intro: "The baseline. Anyone who hears your name, searches you, and lands on your profile finds a business that is clearly running and clearly capable.",
+          groupOneTitle: "Content we make",
+          oneItemOne: "Founder led talking pieces answering the questions you get on every sales call",
+          oneItemTwo: "Text hook reels built from stock or your own footage, no shoot needed",
+          oneItemThree: "Static posts for announcements, offers and the pieces that make a page look considered",
+          oneItemFour: "Carousels for the topics that need more than fifteen seconds",
+          oneItemFive: "Trend formats where they suit the brand, skipped where they do not",
+          groupTwoTitle: "Content we make",
+          twoItemOne: "Calendar planned and approved before anything is produced",
+          twoItemTwo: "Scripting, editing, captions, hashtags and scheduling in your buyer's timezone",
+          twoItemThree: "A daily engagement window so the page never looks abandoned",
+          twoItemFour: "Performance report and a plan for the month after",
+          twoItemFive: "",
+        },
+        {
+          name: "Growth",
+          promise: "Get Found",
+          forWho: "For businesses ready to be found, not just checked",
+          outcome: "Content that earns reach and feeds your ads.",
+          intro: "Everything in Presence, and then the part that compounds. More formats, real testing, and the best performing organic content moving into paid where it works twice.",
+          groupOneTitle: "Added Content",
+          oneItemOne: "Product and service demos shot in your own space",
+          oneItemTwo: "Customer stories, the highest converting format you own",
+          oneItemThree: "UGC style pieces built to run as ad creative",
+          oneItemFour: "Designed static posts carrying data, offers and comparisons",
+          oneItemFive: "Ad variants of anything that performs, same edit, different hook",
+          groupTwoTitle: "Added Activity",
+          twoItemOne: "A weekly direction call where we art direct the shoot with your team",
+          twoItemTwo: "Second platform brought live once the first is working",
+          twoItemThree: "Creator seeding begins, small scale, matched to your category",
+          twoItemFour: "Reporting on which content produced enquiries, not impressions",
+          twoItemFive: "",
+        },
+        {
+          name: "Authority",
+          promise: "Be The Name",
+          forWho: "For businesses that want to own the category conversation",
+          outcome: "The name people bring up before they compare.",
+          intro: "Everything in Growth, plus the work that makes you the reference point. Long form, creators, and a presence across every place your buyer looks.",
+          groupOneTitle: "Added Content",
+          oneItemOne: "Long form founder video on YouTube, the only format still earning years later",
+          oneItemTwo: "Documentary style films about the work, the team, the process",
+          oneItemThree: "Podcast and interview cuts repurposed across every platform",
+          oneItemFour: "Category commentary, the opinion pieces that get you quoted",
+          oneItemFive: "",
+          groupTwoTitle: "Added Activity",
+          twoItemOne: "Influencer and creator programmes, sourced, briefed and managed end to end",
+          twoItemTwo: "Full platform coverage including founder presence on LinkedIn and X",
+          twoItemThree: "Community management and reputation handling",
+          twoItemFour: "Quarterly strategy review with the leadership team",
+          twoItemFive: "",
+        },
+      ],
+    },
+  },
+
+  {
+    key: "metrics",
+    n: "Followers are not a business outcome",
+    about: "The six overlapping number cards. Each card's gradient comes from its position.",
+    fields: [
+      { k: "accent", n: "Heading — orange part", t: "text" },
+      { k: "headA", n: "Heading — rest", t: "text" },
+      { k: "note", n: "Paragraph — before the break", t: "area" },
+      { k: "noteTail", n: "Paragraph — after the break", t: "text" },
+      { k: "cards", n: "Cards", t: "list", of: [
+        { k: "title", n: "Title", t: "text" },
+        { k: "body", n: "Body", t: "area" },
+      ] },
+    ],
+    d: {
+      accent: "Followers Are",
+      headA: "Not A Business Outcome.",
+      note: "Account level engagement, not vanity counts. These are the numbers that move before revenue does, so they are",
+      noteTail: "the ones worth watching.",
+      cards: [
+        { title: "Saves and shares", body: "The only engagement that signals real interest" },
+        { title: "Profile to website", body: "How many went looking for more" },
+        { title: "Direct enquiries", body: "DMs and WhatsApps that started from content" },
+        { title: "Branded search lift", body: "People searching your name after seeing you" },
+        { title: "Creative cost per view", body: "Which organic pieces earned a place in paid" },
+        { title: "Cost per qualified lead", body: "The number every platform reports last" },
+      ],
+    },
+  },
+
+  /* The three bands every page closes with, taken from /sample's schema so
+     they are described once rather than once per page. */
+  borrow("soosocial"),
+  borrow("faqform", { faqKey: "social-content" }),
+  borrow("latestblogs"),
+]);

@@ -10,6 +10,8 @@ export function cleanItems(list) {
       svc: String(x?.svc || "").trim(),
       note: String(x?.note || "").trim(),
       amount: Math.max(0, Math.round(Number(x?.amount || 0))),
+      // Only an invoice fills this in; a proposal line simply carries "".
+      hsn: String(x?.hsn || "").trim(),
     }))
     .filter((x) => x.svc || x.amount);
 }
@@ -22,7 +24,7 @@ export const itemsTotal = (list) =>
 export function docItems(d) {
   const items = cleanItems(d?.items);
   if (items.length) return items;
-  return [{ svc: String(d?.svc || "Service"), note: "", amount: Number(d?.amount || 0) }];
+  return [{ svc: String(d?.svc || "Service"), note: "", amount: Number(d?.amount || 0), hsn: "" }];
 }
 
 // The one-line summary that sits in the Service column and in the PDF prose.

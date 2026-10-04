@@ -5,25 +5,38 @@
 // The two boards keep their own style objects, so the caller hands its own in
 // as `ui` and the rows come out looking native to whichever page drew them.
 import { itemsTotal } from "@/utils/proposalItems";
-import { inr } from "@/utils/leadsMeta";
+import { inr, sacFor } from "@/utils/leadsMeta";
 
-export default function ServiceLines({ items, setItems, svcList, ui, label = "Services on this document" }) {
+export default function ServiceLines({ items, setItems, svcList, ui, label = "Services on this document", withHsn = false }) {
   const row = (i, k, v) => setItems(items.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  // Picking the service fills the SAC in, because that is the one the service
+  // is almost always billed under — it stays a plain field, so a line that
+  // needs a different code can simply be typed over.
+  const pickSvc = (i, v) =>
+    setItems(items.map((x, j) => (j === i ? { ...x, svc: v, hsn: x.hsn || (v ? sacFor(v) : "") } : x)));
   const total = itemsTotal(items);
+  const cols = withHsn ? "1fr 1.3fr .62fr .72fr 34px" : "1.1fr 1.7fr .8fr 34px";
 
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase",
                     color: "#94A3B8", marginBottom: 6 }}>{label}</div>
 
+      {/* The note is the only part of a line that holds a sentence, so it takes
+          the room the amount does not need. */}
       {items.map((it, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1fr 34px", gap: 8, marginBottom: 8 }}>
-          <select className="lp-in" style={ui.input} value={it.svc} onChange={(e) => row(i, "svc", e.target.value)}>
+        <div key={i} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8 }}>
+          <select className="lp-in" style={ui.input} value={it.svc} onChange={(e) => pickSvc(i, e.target.value)}>
             <option value="">— pick a service —</option>
             {svcList.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
           <input className="lp-in" style={ui.input} placeholder="What it covers (optional)"
                  value={it.note || ""} onChange={(e) => row(i, "note", e.target.value)} />
+          {withHsn ? (
+            <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="SAC"
+                   title="The SAC code this line is billed under — it prints on the invoice"
+                   value={it.hsn || ""} onChange={(e) => row(i, "hsn", e.target.value.replace(/[^0-9]/g, ""))} />
+          ) : null}
           <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="Value (₹)"
                  value={it.amount ? String(it.amount) : ""}
                  onChange={(e) => row(i, "amount", Number(e.target.value.replace(/\D/g, "") || 0))} />

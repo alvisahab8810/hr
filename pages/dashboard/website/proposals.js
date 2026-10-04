@@ -50,16 +50,19 @@ const propCode = (p) => `VP-${String(p?._id || "").slice(-4).toUpperCase()}`;
 const leadRef  = (id) => `VL-${String(id || "").slice(-4).toUpperCase()}`;
 
 const advAmt   = (p) => Math.round(((p.amount || 0) * (p.advPct || 0)) / 100);
-/* What "raise the invoices" will actually produce, in words. */
-const invoicePlan = (p) => {
-  const adv = advAmt(p);
-  const months = p.term === "Retainer" ? Math.max(1, Number(p.months || 1)) : 0;
-  const parts = [];
-  if (adv > 0) parts.push(`an advance of ${inr(adv)}`);
-  if (months) parts.push(`${months} monthly invoice${months === 1 ? "" : "s"}`);
-  else if ((p.amount || 0) - adv > 0) parts.push(adv > 0 ? "the balance" : `the full ${inr(p.amount || 0)}`);
-  return parts.join(" and ") || "nothing — the deal value is zero";
-};
+/* A deal bills as one invoice for its full value. It used to raise the whole
+   schedule up front — an advance plus one a month — which left a client holding
+   four invoices for one deal and nobody sure which one a transfer had settled.
+   Anything that comes in part by part is a payment record against this single
+   invoice instead, each with its own receipt (Invoices → payment records). */
+const invoicePlan = (p) =>
+  (p.amount || 0) > 0 ? `one invoice for ${inr(p.amount || 0)}` : "nothing — the deal value is zero";
+
+/* Billing used to wait for someone to find "Mark as accepted" in a panel and
+   click it first, which is a step nobody could see from the board. An approved
+   proposal can be invoiced straight away now; raising the invoice is what marks
+   it accepted. A lost one is still never billed. */
+const canInvoice = (p) => p.approval === "Approved" && p.status !== "Lost";
 const perMonth = (p) => (p.term === "Retainer" && p.months ? Math.round((p.amount || 0) / p.months) : 0);
 const replies  = (p) => (p.followups || []).filter((f) => f.type === "reply").length;
 const lastTouch = (p) => {
@@ -83,7 +86,6 @@ const COLS = [
   { k: "approval", n: "Approval",     on: true,  w: 150 },
   { k: "status",   n: "Status",       on: true,  w: 130 },
   { k: "sent",     n: "Sent on",      on: true,  w: 110 },
-  { k: "agree",    n: "Agreement",    on: true,  w: 150 },
   { k: "fu",       n: "Follow ups",   on: true,  w: 130 },
   { k: "touch",    n: "Last touch",   on: true,  w: 115 },
   { k: "nextfu",   n: "Next follow up", on: true, w: 130 },
@@ -97,7 +99,6 @@ const PANEL_OF = {
   months: "commercials", adv: "commercials", valid: "commercials",
   approval: "approval",
   status: "status", sent: "status",
-  agree: "agreement",
   fu: "followups", touch: "followups", nextfu: "followups",
   owner: "owner",
 };
@@ -279,22 +280,24 @@ export default function ProposalsPage() {
     toast.success("Deleted");
   };
 
-  /* Accepted proposal → the whole billing schedule in one go: the advance now
-     and one invoice a month for the retainer. Then straight to Invoices. */
+  /* Approved proposal → one invoice for the full deal value, and the proposal
+     is marked accepted on the way. Then straight to Invoices, where whatever
+     comes in part by part is recorded against it. */
   const raiseInvoice = async (p) => {
-    if (p.status !== "Accepted") return toast.error("Only an accepted proposal can be invoiced");
+    if (!canInvoice(p)) return toast.error("This one still needs approval before it can be invoiced");
     if (p.invCount) return router.push(`/dashboard/website/invoices?lead=${p.leadId}`);
-    if (!(await confirmDialog(`Raise the invoices for ${propCode(p)} — ${invoicePlan(p)}?`))) return;
+    const also = p.status === "Accepted" ? "" : " It marks the proposal accepted too.";
+    if (!(await confirmDialog(`Raise ${invoicePlan(p)} for ${propCode(p)}?${also}`))) return;
     setBusy(true);
     try {
       const r = await fetch("/api/admin/invoices", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedule: true, proposalId: p._id }),
+        body: JSON.stringify({ schedule: true, single: true, proposalId: p._id }),
       });
       const j = await r.json();
-      if (!j.success) throw new Error(j.message || "Could not raise the invoices");
-      toast.success(`${j.count} invoice${j.count === 1 ? "" : "s"} raised`);
+      if (!j.success) throw new Error(j.message || "Could not raise the invoice");
+      toast.success("Invoice raised");
       setModal(null);
       router.push(`/dashboard/website/invoices?lead=${p.leadId}`);
     } catch (e) {
@@ -606,13 +609,13 @@ export default function ProposalsPage() {
                                   style={{ ...s.iconBtn, marginRight: 4 }} title="Open the record">
                             <i className="bi bi-card-list" style={{ fontSize: 12 }} />
                           </button>
-                          {/* Accepted means the money can be asked for — that button lives here.
-                             Once the invoices exist it stops raising and starts showing them. */}
-                          {p.status === "Accepted" ? (
+                          {/* Approved means the money can be asked for — that button lives here.
+                             Once the invoice exists it stops raising and starts showing it. */}
+                          {canInvoice(p) ? (
                             <button onClick={() => raiseInvoice(p)} disabled={busy}
                                     style={{ ...s.iconBtn, marginRight: 4, borderColor: "#6366F1",
                                              background: p.invCount ? "#fff" : "#6366F1", color: p.invCount ? "#4338CA" : "#fff" }}
-                                    title={p.invCount ? `${p.invCount} invoice${p.invCount === 1 ? "" : "s"} raised — open them` : "Raise the invoices"}>
+                                    title={p.invCount ? "Invoice raised — open it" : "Raise the invoice"}>
                               <i className={`bi ${p.invCount ? "bi-receipt-cutoff" : "bi-receipt"}`} style={{ fontSize: 12 }} />
                             </button>
                           ) : null}
@@ -1102,19 +1105,16 @@ function Status({ p, busy, patch, go, invoice, mail }) {
               <button onClick={() => patch(p._id, { status: "Lost" })} disabled={busy} style={{ ...s.miniBtn, color: "#C42525", borderColor: "#F6D0D0" }}>Mark as lost</button>
             </>
           ) : null}
-          {p.status === "Accepted" ? (
+          {canInvoice(p) ? (
             <>
               <button onClick={() => invoice?.(p)} disabled={busy} style={p.invCount ? s.miniBtn : s.primaryBtnSm}>
                 <i className="bi bi-receipt" style={{ fontSize: 12 }} />
-                {p.invCount ? ` Open its ${p.invCount} invoice${p.invCount === 1 ? "" : "s"}` : " Raise the invoices"}
-              </button>
-              <button onClick={() => go("agreement")} style={s.miniBtn}>
-                <i className="bi bi-file-earmark-check-fill" style={{ fontSize: 12 }} /> Agreement
+                {p.invCount ? " Open its invoice" : " Raise the invoice"}
               </button>
               <div style={{ width: "100%", fontSize: 12, color: "#0F8A54", fontWeight: 700, marginTop: 4 }}>
-                Accepted — the lead moves to Won once the advance is received.
-                {p.invCount ? " Its invoices are already raised; each one is still a draft until you send it."
-                  : ` Raising the invoices makes ${invoicePlan(p)} — all as drafts, nothing goes out on its own.`}
+                {p.invCount
+                  ? "Its invoice is raised and stays a draft until you send it. Record part payments against it as they come in; the lead moves to Won once the advance is received."
+                  : `This raises ${invoicePlan(p)}, as a draft — nothing goes out on its own. Part payments are recorded against it.${p.status === "Accepted" ? "" : " It marks the proposal accepted at the same time."}`}
               </div>
             </>
           ) : null}

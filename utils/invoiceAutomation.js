@@ -217,3 +217,38 @@ export function startInvoiceAutomation() {
     runInvoiceAutomation().catch((e) => console.error("invoice automation:", e?.message));
   }, 45000);
 }
+
+/* When the next automatic mail for this one invoice is due, for the board to
+   print beside it. It does not invert the ladder — it walks the days forward
+   asking dueRung the same question chase() asks of today, so what the table
+   promises and what the sender actually does can never drift apart. */
+export function nextInvoiceMail(inv, b, today = istDay()) {
+  if (!inv || !b) return null;
+  if (inv.disputed) return { on: "", key: "hold", label: "On hold — disputed" };
+  if (SETTLED.includes(inv.status)) return null;
+  if (inv.createdAt && new Date(inv.createdAt) < LIVE_FROM) return null;
+
+  // The first copy of a Draft, which may still be waiting for its issue date.
+  if (inv.status === "Draft") {
+    if (!b.autoSend || hasKey(inv, "invoice")) return null;
+    const ahead = inv.issued ? daysTo(inv.issued, today) : 0;
+    return { on: ahead > 0 ? inv.issued : today, key: "invoice", label: rungLabel("invoice") };
+  }
+
+  if (!b.dueReminders || !inv.due) return null;
+  if (invoiceLeft(inv) <= 0) return null;
+
+  const every = Math.max(1, Number(b.afterEvery || 7));
+  const max = Math.max(0, Number(b.afterMax || 0));
+  // Far enough to cover the last chase the ladder will ever send, no further.
+  const span = Math.min(730, Math.max(0, daysTo(inv.due, today)) + every * max + 1);
+  const dayAt = (n) => new Date(Date.parse(`${today}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+  for (let n = 0; n <= span; n += 1) {
+    if (n === 0 && mailedToday(inv, today)) continue;
+    const rung = dueRung(inv, b, dayAt(n));
+    if (!rung || hasKey(inv, rung.key)) continue;
+    return { on: dayAt(n), key: rung.key, label: rungLabel(rung.key), days: rung.days };
+  }
+  return null;
+}

@@ -2,7 +2,7 @@
 // A document only leaves the building when its status is moved to "Sent", so
 // both helpers are called from that one place in the PATCH routes.
 import { mailTransport, MAIL_USER } from "@/utils/mailer";
-import { docAttachment } from "@/utils/docPdf";
+import { docAttachment, loadCompany } from "@/utils/docPdf";
 
 const BRAND = "#5138ee";
 const INK = "#04000b";
@@ -47,8 +47,8 @@ const code = (p, pre) => `${pre}-${String(p?._id || "").slice(-4).toUpperCase()}
 
 /* ── the drafts ───────────────────────────────────────────────────────────
    Each returns what the compose box opens with: the client's address, the
-   subject and the body. The body is plain HTML the sender can edit; it is
-   dropped into the branded shell on the way out. */
+   subject and the body. The body is dropped into the branded shell on the
+   way out. */
 
 const first = (n) => String(n || "there").trim().split(/\s+/)[0] || "there";
 
@@ -58,47 +58,70 @@ function detailTable(rows) {
   </table>`;
 }
 
+/* The compose box belongs to salespeople, not to anyone who writes HTML, so a
+   draft comes back as ordered parts rather than one blob of markup. The prose
+   parts open in the same rich editor the rest of the dashboard uses; the
+   figures carry `lock` and are shown read-only, because they are the
+   document's own numbers and retyping them in the mail is how a mail ends up
+   disagreeing with the PDF attached to it. `body` is still those parts joined,
+   so anything that sends a draft untouched carries on working. */
+const say = (k, label, html) => (html ? { k, label, html } : null);
+const figures = (k, label, html) => (html ? { k, label, html, lock: true } : null);
+
+function draft(base, parts) {
+  const list = parts.filter(Boolean);
+  return { ...base, parts: list, body: list.map((x) => x.html).join("\n") };
+}
+
 export function proposalDraft(p) {
   const months = Number(p?.months || 1);
   const adv = Number(p?.advPct || 0);
-  return {
-    to: p?.em || "",
-    subject: `Your proposal${p?.co ? ` — ${p.co}` : ""}`,
-    fileName: `${code(p, "VP")}.pdf`,
-    body: `<p>Hi ${first(p?.contact)},</p>
-<p>Thanks for your time. Here's the proposal we discussed${p?.co ? ` for <strong>${p.co}</strong>` : ""}. The full document is attached as a PDF.</p>
-${detailTable([
-  ["Service", p?.svc || "—"],
-  ["Value", rupee(p?.amount)],
-  ["Terms", `${p?.term || "Retainer"}${months > 1 ? ` · ${months} months` : ""}`],
-  adv ? ["Advance", `${adv}%`] : null,
-  p?.validTill ? ["Valid till", p.validTill] : null,
-])}
-${p?.notes ? `<p>${String(p.notes).replace(/\n/g, "<br/>")}</p>` : ""}
-<p>Reply to this mail with a yes and we'll get started, or tell us what you'd like changed.</p>`,
-  };
+  return draft(
+    {
+      to: p?.em || "",
+      subject: `Your proposal${p?.co ? ` — ${p.co}` : ""}`,
+      fileName: `${code(p, "VP")}.pdf`,
+    },
+    [
+      say("open", "Opening", `<p>Hi ${first(p?.contact)},</p>
+<p>Thanks for your time. Here's the proposal we discussed${p?.co ? ` for <strong>${p.co}</strong>` : ""}. The full document is attached as a PDF.</p>`),
+      figures("figures", "What you quoted", detailTable([
+        ["Service", p?.svc || "—"],
+        ["Value", rupee(p?.amount)],
+        ["Terms", `${p?.term || "Retainer"}${months > 1 ? ` · ${months} months` : ""}`],
+        adv ? ["Advance", `${adv}%`] : null,
+        p?.validTill ? ["Valid till", p.validTill] : null,
+      ])),
+      p?.notes ? say("note", "Your note", `<p>${String(p.notes).replace(/\n/g, "<br/>")}</p>`) : null,
+      say("close", "Closing", "<p>Reply to this mail with a yes and we'll get started, or tell us what you'd like changed.</p>"),
+    ]
+  );
 }
 
 export function agreementDraft(p) {
   const g = p?.agreement || {};
   const months = Number(p?.months || 1);
-  return {
-    to: p?.em || "",
-    subject: `${g.title || "Agreement"} for signature${p?.co ? ` — ${p.co}` : ""}`,
-    fileName: `${code(p, "VA")}.pdf`,
-    body: `<p>Hi ${first(p?.contact)},</p>
-<p>Thanks for accepting the proposal. Here is the agreement${p?.co ? ` for <strong>${p.co}</strong>` : ""}, attached as a PDF.</p>
-${detailTable([
-  ["Agreement no.", code(p, "VA")],
-  ["Service", p?.svc || "—"],
-  ["Value", rupee(p?.amount)],
-  ["Terms", `${p?.term || "Retainer"}${months > 1 ? ` · ${months} months` : ""}`],
-  g.startDate ? ["Starts on", g.startDate] : null,
-  g.endDate ? ["Ends on", g.endDate] : null,
-])}
-${g.note ? `<p>${String(g.note).replace(/\n/g, "<br/>")}</p>` : ""}
-<p>Please go through it, sign the client block and send a scanned copy back to this mail. Tell us if anything needs changing.</p>`,
-  };
+  return draft(
+    {
+      to: p?.em || "",
+      subject: `${g.title || "Agreement"} for signature${p?.co ? ` — ${p.co}` : ""}`,
+      fileName: `${code(p, "VA")}.pdf`,
+    },
+    [
+      say("open", "Opening", `<p>Hi ${first(p?.contact)},</p>
+<p>Thanks for accepting the proposal. Here is the agreement${p?.co ? ` for <strong>${p.co}</strong>` : ""}, attached as a PDF.</p>`),
+      figures("figures", "What the agreement says", detailTable([
+        ["Agreement no.", code(p, "VA")],
+        ["Service", p?.svc || "—"],
+        ["Value", rupee(p?.amount)],
+        ["Terms", `${p?.term || "Retainer"}${months > 1 ? ` · ${months} months` : ""}`],
+        g.startDate ? ["Starts on", g.startDate] : null,
+        g.endDate ? ["Ends on", g.endDate] : null,
+      ])),
+      g.note ? say("note", "Your note", `<p>${String(g.note).replace(/\n/g, "<br/>")}</p>`) : null,
+      say("close", "Closing", "<p>Please go through it, sign the client block and send a scanned copy back to this mail. Tell us if anything needs changing.</p>"),
+    ]
+  );
 }
 
 export function invoiceDraft(inv) {
@@ -108,37 +131,42 @@ export function invoiceDraft(inv) {
   const left = Math.max(0, total - paid);
   const part = paid > 0 && left > 0;
   const full = paid > 0 && left <= 0;
-  return {
-    to: inv?.em || "",
-    subject: part
-      ? `Part payment received${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(paid)} of ${rupee(total)}`
-      : full
-        ? `Paid in full — invoice from Viralon${inv?.co ? ` · ${inv.co}` : ""}`
-        : `Invoice from Viralon${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(total)}`,
-    fileName: `INV-${String(inv?._id || "").slice(-4).toUpperCase()}.pdf`,
-    body: `<p>Hi ${first(inv?.contact)},</p>
+  return draft(
+    {
+      to: inv?.em || "",
+      subject: part
+        ? `Part payment received${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(paid)} of ${rupee(total)}`
+        : full
+          ? `Paid in full — invoice from Viralon${inv?.co ? ` · ${inv.co}` : ""}`
+          : `Invoice from Viralon${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(total)}`,
+      fileName: `INV-${String(inv?._id || "").slice(-4).toUpperCase()}.pdf`,
+    },
+    [
+      say("open", "Opening", `<p>Hi ${first(inv?.contact)},</p>
 <p>${part
   ? `Thank you — we have received ${rupee(paid)} against your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""}. The updated invoice is attached.`
   : full
     ? `Thank you — your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""} is now settled in full. The receipted invoice is attached.`
-    : `Here is your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""}, attached as a PDF.`}</p>
-${detailTable([
-  ["For", inv?.svc || "—"],
-  ["Type", inv?.kind || "Invoice"],
-  ["Amount", rupee(inv?.amount)],
-  inv?.gstPct ? [`GST (${inv.gstPct}%)`, rupee(gst)] : null,
-  ["Invoice total", rupee(total)],
-  paid ? ["Received so far", rupee(paid)] : null,
-  paid ? [left > 0 ? "Balance due" : "Balance", rupee(left)] : null,
-  inv?.issued ? ["Issued", inv.issued] : null,
-  inv?.due ? ["Due by", inv.due] : null,
-])}
-${(inv?.payments || []).length
-  ? detailTable((inv.payments).map((p) => [`Received ${p.on || ""}${p.method ? ` · ${p.method}` : ""}${p.ref ? ` · ${p.ref}` : ""}`, rupee(p.amount)]))
-  : ""}
-${inv?.notes ? `<p>${String(inv.notes).replace(/\n/g, "<br/>")}</p>` : ""}
-${full ? "" : "<p>Once the transfer is done, reply with the reference and we'll mark it received.</p>"}`,
-  };
+    : `Here is your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""}, attached as a PDF.`}</p>`),
+      figures("figures", "What is on the invoice", detailTable([
+        ["For", inv?.svc || "—"],
+        ["Type", inv?.kind || "Invoice"],
+        ["Amount", rupee(inv?.amount)],
+        inv?.gstPct ? [`GST (${inv.gstPct}%)`, rupee(gst)] : null,
+        ["Invoice total", rupee(total)],
+        paid ? ["Received so far", rupee(paid)] : null,
+        paid ? [left > 0 ? "Balance due" : "Balance", rupee(left)] : null,
+        inv?.issued ? ["Issued", inv.issued] : null,
+        inv?.due ? ["Due by", inv.due] : null,
+      ])),
+      (inv?.payments || []).length
+        ? figures("paid", "Payments received", detailTable((inv.payments).map((p) =>
+            [`Received ${p.on || ""}${p.method ? ` · ${p.method}` : ""}${p.ref ? ` · ${p.ref}` : ""}`, rupee(p.amount)])))
+        : null,
+      inv?.notes ? say("note", "Your note", `<p>${String(inv.notes).replace(/\n/g, "<br/>")}</p>`) : null,
+      full ? null : say("close", "Closing", "<p>Once the transfer is done, reply with the reference and we'll mark it received.</p>"),
+    ]
+  );
 }
 
 const DRAFT = { proposal: proposalDraft, agreement: agreementDraft, invoice: invoiceDraft };
@@ -149,7 +177,10 @@ export function docDraft(kind, doc) {
 }
 
 /* Send what the compose box holds, with the document attached. */
-export function sendDocMail(kind, doc, { to, cc, subject, body, attachments } = {}) {
+export async function sendDocMail(kind, doc, { to, cc, subject, body, attachments } = {}) {
+  // The PDF prints our GSTIN, bank line and UPI out of Settings, so they have
+  // to be in hand before it is drawn.
+  await loadCompany();
   const d = docDraft(kind, doc);
   return send({
     to: to || d.to,

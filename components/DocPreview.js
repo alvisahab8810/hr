@@ -4,7 +4,7 @@
 // It renders the sheet as it will print, and "Save as PDF" hands the same
 // markup to a clean window and calls print — no PDF library, no new dependency,
 // and the browser's own Save-as-PDF does the rest.
-import { inr, fmtD } from "@/utils/leadsMeta";
+import { inr, fmtD, sacFor } from "@/utils/leadsMeta";
 import { docItems } from "@/utils/proposalItems";
 
 // Mutable on purpose: Settings pushes the saved branding in through
@@ -170,7 +170,15 @@ export function docHtml(kind, d) {
     ? [["Invoice no.", code], ["Issued", fmtD(d.issued)], ["Due", fmtD(d.due)], ["Status", d.status || "Draft"]]
     : [["Proposal no.", code], ["Raised", fmtD(d.createdAt)], ["Valid till", d.validTill ? fmtD(d.validTill) : "—"], ["Status", d.status || "Draft"]];
 
-  const rows = docItems(d).map((it, i) => [it.svc || "Service", it.note || (i === 0 ? forLine : ""), inr(it.amount || 0)]);
+  // An invoice carries the SAC against every line; a proposal is not a tax
+  // document, so the column is left off it. A line saved before the column
+  // existed falls back to the code its service is billed under.
+  const rows = docItems(d).map((it, i) => [
+    it.svc || "Service",
+    it.note || (i === 0 ? forLine : ""),
+    ...(isInv ? [it.hsn || sacFor(it.svc)] : []),
+    inr(it.amount || 0),
+  ]);
 
   const paid = isInv ? (d.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0) : 0;
   const half = Math.round(gst / 2);
@@ -216,9 +224,9 @@ export function docHtml(kind, d) {
   </div>
 
   <table class="vp-items">
-    <thead><tr><th>Item</th><th>Details</th><th class="r">Amount</th></tr></thead>
+    <thead><tr><th>Item</th><th>Details</th>${isInv ? "<th>HSN / SAC</th>" : ""}<th class="r">Amount</th></tr></thead>
     <tbody>
-      ${rows.map((r) => `<tr><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td class="r">${esc(r[2])}</td></tr>`).join("")}
+      ${rows.map((r) => `<tr><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td>${isInv ? `<td>${esc(r[2])}</td>` : ""}<td class="r">${esc(r[r.length - 1])}</td></tr>`).join("")}
     </tbody>
   </table>
 

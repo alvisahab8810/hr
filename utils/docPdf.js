@@ -3,14 +3,38 @@
 // works the same on the box as it does here).
 import { jsPDF } from "jspdf";
 import { docItems } from "@/utils/proposalItems";
+import { sacFor } from "@/utils/leadsMeta";
 
+// The printed-on-screen copy (components/DocPreview.js) has always carried the
+// GSTIN, the bank line and the UPI handle out of Settings, while this one — the
+// PDF that is actually attached to the mail — was hard-coded and carried none
+// of it. A client's accounts team works off the attachment, so it reads the
+// same settings now; the values below are only the fallback for a fresh
+// install, and loadCompany() is awaited before anything is drawn.
 const COMPANY = {
   name: "Viralon",
   tag: "Digital marketing, built to perform",
   email: "info@viralon.in",
   site: "www.viralon.in",
   place: "Pune, Maharashtra",
+  state: "",
+  gstin: "",
+  pan: "",
+  bank: "",
+  ifsc: "",
+  upi: "",
 };
+
+export async function loadCompany() {
+  try {
+    const { getSettings } = await import("@/pages/api/admin/settings");
+    const c = (await getSettings())?.company || {};
+    for (const k of Object.keys(COMPANY)) if (c[k]) COMPANY[k] = c[k];
+  } catch {
+    // Settings unreadable: the fallback above still prints a correct document.
+  }
+  return COMPANY;
+}
 
 const INDIGO = [67, 56, 202];
 const INK = [15, 23, 42];
@@ -66,6 +90,11 @@ function head(k, title, meta) {
   doc.text(COMPANY.tag, M, st.y + 10);
   doc.text(`${COMPANY.email}  ·  ${COMPANY.site}`, M, st.y + 15);
   doc.text(COMPANY.place, M, st.y + 19.5);
+  // Our own GSTIN and PAN belong on the face of the document — without the
+  // first of them it is not a tax invoice at all, only a bill.
+  const ids = [COMPANY.gstin ? `GSTIN ${COMPANY.gstin}` : "", COMPANY.pan ? `PAN ${COMPANY.pan}` : ""]
+    .filter(Boolean).join("   ·   ");
+  if (ids) doc.text(ids, M, st.y + 24);
 
   set(17, true, INK);
   doc.text(title, RIGHT, st.y + 5, { align: "right" });
@@ -78,7 +107,7 @@ function head(k, title, meta) {
     doc.text(String(b), RIGHT, y, { align: "right" });
     y += 4.6;
   }
-  st.y = Math.max(st.y + 24, y) + 2;
+  st.y = Math.max(st.y + (ids ? 28 : 24), y) + 2;
   k.rule(3);
 }
 
@@ -115,18 +144,28 @@ function itemBar(k, left, mid, right) {
 }
 
 // The same bar, but one row per service — a proposal can carry several.
-function itemBars(k, rows, mid) {
+// `hsn` adds the SAC column, which only an invoice needs: a proposal is not a
+// tax document and the code would be noise on it.
+function itemBars(k, rows, mid, hsn = false) {
   const { doc, st, set } = k;
+  const SAC_X = RIGHT - 42;   // the SAC sits between the name and the value
   doc.setFillColor(238, 242, 255);
   doc.rect(M, st.y, RIGHT - M, 9, "F");
   set(8, true, INDIGO);
   doc.text("ENGAGEMENT", M + 3, st.y + 6);
+  if (hsn) doc.text("HSN / SAC", SAC_X, st.y + 6);
   doc.text("VALUE", RIGHT - 3, st.y + 6, { align: "right" });
   st.y += 13;
   rows.forEach((r, i) => {
     set(11, true, INK);
     doc.text(String(r.svc || "Service"), M + 3, st.y);
     doc.text(money(r.amount), RIGHT - 3, st.y, { align: "right" });
+    if (hsn) {
+      // An invoice raised before the column existed still prints a code: the
+      // service it was sold under decides it, exactly as the form would have.
+      set(9.5, false, GREY);
+      doc.text(String(r.hsn || sacFor(r.svc)), SAC_X, st.y);
+    }
     st.y += 5;
     set(9, false, GREY);
     doc.text(String(r.note || (i === 0 ? mid : "") || ""), M + 3, st.y);
@@ -273,20 +312,25 @@ function invoicePdf(inv) {
   const gst = Math.round(((inv.amount || 0) * (inv.gstPct || 0)) / 100);
   const total = Math.round(inv.amount || 0) + gst;
 
-  head(k, "Invoice", [
+  const b = inv.billTo || {};
+  // Without our own GSTIN on it the document cannot call itself a tax invoice,
+  // so it says what it actually is until Settings carries one.
+  head(k, COMPANY.gstin ? "Tax Invoice" : "Invoice", [
     ["Invoice no.", `INV-${short(inv._id)}`],
     ["Issued", inv.issued ? dstr(inv.issued) : dstr(new Date())],
     ["Due by", inv.due ? dstr(inv.due) : "—"],
+    // Which state the service is supplied in decides CGST+SGST against IGST,
+    // so the invoice has to say it rather than leave the reader to work it out.
+    ["Place of supply", b.state || COMPANY.state || "—"],
     ["Status", inv.status || "Sent"],
   ]);
-  const b = inv.billTo || {};
   const town = [b.city, b.state, b.pincode].filter(Boolean).join(", ");
   party(k, "Billed to", inv.co || inv.contact || "—", [
     inv.contact, inv.em, inv.ph, b.address, town,
     b.gstin ? `GSTIN ${b.gstin}` : "",
     inv.poRef ? `PO / Ref ${inv.poRef}` : "",
   ]);
-  itemBars(k, docItems(inv), inv.kind || "Invoice");
+  itemBars(k, docItems(inv), inv.kind || "Invoice", true);
   const paid = (inv.payments || []).reduce((n, p) => n + Number(p.amount || 0), 0);
   const left = Math.max(0, total - paid);
   kvTable(
@@ -324,6 +368,33 @@ function invoicePdf(inv) {
     k.set(8, true, GREY); k.doc.text("NOTES", M, k.st.y); k.st.y += 5;
     k.para(inv.notes);
   }
+
+  // Where the money actually goes. The on-screen copy has always printed this;
+  // the attachment is the one the client pays from, so it prints it too.
+  const bankLine = [COMPANY.bank, COMPANY.ifsc].filter(Boolean).join("  ·  ");
+  if (bankLine || COMPANY.upi) {
+    k.st.y += 3;
+    k.set(8, true, GREY); k.doc.text("HOW TO PAY", M, k.st.y); k.st.y += 5;
+    k.set(9.5, false, INK);
+    if (bankLine) { k.room(6); k.doc.text(bankLine, M, k.st.y); k.st.y += 4.6; }
+    if (COMPANY.upi) { k.room(6); k.doc.text(`UPI  ${COMPANY.upi}`, M, k.st.y); k.st.y += 4.6; }
+  }
+
+  // Rule 46 asks an invoice to say whether the tax is payable the other way
+  // round, and to be signed. Neither was on it.
+  k.st.y += 4;
+  k.set(8.5, false, GREY);
+  k.room(10);
+  k.doc.text("Tax payable on reverse charge: No", M, k.st.y);
+  k.st.y += 10;
+  k.room(16);
+  k.set(9.5, true, INK);
+  k.doc.text(`For ${COMPANY.name}`, RIGHT, k.st.y, { align: "right" });
+  k.st.y += 12;
+  k.set(8.5, false, GREY);
+  k.doc.text("Authorised signatory", RIGHT, k.st.y, { align: "right" });
+  k.st.y += 4;
+
   foot(k, "Please quote the invoice number with the transfer.");
   return k.doc;
 }

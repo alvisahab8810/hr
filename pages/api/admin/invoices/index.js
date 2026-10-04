@@ -9,7 +9,10 @@ import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { salesId } from "@/utils/salesAuth";
 import { ownsLead } from "@/utils/leadScope";
-import { startInvoiceAutomation } from "@/utils/invoiceAutomation";
+import { startInvoiceAutomation, nextInvoiceMail, istDay, nextRunAt } from "@/utils/invoiceAutomation";
+import { getSettings } from "@/pages/api/admin/settings";
+import { rungLabel } from "@/utils/invoiceMail";
+import { sacFor } from "@/utils/leadsMeta";
 
 const addDays = (d, n) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -31,17 +34,27 @@ export default async function handler(req, res) {
         ? (await Query.find({ salespersonId: mine }).select("_id").lean()).map((l) => l._id)
         : null;
       const scope = own ? { leadId: { $in: own } } : {};
-      const [invoices, proposals, leads] = await Promise.all([
+      const [invoices, proposals, leads, settings] = await Promise.all([
         Invoice.find(scope).sort({ createdAt: -1 }).lean(),
         Proposal.find(scope).select("co contact em ph svc amount term months advPct status leadId owner").lean(),
         Query.find(own ? { salespersonId: mine } : {}).select("name businessName email phone").lean(),
+        getSettings(),
       ]);
+      // What the sender will do next with each invoice, worked out here because
+      // the ladder lives server-side with the settings it reads.
+      const b = settings.billing || {};
+      const today = istDay();
       return res.status(200).json({
         success: true,
+        senderNext: nextRunAt(b),
         data: invoices.map((i) => ({
           ...i, _id: String(i._id),
           leadId: String(i.leadId),
           proposalId: i.proposalId ? String(i.proposalId) : "",
+          nextMail: nextInvoiceMail(i, b, today),
+          // The rungs already gone out, in words, so the board can show the
+          // whole track and not just the next step.
+          mailTrack: (i.mailsSent || []).map((r) => ({ label: rungLabel(r.key), at: r.at })),
         })),
         proposals: proposals.map((p) => ({ ...p, _id: String(p._id), leadId: String(p.leadId) })),
         leads: leads.map((l) => ({ ...l, _id: String(l._id) })),
@@ -58,10 +71,11 @@ export default async function handler(req, res) {
         if (!p) return res.status(404).json({ success: false, message: "Proposal not found" });
         if (!(await ownsLead(req, res, p.leadId))) return;
 
-        // The same gate the board shows: nothing is billed off a proposal the
-        // client has not accepted yet.
-        if (p.status !== "Accepted") {
-          return res.status(400).json({ success: false, message: "Only an accepted proposal can be invoiced" });
+        // The same gate the board shows. Acceptance is no longer a step of its
+        // own — raising the invoice is the acceptance, so the only thing asked
+        // of a proposal here is that it was approved and not lost.
+        if (p.approval !== "Approved" || p.status === "Lost") {
+          return res.status(400).json({ success: false, message: "Only an approved proposal can be invoiced" });
         }
 
         const already = await Invoice.countDocuments({ proposalId: p._id });
@@ -86,7 +100,10 @@ export default async function handler(req, res) {
         const slice = (part) => {
           const tot = p.amount || 0;
           if (!tot || lines.length < 2) return [];
-          const out = lines.map((it) => ({ svc: it.svc, note: it.note || "", amount: Math.round((Number(it.amount || 0) * part) / tot) }));
+          const out = lines.map((it) => ({
+            svc: it.svc, note: it.note || "", hsn: it.hsn || sacFor(it.svc),
+            amount: Math.round((Number(it.amount || 0) * part) / tot),
+          }));
           // Rounding must not lose or invent a rupee — the last line absorbs it.
           const off = part - out.reduce((n, x) => n + x.amount, 0);
           if (off) out[out.length - 1].amount += off;
@@ -118,6 +135,16 @@ export default async function handler(req, res) {
         }
 
         const made = await Invoice.insertMany(docs);
+
+        // Billing a proposal is the moment it was accepted, so the board does
+        // not need anyone to go and say so separately afterwards.
+        if (p.status !== "Accepted") {
+          await Proposal.findByIdAndUpdate(p._id, {
+            $set: { status: "Accepted" },
+            $push: { followups: { at: new Date(), type: "note", text: "Accepted — invoice raised" } },
+          }).catch(() => {});
+        }
+
         await Query.findByIdAndUpdate(p.leadId, {
           $push: { events: { at: new Date(), type: "invoice", text: `${made.length} invoice${made.length === 1 ? "" : "s"} raised` } },
         }).catch(() => {});

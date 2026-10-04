@@ -5,6 +5,14 @@ import dbConnect from "@/utils/dbConnect";
 import LandingPage from "@/models/LandingPage";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { TEMPLATE_KEYS, SECTION_TYPES } from "@/utils/landingTemplates";
+import { cleanSections } from "@/utils/sampleSchema";
+import { cleanSeo } from "@/utils/landingSeo";
+
+// The builder makes "sample" pages — the /sample bands, in any order, with
+// their copy and images filled in. The five older templates are still accepted
+// so a page saved under one of them keeps working, but nothing creates them
+// any more.
+const TEMPLATES_OK = ["sample", ...TEMPLATE_KEYS];
 
 export function slugify(str) {
   return String(str || "")
@@ -26,6 +34,10 @@ export const RESERVED_SLUGS = new Set([
   "our-work", "our-services", "thank-you", "your-brands-bff",
   "editor", "test", "posts", "dashboard", "employee", "admin", "login",
   "landing-preview",
+  // The rest of the website's own static routes. A page saved under any of
+  // these would be shadowed by the real one and silently never render.
+  "sample", "brand", "search", "paid-ads", "social-content", "website-and-cro",
+  "analytics-and-tracking", "case-study",
 ]);
 
 const str = (v) => String(v ?? "").trim();
@@ -164,7 +176,13 @@ function sanitizeSection(sec) {
   return { type: sec.type, data };
 }
 
-function sanitizeContent(c = {}) {
+function sanitizeContent(c = {}, template) {
+  // A sample page is nothing but its band list, and every band is cleaned
+  // against the shared descriptors in utils/sampleSchema.js — the same file
+  // the website renders from, so a field the website does not know about
+  // cannot be stored and a field it needs cannot be dropped.
+  if (template === "sample") return { sections: cleanSections(c.sections) };
+
   const hero = c.hero && typeof c.hero === "object" ? c.hero : {};
   const sections = (Array.isArray(c.sections) ? c.sections : [])
     .map(sanitizeSection)
@@ -185,13 +203,16 @@ function sanitizeContent(c = {}) {
 }
 
 export function sanitizeBody(body) {
+  const template = TEMPLATES_OK.includes(body.template) ? body.template : "sample";
   return {
     title: str(body.title),
-    template: TEMPLATE_KEYS.includes(body.template) ? body.template : TEMPLATE_KEYS[0],
-    seoTitle: str(body.seoTitle),
-    seoDescription: str(body.seoDescription),
-    seoKeywords: str(body.seoKeywords),
-    content: sanitizeContent(body.content || {}),
+    template,
+    // Meta tags, canonical, Open Graph, robots and the JSON-LD blocks all come
+    // back cleaned by utils/landingSeo.js — the same file the website reads
+    // them with, so a field one side knows about cannot go missing on the
+    // other. A schema block that is not valid JSON is dropped there.
+    ...cleanSeo(body),
+    content: sanitizeContent(body.content || {}, template),
     status: body.status === "published" ? "published" : "draft",
     order: Number.isFinite(Number(body.order)) ? Number(body.order) : 0,
   };

@@ -155,6 +155,22 @@ export default function RichFieldEditor({ value, onChange, placeholder, minHeigh
         </div>
       )}
       <EditorContent editor={editor} style={{ minHeight }} className="rfe-content" />
+
+      {/* The editor used to be dressed by whichever page hosted it, so it only
+          looked right on the three forms that happened to carry these rules.
+          It brings them along now, and anywhere else it is dropped in — the
+          mail compose box, say — gets the same box. */}
+      <style jsx global>{`
+        .rfe-wrap:focus-within { border-color: #6366F1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.08); }
+        .rfe-content .ProseMirror {
+          padding: 12px 15px; outline: none; font-size: 13.5px; color: #1E293B;
+          line-height: 1.6; min-height: inherit;
+        }
+        .rfe-content .ProseMirror p { margin: 0 0 6px; }
+        .rfe-content .ProseMirror ul, .rfe-content .ProseMirror ol { margin: 0 0 6px; padding-left: 22px; }
+        .rfe-content .ProseMirror li { margin-bottom: 3px; }
+        .rfe-content .ProseMirror li p { margin: 0; }
+      `}</style>
     </div>
   );
 }

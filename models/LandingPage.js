@@ -8,16 +8,44 @@
 
 import mongoose from "mongoose";
 
+// Explicit subdocument schema: a field named "type" would otherwise be read as
+// a discriminator key and blow up on $set (same trick as models/Blog.js).
+const SchemaBlockSchema = new mongoose.Schema(
+  {
+    type: { type: String, default: "WebPage" },
+    content: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const LandingPageSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },              // internal name + H1 fallback
     slug: { type: String, required: true, unique: true }, // URL path: viralon.in/<slug>
     template: { type: String, required: true, default: "spotlight" }, // key from the template registry
 
-    // SEO meta
+    // SEO meta. The same set the blog editor has — see utils/landingSeo.js,
+    // which owns the defaults, the cleaning and every fallback the <head>
+    // uses, in both repos.
     seoTitle: { type: String, default: "" },
     seoDescription: { type: String, default: "" },
     seoKeywords: { type: String, default: "" },
+    canonical: { type: String, default: "" },
+
+    // Open Graph / Twitter: what a pasted link turns into.
+    ogTitle: { type: String, default: "" },
+    ogDescription: { type: String, default: "" },
+    ogImage: { type: String, default: "" },
+    twitterCard: { type: String, default: "summary_large_image" },
+
+    // Robots directives. Both default to the same value, which is what the
+    // site sends for a page that has never been edited.
+    metaRobots: { type: String, default: "index, follow, max-image-preview:large, max-snippet:-1" },
+    xRobotsTag: { type: String, default: "index, follow, max-image-preview:large, max-snippet:-1" },
+
+    // JSON-LD blocks, printed into the page in order. A page with questions
+    // on it also gets a generated FAQPage block, so that one is not stored.
+    schemas: { type: [SchemaBlockSchema], default: [] },
 
     // Per-template content object (hero, intro, features, stats, gallery,
     // faqs, quote, closing, showLeadForm…). Shape documented in

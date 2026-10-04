@@ -1,12 +1,19 @@
 // components/MailCompose.js — the compose box a document goes out from.
 // It opens on the draft the server builds, lets the sender change the address,
-// the subject and the body, shows the PDF that will ride along, and sends.
-import { useEffect, useState } from "react";
+// the subject and the wording, shows the PDF that will ride along, and sends.
+//
+// The people who send these are salespeople, so nothing here asks anyone to
+// write HTML: the draft arrives as parts (utils/docMail.js), the prose ones
+// open in the same rich editor the rest of the dashboard uses, and the figures
+// are shown read-only so the mail can never disagree with the attached PDF.
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import MailAttach from "@/components/MailAttach";
+import RichFieldEditor from "@/components/RichFieldEditor";
 
 export default function MailCompose({ url, kind, markSent, title, extra, onPreview, onClose, onSent }) {
-  const [f, setF] = useState({ to: "", subject: "", body: "" });
+  const [f, setF] = useState({ to: "", subject: "" });
+  const [parts, setParts] = useState([]);
   const [file, setFile] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -26,7 +33,14 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
         const j = await r.json();
         if (!j.success) throw new Error(j.message || "Could not build the mail");
         if (dead) return;
-        setF({ to: j.draft.to || "", subject: j.draft.subject || "", body: j.draft.body || "" });
+        setF({ to: j.draft.to || "", subject: j.draft.subject || "" });
+        // An older route that only knows about `body` still composes, as one
+        // editable block.
+        setParts(
+          Array.isArray(j.draft.parts) && j.draft.parts.length
+            ? j.draft.parts
+            : [{ k: "body", label: "Message", html: j.draft.body || "" }]
+        );
         setFile(j.draft.fileName || "");
       } catch (e) {
         toast.error(e.message);
@@ -44,6 +58,11 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
     return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
   }, [onClose]);
 
+  // What actually goes out: the parts in the order the server put them in.
+  const body = useMemo(() => parts.map((p) => p.html || "").join("\n"), [parts]);
+
+  const setPart = (i, html) => setParts((ps) => ps.map((p, n) => (n === i ? { ...p, html } : p)));
+
   const send = async () => {
     if (!f.to.trim()) return toast.error("Add an address to send it to");
     setBusy(true);
@@ -52,7 +71,7 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ kind, markSent: !!markSent, ...(extra || {}), ...f, files }),
+        body: JSON.stringify({ kind, markSent: !!markSent, ...(extra || {}), ...f, body, files }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.message || "The mail did not go out");
@@ -96,21 +115,38 @@ export default function MailCompose({ url, kind, markSent, title, extra, onPrevi
                 <div style={S.label}>Message</div>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => setPreview((v) => !v)} style={{ ...S.miniBtn, height: 26 }}>
-                  {preview ? "Edit" : "Preview"}
+                  {preview ? "Back to editing" : "Preview"}
                 </button>
               </div>
 
               {preview ? (
                 <div style={{ border: "1px solid #F0F0F8", borderRadius: 12, padding: 16, background: "#FAFAFD",
                               fontSize: 14, lineHeight: 1.65, color: "#0F172A", minHeight: 200 }}
-                     dangerouslySetInnerHTML={{ __html: f.body }} />
+                     dangerouslySetInnerHTML={{ __html: body }} />
               ) : (
-                <textarea className="lp-in" value={f.body} onChange={(e) => set("body", e.target.value)}
-                          style={{ ...S.input, height: 300, padding: "11px 13px", resize: "vertical",
-                                   fontFamily: "ui-monospace,Menlo,Consolas,monospace", fontSize: 12.5, lineHeight: 1.6 }} />
+                parts.map((p, i) =>
+                  p.lock ? (
+                    // The numbers come straight off the document. Showing them
+                    // here is the point — they just are not typed again.
+                    <div key={p.k || i} style={{ marginBottom: 14 }}>
+                      <div style={S.partLabel}>
+                        {p.label}
+                        <span style={S.lockTag}><i className="bi bi-lock-fill" style={{ fontSize: 9 }} /> filled in for you</span>
+                      </div>
+                      <div style={{ border: "1px solid #F0F0F8", borderRadius: 12, padding: "2px 14px", background: "#FAFAFD",
+                                    fontSize: 13.5, lineHeight: 1.6, color: "#334155" }}
+                           dangerouslySetInnerHTML={{ __html: p.html }} />
+                    </div>
+                  ) : (
+                    <div key={p.k || i} style={{ marginBottom: 14 }}>
+                      <div style={S.partLabel}>{p.label}</div>
+                      <RichFieldEditor value={p.html} onChange={(html) => setPart(i, html)} minHeight={90} withLink />
+                    </div>
+                  )
+                )
               )}
               <div style={{ fontSize: 11.5, color: "#94A3B8", marginTop: 6 }}>
-                Plain HTML — it goes out inside the Viralon mail template, logo and all.
+                Write it the way you would say it — it goes out inside the Viralon mail template, logo and all.
               </div>
 
               {file ? (
@@ -154,6 +190,14 @@ function Row({ label, children }) {
 
 const S = {
   label: { fontSize: 11, fontWeight: 800, color: "#64748B", letterSpacing: .3, textTransform: "uppercase", marginBottom: 6 },
+  partLabel: {
+    fontSize: 11, fontWeight: 800, color: "#94A3B8", letterSpacing: .3, textTransform: "uppercase",
+    marginBottom: 6, display: "flex", alignItems: "center", gap: 7,
+  },
+  lockTag: {
+    display: "inline-flex", alignItems: "center", gap: 4, padding: "1px 7px", borderRadius: 20,
+    background: "#F1F5F9", color: "#64748B", fontSize: 9.5, fontWeight: 700, letterSpacing: .2, textTransform: "none",
+  },
   input: {
     width: "100%", height: 38, borderRadius: 10, border: "1px solid #E6E6F2", padding: "0 12px",
     fontSize: 13, color: "#0F172A", background: "#fff", outline: "none",
