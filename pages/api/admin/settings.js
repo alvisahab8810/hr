@@ -16,17 +16,35 @@ export const DEFAULTS = {
     runningAds: RUNNING_ADS,
     lostReasons: LOST_REASONS,
   },
+  // The invoice prints a registered business, not a brand: the tax sheet asks
+  // for the legal name, the registered address, the trade name and a phone, and
+  // it signs off in somebody's capacity. None of that existed here, so the PDF
+  // could not be a GST tax invoice however it was laid out. The bank block is
+  // left blank on purpose -- account numbers belong in the database the admin
+  // fills in, not in a file that is committed.
   company: {
     name: "Viralon",
+    legalName: "Viralon Digital Services LLP",
+    tradeName: "Viralon",
     tag: "Digital marketing, built to perform",
     email: "info@viralon.in",
     site: "www.viralon.in",
-    place: "Pune, Maharashtra",
-    gstin: "",
+    // The registered details print on every tax invoice, so they are the
+    // defaults rather than blanks waiting for somebody to fill them in.
+    phone: "9305451301",
+    address: "GF, Unit no.-1, Tower 2, Parsvnath Planet, Gomti Nagar, Lucknow-226010",
+    place: "Lucknow, Uttar Pradesh",
+    state: "Uttar Pradesh",
+    gstin: "09AAVFV6664JIZ3",
     pan: "",
     bank: "",
+    bankName: "",
+    accountName: "",
+    accountNo: "",
     ifsc: "",
     upi: "",
+    qr: "",            // an image the admin pastes in: the UPI code to scan
+    signatory: "PARTNER",
   },
   // The invoice sender, set once in Finance -> Invoice sender and then left
   // alone: the pass in utils/invoiceAutomation.js reads nothing else.
@@ -45,6 +63,18 @@ export const DEFAULTS = {
   docs: {
     gstPct: 18,
     dueDays: 10,
+    // What the invoice serial is raised under: VIR/26-27/001. It is a setting
+    // and not a constant because the numbers already issued must not move if
+    // the business ever bills under a different mark.
+    invPrefix: "VIR",
+    // The invoice carries its own terms. A bill asks for money by a date and
+    // says how it may be paid, which is not what a proposal's six lines about
+    // scope and jurisdiction are for, so the two lists are kept apart.
+    invTerms: [
+      "100% advance payment at the 25th to 30th of each month.",
+      "Payment mode - UPI, Bank Transfer, Paypal (as applicable), NO CASH PAYMENT",
+      "A late fee of 5% will be applicable for payment delayed beyond the due date",
+    ],
     terms: [
       "Payment is due by the date on this document unless agreed otherwise in writing.",
       "Overdue amounts carry a late fee of 2% per month.",

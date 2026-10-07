@@ -15,7 +15,11 @@ export default function ServiceLines({ items, setItems, svcList, ui, label = "Se
   const pickSvc = (i, v) =>
     setItems(items.map((x, j) => (j === i ? { ...x, svc: v, hsn: x.hsn || (v ? sacFor(v) : "") } : x)));
   const total = itemsTotal(items);
-  const cols = withHsn ? "1fr 1.3fr .62fr .72fr 34px" : "1.1fr 1.7fr .8fr 34px";
+  // The invoice prints a quantity and a unit price against every line, so the
+  // two are typed rather than worked backwards out of the value. The value
+  // column is read-only there: qty x rate is the one that prints.
+  const cols = withHsn ? "1fr 1.05fr .5fr .38fr .6fr .6fr 34px" : "1.1fr 1.7fr .8fr 34px";
+  const lineAmt = (it) => Math.round((Number(it.qty || 1) || 1) * Number(it.rate || 0));
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -33,13 +37,27 @@ export default function ServiceLines({ items, setItems, svcList, ui, label = "Se
           <input className="lp-in" style={ui.input} placeholder="What it covers (optional)"
                  value={it.note || ""} onChange={(e) => row(i, "note", e.target.value)} />
           {withHsn ? (
-            <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="SAC"
-                   title="The SAC code this line is billed under — it prints on the invoice"
-                   value={it.hsn || ""} onChange={(e) => row(i, "hsn", e.target.value.replace(/[^0-9]/g, ""))} />
-          ) : null}
-          <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="Value (₹)"
-                 value={it.amount ? String(it.amount) : ""}
-                 onChange={(e) => row(i, "amount", Number(e.target.value.replace(/\D/g, "") || 0))} />
+            <>
+              <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="SAC"
+                     title="The SAC code this line is billed under — it prints on the invoice"
+                     value={it.hsn || ""} onChange={(e) => row(i, "hsn", e.target.value.replace(/[^0-9]/g, ""))} />
+              <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="Qty"
+                     title="How many of it"
+                     value={it.qty ? String(it.qty) : ""}
+                     onChange={(e) => row(i, "qty", Number(e.target.value.replace(/[^0-9]/g, "") || 0))} />
+              <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="Unit price"
+                     title="What one of them costs — it prints as the unit price"
+                     value={it.rate ? String(it.rate) : ""}
+                     onChange={(e) => row(i, "rate", Number(e.target.value.replace(/[^0-9]/g, "") || 0))} />
+              <input className="lp-in" readOnly title="Quantity times the unit price"
+                     style={{ ...ui.input, background: "#F4F4FD", cursor: "default" }}
+                     value={lineAmt(it) ? inr(lineAmt(it)) : ""} />
+            </>
+          ) : (
+            <input className="lp-in" style={ui.input} inputMode="numeric" placeholder="Value (₹)"
+                   value={it.amount ? String(it.amount) : ""}
+                   onChange={(e) => row(i, "amount", Number(e.target.value.replace(/[^0-9]/g, "") || 0))} />
+          )}
           <button onClick={() => setItems(items.filter((_, j) => j !== i))}
                   disabled={items.length === 1}
                   style={{ ...ui.iconBtn, color: "#C42525", opacity: items.length === 1 ? .35 : 1 }}
@@ -50,7 +68,7 @@ export default function ServiceLines({ items, setItems, svcList, ui, label = "Se
       ))}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={() => setItems([...items, { svc: "", note: "", amount: 0 }])} style={ui.miniBtn}>
+        <button onClick={() => setItems([...items, { svc: "", note: "", qty: 1, rate: 0, amount: 0 }])} style={ui.miniBtn}>
           <i className="bi bi-plus-lg" style={{ fontSize: 11 }} /> Add a line
         </button>
         <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 900, color: "#0F172A" }}>

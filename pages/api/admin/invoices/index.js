@@ -13,6 +13,7 @@ import { startInvoiceAutomation, nextInvoiceMail, istDay, nextRunAt } from "@/ut
 import { getSettings } from "@/pages/api/admin/settings";
 import { rungLabel } from "@/utils/invoiceMail";
 import { sacFor } from "@/utils/leadsMeta";
+import { nextInvoiceNo, serialPrefix } from "@/utils/invoiceNo";
 
 const addDays = (d, n) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -134,6 +135,23 @@ export default async function handler(req, res) {
             issued: on, due: addDays(on, 7), status: "Draft" });
         }
 
+        // The serials are handed out here, in the order the schedule was built,
+        // so the year's run stays consecutive. They are worked out in one pass
+        // rather than one lookup each because none of these rows is in the
+        // database yet for the next one to see -- and a monthly schedule can
+        // run past March, which starts a second year's numbering.
+        const prefix = (await getSettings()).docs?.invPrefix;
+        const runs = {};
+        for (const d of docs) {
+          const head = serialPrefix(prefix, d.issued);
+          if (runs[head] == null) {
+            runs[head] = Number(String(await nextInvoiceNo(Invoice, d.issued, prefix)).slice(head.length));
+          } else {
+            runs[head] += 1;
+          }
+          d.no = `${head}${String(runs[head]).padStart(3, "0")}`;
+        }
+
         const made = await Invoice.insertMany(docs);
 
         // Billing a proposal is the moment it was accepted, so the board does
@@ -160,8 +178,13 @@ export default async function handler(req, res) {
 
       // An invoice by hand can carry several lines; the total is their sum.
       const items = cleanItems(b.items);
-      const amount = items.length ? itemsTotal(items) : Number(b.amount || 0);
-      if (!amount) return res.status(400).json({ success: false, message: "Put an amount on it" });
+      const gross = items.length ? itemsTotal(items) : Number(b.amount || 0);
+      if (!gross) return res.status(400).json({ success: false, message: "Put an amount on it" });
+      // A discount comes off the lines before tax, so it is taken here rather
+      // than left to whoever types the amounts to do in their head.
+      const discPct = Math.min(100, Math.max(0, Number(b.discPct || 0)));
+      const discAmt = Math.round((gross * discPct) / 100);
+      const amount = gross - discAmt;
 
       const billTo = {
         address: String(b.billTo?.address || "").trim(),
@@ -184,6 +207,7 @@ export default async function handler(req, res) {
 
       const issued = b.issued || new Date().toISOString().slice(0, 10);
       const created = await Invoice.create({
+        no: await nextInvoiceNo(Invoice, issued, (await getSettings()).docs?.invPrefix),
         leadId: lead._id,
         proposalId: linked,
         // Whatever was typed into the form wins; the lead only prefills it.
@@ -197,6 +221,8 @@ export default async function handler(req, res) {
         items,
         svc: items.length ? itemsLabel(items) : String(b.svc || "").trim(),
         amount,
+        discPct,
+        discAmt,
         gstPct: Number(b.gstPct ?? 18),
         issued,
         due: b.due || addDays(issued, 7),

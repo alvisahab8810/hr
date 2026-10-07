@@ -6,30 +6,43 @@
 // and the browser's own Save-as-PDF does the rest.
 import { inr, fmtD, sacFor } from "@/utils/leadsMeta";
 import { docItems } from "@/utils/proposalItems";
+import { invoiceHtml, INVOICE_CSS, COMPANY_FALLBACK } from "@/components/invoiceSheet";
 
 // Mutable on purpose: Settings pushes the saved branding in through
 // applyDocBranding before anything is printed.
+// Seeded from the invoice sheet's fallback so the two can never disagree about
+// where the business is registered; the tagline is the proposal header's own.
 const COMPANY = {
-  name: "Viralon",
+  ...COMPANY_FALLBACK,
   tag: "Digital marketing, built to perform",
-  email: "info@viralon.in",
-  site: "www.viralon.in",
-  place: "Pune, Maharashtra",
 };
+
+// The tax invoice prints a registered business rather than a brand, so it
+// needs the legal name, the registered address and the capacity it is signed
+// in -- none of which a proposal's header ever asked for. They are listed
+// separately because the loop above only carries the keys it already knows.
+const INVOICE_KEYS = ["legalName", "tradeName", "phone", "address", "pan",
+  "bankName", "accountName", "accountNo", "ifsc", "qr", "signatory"];
+
+// A bill asks for money by a date and says how it may be paid; a proposal's
+// terms are about scope and jurisdiction. The two lists are kept apart.
+const INV_TERMS = [];
 
 // Settings → Documents writes here. Blank values are ignored so the sheet
 // never prints an empty header.
-export function applyDocBranding(company, terms) {
+export function applyDocBranding(company, terms, invTerms) {
   if (company) {
     for (const k of Object.keys(COMPANY)) {
       if (company[k]) COMPANY[k] = company[k];
     }
+    for (const k of INVOICE_KEYS) COMPANY[k] = company[k] || "";
     COMPANY.gstin = company.gstin || "";
     COMPANY.state = company.state || "";
     COMPANY.bankLine = [company.bank, company.ifsc].filter(Boolean).join(" · ");
     COMPANY.upi = company.upi || "";
   }
   if (Array.isArray(terms) && terms.length) TERMS.splice(0, TERMS.length, ...terms);
+  if (Array.isArray(invTerms) && invTerms.length) INV_TERMS.splice(0, INV_TERMS.length, ...invTerms);
 }
 
 const esc = (v) =>
@@ -154,6 +167,9 @@ function taxSplit(d) {
 
 export function docHtml(kind, d) {
   if (kind === "agreement") return agreementHtml(d);
+  // The invoice has its own sheet, measured off the design. The proposal is
+  // left on the generic layout below, which is all it ever needed.
+  if (kind === "invoice") return invoiceHtml(d, { company: COMPANY, terms: INV_TERMS.length ? INV_TERMS : TERMS });
   const isInv = kind === "invoice";
   const code = isInv
     ? `INV-${String(d._id || "").slice(-4).toUpperCase()}`
@@ -259,6 +275,8 @@ export function docHtml(kind, d) {
 </div>`;
 }
 
+const sheetCss = (kind) => (kind === "invoice" ? INVOICE_CSS : CSS);
+
 const CSS = `
 .vp-sheet { background:#fff; color:#0F172A; font-family: -apple-system,Segoe UI,Roboto,sans-serif; padding:34px 38px; }
 .vp-top { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; border-bottom:2px solid #4338CA; padding-bottom:16px; }
@@ -299,7 +317,7 @@ export function printDoc(kind, d) {
   const name = kind === "invoice" ? "Invoice" : kind === "agreement" ? "Agreement" : "Proposal";
   w.document.write(
     `<!doctype html><html><head><meta charset="utf-8"/><title>${name} — ${COMPANY.name}</title>` +
-    `<style>body{margin:0;background:#fff}${CSS}</style></head><body>${docHtml(kind, d)}</body></html>`
+    `<style>body{margin:0;background:#fff}${sheetCss(kind)}</style></head><body>${docHtml(kind, d)}</body></html>`
   );
   w.document.close();
   w.focus();
@@ -337,7 +355,7 @@ export default function DocPreview({ kind, doc, onClose }) {
           </button>
         </div>
         <div style={{ overflow: "auto", padding: 16 }}>
-          <style>{CSS}</style>
+          <style>{sheetCss(kind)}</style>
           <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 2px 12px rgba(15,23,42,.08)" }}
                dangerouslySetInnerHTML={{ __html: docHtml(kind, doc) }} />
         </div>

@@ -8,7 +8,7 @@ import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
 import { winLeadOnPayment, unwinLeadIfUnpaid } from "@/utils/leadWon";
 
-const FIELDS = ["kind", "svc", "amount", "gstPct", "issued", "due", "status", "paidOn", "method", "ref", "owner", "notes",
+const FIELDS = ["kind", "svc", "amount", "discPct", "discAmt", "gstPct", "issued", "due", "status", "paidOn", "method", "ref", "owner", "notes",
   "co", "contact", "em", "ph", "poRef", "billTo"];
 
 export default async function handler(req, res) {
@@ -176,16 +176,28 @@ export default async function handler(req, res) {
     }
 
     const set = {};
-    // Lines rule the total, exactly as they do on a proposal.
-    if (b.items !== undefined) {
-      const items = cleanItems(b.items);
-      b.items = items;
-      b.amount = itemsTotal(items);
-      b.svc = itemsLabel(items);
+    // Lines rule the total, exactly as they do on a proposal, and the discount
+    // comes off it before tax. Either one moving has to re-work the amount, so
+    // the saved row is read back when only the discount was typed — otherwise
+    // the percentage would print against a total it was never taken off.
+    if (b.items !== undefined || b.discPct !== undefined) {
+      const row = await Invoice.findById(id).select("items amount discPct discAmt").lean();
+      const items = cleanItems(b.items !== undefined ? b.items : row?.items);
+      if (b.items !== undefined) {
+        b.items = items;
+        b.svc = itemsLabel(items);
+      }
+      // A line-less invoice carries one amount, and that amount is already net
+      // of whatever discount was taken, so the gross has to be put back first.
+      const gross = items.length ? itemsTotal(items) : Number(row?.amount || 0) + Number(row?.discAmt || 0);
+      const pct = Math.min(100, Math.max(0, Number(b.discPct ?? row?.discPct ?? 0)));
+      b.discPct = pct;
+      b.discAmt = Math.round((gross * pct) / 100);
+      b.amount = gross - b.discAmt;
     }
     for (const k of FIELDS.concat(b.items !== undefined ? ["items"] : [])) {
       if (b[k] === undefined) continue;
-      set[k] = ["amount", "gstPct"].includes(k) ? Number(b[k] || 0) : b[k];
+      set[k] = ["amount", "discPct", "discAmt", "gstPct"].includes(k) ? Number(b[k] || 0) : b[k];
     }
     // Marking it paid without saying when is the common slip — fill it in.
     if (b.status === "Paid" && !b.paidOn) set.paidOn = new Date().toISOString().slice(0, 10);

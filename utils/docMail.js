@@ -3,6 +3,7 @@
 // both helpers are called from that one place in the PATCH routes.
 import { mailTransport, MAIL_USER } from "@/utils/mailer";
 import { docAttachment, loadCompany } from "@/utils/docPdf";
+import { invoiceNo } from "@/utils/invoiceNo";
 
 const BRAND = "#5138ee";
 const INK = "#04000b";
@@ -139,7 +140,7 @@ export function invoiceDraft(inv) {
         : full
           ? `Paid in full — invoice from Viralon${inv?.co ? ` · ${inv.co}` : ""}`
           : `Invoice from Viralon${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(total)}`,
-      fileName: `INV-${String(inv?._id || "").slice(-4).toUpperCase()}.pdf`,
+      fileName: `${invoiceNo(inv).replace(/[^A-Za-z0-9._-]+/g, "-")}.pdf`,
     },
     [
       say("open", "Opening", `<p>Hi ${first(inv?.contact)},</p>
@@ -188,7 +189,7 @@ export async function sendDocMail(kind, doc, { to, cc, subject, body, attachment
     name: SENDER[kind] || "Viralon",
     subject: subject || d.subject,
     html: body || d.body,
-    attachments: [...docAttachment(kind, doc, d.fileName), ...(attachments || [])],
+    attachments: [...(await docAttachment(kind, doc, d.fileName)), ...(attachments || [])],
   });
 }
 

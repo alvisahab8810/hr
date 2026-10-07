@@ -17,7 +17,7 @@ export function loadCrmSettings() {
       .then((r) => r.json())
       .then((j) => {
         CACHE = j?.success ? j.data : {};
-        applyDocBranding(CACHE.company, CACHE.docs?.terms);
+        applyDocBranding(CACHE.company, CACHE.docs?.terms, CACHE.docs?.invTerms);
         subs.forEach((fn) => fn(CACHE));
         return CACHE;
       })

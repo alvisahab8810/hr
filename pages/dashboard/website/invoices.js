@@ -20,6 +20,7 @@ import { docItems, itemsTotal } from "@/utils/proposalItems";
 import { SERVICES, inr, initials, fmtD, fmtDT, todayStr } from "@/utils/leadsMeta";
 import { useList, useCrmSettings } from "@/utils/crmSettings";
 import { confirmDialog } from "../../../components/ConfirmDialog";
+import { invoiceNo } from "@/utils/invoiceNo";
 
 const COLS_KEY = "viralon.invoices.hiddenCols";
 const DENSITY_KEY = "viralon.invoices.density";
@@ -28,7 +29,10 @@ const KINDS = ["Advance", "Monthly", "Balance", "One time"];
 const STATUSES = ["Draft", "Sent", "Partly paid", "Paid", "Overdue", "Cancelled"];
 const METHODS = ["Bank transfer", "UPI", "Cheque", "Cash"];
 
-const invCode  = (i) => `INV-${String(i?._id || "").slice(-4).toUpperCase()}`;
+// The serial the invoice was raised under. Rows from before serials existed
+// fall back to the id-derived code inside invoiceNo(), so nothing that has
+// already gone to a client changes number.
+const invCode  = (i) => invoiceNo(i);
 const propRef  = (id) => (id ? `VP-${String(id).slice(-4).toUpperCase()}` : "—");
 const leadRef  = (id) => `VL-${String(id || "").slice(-4).toUpperCase()}`;
 
@@ -174,6 +178,11 @@ function Modal({ title, icon, wide, onClose, children }) {
 
 export default function InvoicesPage() {
   const router = useRouter();
+  // The sheet reads the company and the invoice terms out of Settings, and
+  // nothing else on this page asked for them -- so the preview printed the
+  // built-in fallback and no bank block at all. Asking here loads them once
+  // for the board, the preview and the print.
+  useCrmSettings();
 
   const [rows, setRows] = useState([]);
   const [proposals, setProposals] = useState([]);
@@ -813,11 +822,14 @@ function BillTo({ i, busy, patch }) {
 
 function Amounts({ i, busy, patch }) {
   const svcList = useList("services", SERVICES);
-  const [f, setF] = useState({ kind: i.kind, gstPct: String(i.gstPct ?? 18) });
+  const [f, setF] = useState({ kind: i.kind, gstPct: String(i.gstPct ?? 18), discPct: String(i.discPct || "") });
   const [items, setItems] = useState(() => docItems(i));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const locked = i.status === "Paid" || i.status === "Partly paid";
-  const amt = itemsTotal(items), g = Math.round((amt * Number(f.gstPct || 0)) / 100);
+  // Discount first, tax on what is left — the order the sheet prints in.
+  const amt = itemsTotal(items);
+  const d = Math.round((amt * Math.min(100, Number(f.discPct || 0))) / 100);
+  const g = Math.round(((amt - d) * Number(f.gstPct || 0)) / 100);
 
   return (
     <>
@@ -825,6 +837,7 @@ function Amounts({ i, busy, patch }) {
       {docItems(i).map((it, n) => (
         <KV key={n} k={it.svc || "Service"} v={inr(it.amount || 0)} />
       ))}
+      {i.discAmt ? <KV k={`Discount ${i.discPct}%`} v={`− ${inr(i.discAmt)}`} /> : null}
       <KV k="Amount" v={inr(i.amount || 0)} />
       <KV k="GST" v={i.gstPct ? `${i.gstPct}% · ${inr(gstAmt(i))}` : "—"} />
       <KV k="Total" v={inr(grand(i))} />
@@ -847,9 +860,14 @@ function Amounts({ i, busy, patch }) {
                      onChange={(e) => set("gstPct", e.target.value.replace(/\D/g, "").slice(0, 2))} />
             </Field>
           </div>
+          <Field label="Discount %" hint="Taken off the lines before GST">
+            <input className="lp-in" style={s.input} inputMode="numeric" value={f.discPct} placeholder="0"
+                   onChange={(e) => set("discPct", e.target.value.replace(/[^0-9]/g, "").slice(0, 3))} />
+          </Field>
           <div style={{ ...s.softBox, marginBottom: 12 }}>
+            {d ? <KV k={`Discount ${f.discPct}%`} v={`− ${inr(d)}`} /> : null}
             <KV k="GST on it" v={inr(g)} />
-            <KV k="Client pays" v={inr(amt + g)} />
+            <KV k="Client pays" v={inr(amt - d + g)} />
           </div>
           <button onClick={() => patch(i._id, { ...f, items })} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? .5 : 1 }}>
             <i className="bi bi-check2" style={{ fontSize: 12 }} /> Save
@@ -1285,13 +1303,17 @@ function NewInvoice({ proposals, leads, proposalId, billed, onClose, onDone }) {
   const [saving, setSaving] = useState(false);
 
   const [f, setF] = useState({
-    leadId: "", kind: "One time", gstPct: "18", issued: todayStr(), due: "", owner: "", notes: "",
+    leadId: "", kind: "One time", gstPct: "18", discPct: "", issued: todayStr(), due: "", owner: "", notes: "",
     co: "", contact: "", em: "", ph: "", poRef: "",
     address: "", city: "", state: "", pincode: "", gstin: "",
   });
-  const [items, setItems] = useState([{ svc: "", note: "", amount: 0 }]);
+  const [items, setItems] = useState([{ svc: "", note: "", qty: 1, rate: 0, amount: 0 }]);
   const sub = itemsTotal(items);
-  const tax = Math.round((sub * Number(f.gstPct || 0)) / 100);
+  // The invoice takes the discount off the lines and charges tax on what is
+  // left, so the box below has to be worked out in that order too.
+  const disc = Math.round((sub * Math.min(100, Number(f.discPct || 0))) / 100);
+  const net = sub - disc;
+  const tax = Math.round((net * Number(f.gstPct || 0)) / 100);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
 
   // Settings → Invoices & proposals decides the GST rate and how many days a
@@ -1491,6 +1513,11 @@ function NewInvoice({ proposals, leads, proposalId, billed, onClose, onDone }) {
               <input className="lp-in" style={s.input} inputMode="numeric" value={f.gstPct}
                      onChange={(e) => set("gstPct", e.target.value.replace(/\D/g, "").slice(0, 2))} />
             </Field>
+            <Field label="Discount %" hint="Taken off the lines before GST">
+              <input className="lp-in" style={s.input} inputMode="numeric" value={f.discPct}
+                     placeholder="0"
+                     onChange={(e) => set("discPct", e.target.value.replace(/\D/g, "").slice(0, 3))} />
+            </Field>
             <Field label="Issued">
               <input className="lp-in" style={s.input} type="date" value={f.issued} onChange={(e) => set("issued", e.target.value)} />
             </Field>
@@ -1502,8 +1529,9 @@ function NewInvoice({ proposals, leads, proposalId, billed, onClose, onDone }) {
           {sub ? (
             <div style={{ ...s.softBox, marginBottom: 12 }}>
               <KV k="Subtotal" v={inr(sub)} />
+              {disc ? <KV k={`Discount ${f.discPct}%`} v={`− ${inr(disc)}`} /> : null}
               <KV k={`GST ${f.gstPct || 0}%`} v={inr(tax)} />
-              <KV k="Invoice total" v={inr(sub + tax)} />
+              <KV k="Invoice total" v={inr(net + tax)} />
             </div>
           ) : null}
 

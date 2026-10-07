@@ -6,13 +6,26 @@
 export function cleanItems(list) {
   if (!Array.isArray(list)) return [];
   return list
-    .map((x) => ({
-      svc: String(x?.svc || "").trim(),
-      note: String(x?.note || "").trim(),
-      amount: Math.max(0, Math.round(Number(x?.amount || 0))),
-      // Only an invoice fills this in; a proposal line simply carries "".
-      hsn: String(x?.hsn || "").trim(),
-    }))
+    .map((x) => {
+      // An invoice line is quantity x unit price; a proposal line is just a
+      // value. Where a rate is typed it decides the amount, so the two can
+      // never disagree on the sheet; where it is not, the line keeps the
+      // amount it was saved with and prints as one unit of it.
+      const qty = Math.max(0, Number(x?.qty || 0));
+      const rate = Math.max(0, Math.round(Number(x?.rate || 0)));
+      const amount = rate
+        ? Math.round((qty || 1) * rate)
+        : Math.max(0, Math.round(Number(x?.amount || 0)));
+      return {
+        svc: String(x?.svc || "").trim(),
+        note: String(x?.note || "").trim(),
+        qty: qty || 1,
+        rate: rate || amount,
+        amount,
+        // Only an invoice fills this in; a proposal line simply carries "".
+        hsn: String(x?.hsn || "").trim(),
+      };
+    })
     .filter((x) => x.svc || x.amount);
 }
 
@@ -24,7 +37,8 @@ export const itemsTotal = (list) =>
 export function docItems(d) {
   const items = cleanItems(d?.items);
   if (items.length) return items;
-  return [{ svc: String(d?.svc || "Service"), note: "", amount: Number(d?.amount || 0), hsn: "" }];
+  const amount = Number(d?.amount || 0);
+  return [{ svc: String(d?.svc || "Service"), note: "", qty: 1, rate: amount, amount, hsn: "" }];
 }
 
 // The one-line summary that sits in the Service column and in the PDF prose.

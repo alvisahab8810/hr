@@ -12,6 +12,7 @@ import toast, { Toaster } from "react-hot-toast";
 import Dashnav from "@/components/Dashnav";
 import WebsiteLeftbar from "@/components/WebsiteLeftbar";
 import LeftbarMobile from "@/components/LeftbarMobile";
+import { invoiceNo } from "@/utils/invoiceNo";
 import {
   LADDER, PREP, SCOREQ, srcOf, prepPct, leadCode,
   inr, fmtD, fmtDT, prettyTime, budgetValue, todayStr,
@@ -20,7 +21,10 @@ import {
 } from "@/utils/leadsMeta";
 
 const propCode = (p) => `VP-${String(p?._id || "").slice(-4).toUpperCase()}`;
-const invCode  = (i) => `INV-${String(i?._id || "").slice(-4).toUpperCase()}`;
+// The serial the invoice was raised under. Rows from before serials existed
+// fall back to the id-derived code inside invoiceNo(), so nothing that has
+// already gone to a client changes number.
+const invCode  = (i) => invoiceNo(i);
 const gstAmt   = (i) => Math.round(((i.amount || 0) * (i.gstPct || 0)) / 100);
 const grand    = (i) => (i.amount || 0) + gstAmt(i);
 const advAmt   = (p) => Math.round(((p.amount || 0) * (p.advPct || 0)) / 100);

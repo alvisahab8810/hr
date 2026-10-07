@@ -240,7 +240,11 @@ export default function CrmSettings() {
 /* ── invoices and proposals ────────────────────────────────────────────────── */
 function DocsTab({ st, save, saving }) {
   const [c, setC] = useState(st.company);
-  const [d, setD] = useState({ ...st.docs, terms: (st.docs.terms || []).join("\n") });
+  const [d, setD] = useState({
+    ...st.docs,
+    terms: (st.docs.terms || []).join("\n"),
+    invTerms: (st.docs.invTerms || []).join("\n"),
+  });
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const setd = (k, v) => setD((x) => ({ ...x, [k]: v }));
 
@@ -248,15 +252,25 @@ function DocsTab({ st, save, saving }) {
     <div style={s.cols2} className="set-cols2">
       <Panel title="What prints on the paperwork" tag="header of every sheet">
         <F l="Business name"><input style={s.in} value={c.name || ""} onChange={(e) => set("name", e.target.value)} /></F>
+        <F l="Registered name" hint="The legal entity the tax invoice is raised by."><input style={s.in} value={c.legalName || ""} onChange={(e) => set("legalName", e.target.value)} /></F>
+        <F l="Trade name"><input style={s.in} value={c.tradeName || ""} onChange={(e) => set("tradeName", e.target.value)} /></F>
         <F l="Tagline"><input style={s.in} value={c.tag || ""} onChange={(e) => set("tag", e.target.value)} /></F>
         <F l="Email"><input style={s.in} value={c.email || ""} onChange={(e) => set("email", e.target.value)} /></F>
         <F l="Website"><input style={s.in} value={c.site || ""} onChange={(e) => set("site", e.target.value)} /></F>
+        <F l="Contact number"><input style={s.in} value={c.phone || ""} onChange={(e) => set("phone", e.target.value)} /></F>
+        <F l="Registered address" hint="Printed under the name on the invoice.">
+          <textarea style={{ ...s.in, height: 58, resize: "vertical" }} value={c.address || ""} onChange={(e) => set("address", e.target.value)} />
+        </F>
         <F l="Place"><input style={s.in} value={c.place || ""} onChange={(e) => set("place", e.target.value)} /></F>
         <F l="GSTIN" hint="Printed under the address when it is filled in."><input style={s.in} value={c.gstin || ""} onChange={(e) => set("gstin", e.target.value)} /></F>
         <F l="PAN"><input style={s.in} value={c.pan || ""} onChange={(e) => set("pan", e.target.value)} /></F>
-        <F l="Bank account" hint="Shown on invoices only."><input style={s.in} value={c.bank || ""} onChange={(e) => set("bank", e.target.value)} /></F>
+        <F l="Signs off as" hint="The capacity printed under the signature, e.g. PARTNER."><input style={s.in} value={c.signatory || ""} onChange={(e) => set("signatory", e.target.value)} /></F>
+        <F l="Bank name" hint="The four bank fields fill the payment box on an invoice."><input style={s.in} value={c.bankName || ""} onChange={(e) => set("bankName", e.target.value)} /></F>
+        <F l="Account holder name"><input style={s.in} value={c.accountName || ""} onChange={(e) => set("accountName", e.target.value)} /></F>
+        <F l="Account number"><input style={s.in} value={c.accountNo || ""} onChange={(e) => set("accountNo", e.target.value)} /></F>
         <F l="IFSC"><input style={s.in} value={c.ifsc || ""} onChange={(e) => set("ifsc", e.target.value)} /></F>
         <F l="UPI"><input style={s.in} value={c.upi || ""} onChange={(e) => set("upi", e.target.value)} /></F>
+        <F l="Scan-to-pay image" hint="A link to the QR for the UPI handle. Left blank, the box prints the handle instead."><input style={s.in} value={c.qr || ""} onChange={(e) => set("qr", e.target.value)} /></F>
         <button style={s.primary} disabled={saving} onClick={() => save({ company: c })}>Save the branding</button>
       </Panel>
 
@@ -267,7 +281,15 @@ function DocsTab({ st, save, saving }) {
         <F l="Payment terms in days" hint="The due date is set this many days after the issue date.">
           <input style={s.in} inputMode="numeric" value={d.dueDays ?? ""} onChange={(e) => setd("dueDays", e.target.value.replace(/\D/g, "").slice(0, 3))} />
         </F>
-        <F l="Terms printed on every sheet" hint="One line each. They print as a numbered list.">
+        <F l="Invoice number prefix" hint="The serial is raised as PREFIX/26-27/001. Changing it does not move the numbers already issued.">
+          <input style={s.in} value={d.invPrefix ?? ""}
+                 onChange={(e) => setd("invPrefix", e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))} />
+        </F>
+        <F l="Terms printed on an invoice" hint="One line each, numbered on the sheet. Left blank, the proposal terms below are used.">
+          <textarea style={{ ...s.in, height: 110, resize: "vertical", fontFamily: "inherit" }} value={d.invTerms}
+                    onChange={(e) => setd("invTerms", e.target.value)} />
+        </F>
+        <F l="Terms printed on a proposal" hint="One line each. They print as a numbered list.">
           <textarea style={{ ...s.in, height: 150, resize: "vertical", fontFamily: "inherit" }} value={d.terms}
                     onChange={(e) => setd("terms", e.target.value)} />
         </F>
@@ -275,6 +297,8 @@ function DocsTab({ st, save, saving }) {
                 onClick={() => save({ docs: {
                   gstPct: Number(d.gstPct || 0),
                   dueDays: Number(d.dueDays || 0),
+                  invPrefix: String(d.invPrefix || "").trim(),
+                  invTerms: String(d.invTerms || "").split("\n").map((x) => x.trim()).filter(Boolean),
                   terms: String(d.terms || "").split("\n").map((x) => x.trim()).filter(Boolean),
                 } })}>
           Save the defaults

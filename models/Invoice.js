@@ -8,6 +8,12 @@ import mongoose from "mongoose";
 
 const InvoiceSchema = new mongoose.Schema(
   {
+    // The number printed on the face of the bill. A tax invoice needs a serial
+    // that runs unbroken through the financial year, so it is stored the moment
+    // the invoice is raised rather than derived from the row id -- an id-derived
+    // number is neither consecutive nor stable enough to be quoted back.
+    no: { type: String, default: "", index: true },
+
     proposalId: { type: mongoose.Schema.Types.ObjectId, ref: "Proposal", default: null, index: true },
     leadId:     { type: mongoose.Schema.Types.ObjectId, ref: "Query", required: true, index: true },
 
@@ -37,9 +43,16 @@ const InvoiceSchema = new mongoose.Schema(
     // Every line carries the SAC it is billed under: a tax invoice has to show
     // it, and it is stored on the line rather than looked up at print time so a
     // reprint years later still says what was actually billed.
-    items: { type: [{ svc: String, note: String, amount: Number, hsn: String }], default: [] },
+    // qty x rate is what the invoice shows as Unit Price against Taxable Value;
+    // a line raised before those existed carries the amount alone and prints
+    // one unit of it.
+    items: { type: [{ svc: String, note: String, qty: Number, rate: Number, amount: Number, hsn: String }], default: [] },
     svc: { type: String, default: "" },
-    amount: { type: Number, default: 0 },      // before tax
+    amount: { type: Number, default: 0 },      // before tax, after the discount
+    // A discount is taken off the lines before tax, so it has to be on the
+    // invoice rather than applied by hand to the amounts.
+    discPct: { type: Number, default: 0 },
+    discAmt: { type: Number, default: 0 },
     gstPct: { type: Number, default: 18 },
 
     issued: { type: String, default: "" },     // plain "YYYY-MM-DD", like the lead dates
