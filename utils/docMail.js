@@ -5,32 +5,92 @@ import { mailTransport, MAIL_USER } from "@/utils/mailer";
 import { docAttachment, loadCompany } from "@/utils/docPdf";
 import { invoiceNo } from "@/utils/invoiceNo";
 
-const BRAND = "#5138ee";
+const BRAND = "#0088FF";
 const INK = "#04000b";
 const BRAND2 = "#7C5CFF";
 // A public https URL — mail clients cannot read local files.
 const LOGO = process.env.MAIL_LOGO || "https://viralon.in/assets/images/brand-logo.png";
 const rupee = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
 
-function shell(bodyHtml) {
-  return `<div style="margin:0;padding:28px 12px;background:#F4F4F9;font-family:Arial,Helvetica,sans-serif;color:${INK};">
-    <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #ECECF5;box-shadow:0 6px 24px rgba(81,56,238,.07);">
-      <div style="height:5px;background:linear-gradient(90deg,${BRAND},${BRAND2});font-size:0;line-height:0;">&nbsp;</div>
-      <div style="padding:22px 30px 6px;">
-        <img src="${LOGO}" alt="Viralon" width="70" style="display:block;border:0;outline:none;height:auto;max-width:70px;" />
-      </div>
-      <div style="padding:14px 30px 30px;font-size:15px;line-height:1.65;">${bodyHtml}</div>
-      <div style="padding:16px 30px;background:#FAFAFD;border-top:1px solid #F1F1F8;font-size:12.5px;color:#8A8AA3;">
-        Team Viralon · <a href="https://viralon.in" style="color:${BRAND};text-decoration:none;font-weight:700;">viralon.in</a>
-      </div>
-    </div>
-  </div>`;
+// The pictures have to come from a public https URL -- a mail client cannot
+// read a local file, and these assets live with the website.
+const MAIL_ASSETS = process.env.MAIL_ASSETS || "https://viralon.in";
+const ORANGE = "#FF4D00";
+// PNG, not SVG — Gmail drops SVG images. Served by payroll (public/assets).
+const VERIFY = `${process.env.MAIL_PAYROLL_ASSETS || "https://hq.viralon.in"}/assets/verify.png`;
+
+const SOCIAL = [
+  ["facebook", "https://www.facebook.com/people/Viralon-Digital-Services/61551774960535/"],
+  ["instagram", "https://www.instagram.com/viralon_digital_services/"],
+  ["youtube", "https://www.youtube.com/@ViralonDigtialServices"],
+  ["linkedin", "https://www.linkedin.com/company/viralon-digital-services/"],
+]
+  .map(
+    ([name, href]) =>
+      `<a href="${href}" style="text-decoration:none;display:inline-block;margin:0 7px;"><img src="${MAIL_ASSETS}/assets/others/icons/mail/${name}.png" width="20" height="20" alt="${name}" style="display:block;border:0;outline:none;width:20px;height:20px;" /></a>`
+  )
+  .join("");
+
+/* The headline band: a tick, what happened, and the one figure that matters.
+   Flush to the card's edges, so it sits in its own row rather than inside the
+   body's padding. */
+export function heroBand({ title, amount, sub }) {
+  if (!amount) return "";
+  return `
+    <tr>
+      <td align="center" style="padding:26px 24px 28px;background:#754CDA;text-align:center;">
+        <img src="${VERIFY}" width="54" height="54" alt="" style="display:block;margin:0 auto 14px;border:0;outline:none;width:54px;height:54px;" />
+        <div style="color:#DCEEFF;font-size:13px;line-height:18px;letter-spacing:.3px;">${title}</div>
+        <div style="color:#ffffff;font-size:34px;line-height:44px;font-weight:700;padding:2px 0 4px;">${amount}</div>
+        <div style="color:#C9E4FF;font-size:12px;line-height:17px;">${sub || ""}</div>
+      </td>
+    </tr>`;
+}
+
+function shell(bodyHtml, hero) {
+  return `
+<div style="margin:0;padding:26px 12px 30px;background:#F2F2F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${INK};">
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" width="580" style="width:100%;max-width:580px;margin:0 auto;background:#ffffff;border-radius:16px;border-collapse:separate;overflow:hidden;">
+    <tr>
+      <td align="center" style="padding:22px 28px 16px;text-align:center;">
+        <img src="${LOGO}" width="70" alt="Viralon" style="display:block;margin:0 auto;border:0;outline:none;width:70px;max-width:70px;height:auto;" />
+        <div style="margin:8px 0 0;color:#14121F;font-size:11px;line-height:15px;letter-spacing:.3px;font-weight:600;">Nothing works alone</div>
+      </td>
+    </tr>
+    ${hero || ""}
+    <tr>
+      <td style="padding:24px 30px 28px;font-size:15px;line-height:24px;color:#3F3D4A;">${bodyHtml}</td>
+    </tr>
+    <tr>
+      <td align="center" style="padding:0 30px 20px;text-align:center;border-top:1px solid #EDEDF1;">
+        <p style="margin:18px 0 4px;color:#8A8A94;font-size:12px;line-height:18px;">
+          If you have any questions, please email us at
+          <a href="mailto:info@viralon.in" style="color:#14121F;text-decoration:none;font-weight:600;">info@viralon.in</a>
+        </p>
+        <p style="margin:0 0 14px;color:#8A8A94;font-size:12px;line-height:18px;">
+          Our team can answer any question about this invoice or your account.
+        </p>
+        <div style="margin:0 0 4px;">${SOCIAL}</div>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding:14px 24px 16px;background:#E8F4FF;text-align:center;">
+        <p style="margin:0 0 3px;font-size:12px;line-height:17px;">
+          <a href="https://viralon.in" style="color:#0088FF;text-decoration:none;font-weight:600;">Team Viralon &middot; viralon.in</a>
+        </p>
+        <p style="margin:0;color:#7C879B;font-size:11px;line-height:16px;">
+          Sent with the invoice attached. Reply to this mail to reach us directly.
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>`;
 }
 
 const row = (k, v) =>
   `<tr><td style="padding:9px 14px;color:#6b6880;">${k}</td><td style="padding:9px 14px;font-weight:700;text-align:right;">${v}</td></tr>`;
 
-function send({ to, cc, subject, html, name, attachments }) {
+function send({ to, cc, subject, html, name, attachments, hero }) {
   if (!to) return Promise.resolve(null);
   return mailTransport().sendMail({
     from: `"${name}" <${MAIL_USER}>`,
@@ -39,7 +99,7 @@ function send({ to, cc, subject, html, name, attachments }) {
     // unattended mail is not invisible to the people who have to chase it.
     ...(cc ? { cc } : {}),
     subject,
-    html: shell(html),
+    html: shell(html, hero),
     ...(attachments && attachments.length ? { attachments } : {}),
   });
 }
@@ -125,6 +185,64 @@ export function agreementDraft(p) {
   );
 }
 
+// One line of the summary. The last one drops its rule so the block does not
+// close on a stray hairline.
+const invRow = (k, v, opt = {}) =>
+  `<tr>
+    <td style="padding:11px 0;color:#6B6B76;font-size:14px;line-height:20px;${opt.last ? "" : "border-bottom:1px solid #EFEFF4;"}">${k}</td>
+    <td align="right" style="padding:11px 0;color:${opt.colour || "#14121F"};font-size:14px;line-height:20px;font-weight:${opt.weight || 700};text-align:right;${opt.last ? "" : "border-bottom:1px solid #EFEFF4;"}">${v}</td>
+  </tr>`;
+
+function invoiceFigures(inv, { gst, total, paid, left }) {
+  const payments = (inv?.payments || []).filter((p) => Number(p.amount));
+  return `
+<h3 style="margin:26px 0 2px;color:#14121F;font-size:18px;line-height:26px;font-weight:700;">Invoice summary</h3>
+
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:collapse;margin:14px 0 0;">
+  <tr>
+    <td width="50%" style="padding:0 0 14px;border-bottom:1px solid #EFEFF4;">
+      <div style="color:#8A8A94;font-size:12px;line-height:17px;">Issued</div>
+      <div style="color:#14121F;font-size:14px;line-height:20px;font-weight:700;">${inv?.issued || "—"}</div>
+    </td>
+    <td width="50%" align="right" style="padding:0 0 14px;border-bottom:1px solid #EFEFF4;text-align:right;">
+      <div style="color:#8A8A94;font-size:12px;line-height:17px;">Due by</div>
+      <div style="color:#14121F;font-size:14px;line-height:20px;font-weight:700;">${inv?.due || "—"}</div>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:14px 0 2px;color:#14121F;font-size:15px;line-height:22px;font-weight:700;">${inv?.svc || "—"}</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:collapse;margin:6px 0 0;">
+  ${invRow("Type", inv?.kind || "Invoice")}
+  ${invRow("Amount", rupee(inv?.amount))}
+  ${inv?.gstPct ? invRow(`GST (${inv.gstPct}%)`, rupee(gst)) : ""}
+  ${invRow("Invoice total", rupee(total))}
+  ${paid ? invRow("Received so far", rupee(paid), { last: !paid }) : ""}
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:separate;margin:14px 0 0;background:#FAF8FF;border-radius:10px;">
+  <tr>
+    <td style="padding:14px 16px;color:#754CDA;font-size:14px;line-height:22px;font-weight:700;">${left > 0 ? "Balance due" : "Balance"}</td>
+    <td align="right" style="padding:14px 16px;color:#754CDA;font-size:20px;line-height:26px;font-weight:700;text-align:right;">${rupee(left)}</td>
+  </tr>
+</table>
+
+${payments.length ? `
+<div style="margin:22px 0 0;color:#8A8A94;font-size:11px;line-height:16px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;">Payment received</div>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:collapse;margin:4px 0 0;">
+  ${payments
+    .map(
+      (p, i) => `<tr>
+        <td style="padding:10px 0;color:#14121F;font-size:14px;line-height:20px;${i === payments.length - 1 ? "" : "border-bottom:1px solid #EFEFF4;"}">${p.on || ""}</td>
+        <td align="center" style="padding:10px 0;color:#6B6B76;font-size:13px;line-height:20px;text-align:center;${i === payments.length - 1 ? "" : "border-bottom:1px solid #EFEFF4;"}">${[p.method, p.ref].filter(Boolean).join(" · ")}</td>
+        <td align="right" style="padding:10px 0;color:#00A37A;font-size:14px;line-height:20px;font-weight:700;text-align:right;${i === payments.length - 1 ? "" : "border-bottom:1px solid #EFEFF4;"}">${rupee(p.amount)}</td>
+      </tr>`
+    )
+    .join("")}
+</table>` : ""}`;
+}
+
 export function invoiceDraft(inv) {
   const gst = Math.round((Number(inv?.amount || 0) * Number(inv?.gstPct || 0)) / 100);
   const total = Math.round(Number(inv?.amount || 0)) + gst;
@@ -141,31 +259,27 @@ export function invoiceDraft(inv) {
           ? `Paid in full — invoice from Viralon${inv?.co ? ` · ${inv.co}` : ""}`
           : `Invoice from Viralon${inv?.co ? ` — ${inv.co}` : ""} · ${rupee(total)}`,
       fileName: `${invoiceNo(inv).replace(/[^A-Za-z0-9._-]+/g, "-")}.pdf`,
+      // The band above the letter: whichever figure the mail is really about.
+      hero: heroBand(
+        paid
+          ? {
+              title: full ? "Paid in full" : "Payment received",
+              amount: rupee(paid),
+              sub: full ? "Thank you — nothing is outstanding" : `Received against your invoice`,
+            }
+          : { title: "Invoice raised", amount: rupee(total), sub: inv?.due ? `Payable by ${inv.due}` : "" }
+      ),
     },
     [
-      say("open", "Opening", `<p>Hi ${first(inv?.contact)},</p>
-<p>${part
+      say("open", "Opening", `<p style="margin:0 0 12px;color:#14121F;font-size:20px;line-height:28px;font-weight:700;">Hi ${first(inv?.contact)},</p>
+<p style="margin:0;">${part
   ? `Thank you — we have received ${rupee(paid)} against your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""}. The updated invoice is attached.`
   : full
     ? `Thank you — your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""} is now settled in full. The receipted invoice is attached.`
     : `Here is your invoice${inv?.co ? ` for <strong>${inv.co}</strong>` : ""}, attached as a PDF.`}</p>`),
-      figures("figures", "What is on the invoice", detailTable([
-        ["For", inv?.svc || "—"],
-        ["Type", inv?.kind || "Invoice"],
-        ["Amount", rupee(inv?.amount)],
-        inv?.gstPct ? [`GST (${inv.gstPct}%)`, rupee(gst)] : null,
-        ["Invoice total", rupee(total)],
-        paid ? ["Received so far", rupee(paid)] : null,
-        paid ? [left > 0 ? "Balance due" : "Balance", rupee(left)] : null,
-        inv?.issued ? ["Issued", inv.issued] : null,
-        inv?.due ? ["Due by", inv.due] : null,
-      ])),
-      (inv?.payments || []).length
-        ? figures("paid", "Payments received", detailTable((inv.payments).map((p) =>
-            [`Received ${p.on || ""}${p.method ? ` · ${p.method}` : ""}${p.ref ? ` · ${p.ref}` : ""}`, rupee(p.amount)])))
-        : null,
-      inv?.notes ? say("note", "Your note", `<p>${String(inv.notes).replace(/\n/g, "<br/>")}</p>`) : null,
-      full ? null : say("close", "Closing", "<p>Once the transfer is done, reply with the reference and we'll mark it received.</p>"),
+      figures("figures", "What is on the invoice", invoiceFigures(inv, { gst, total, paid, left })),
+      inv?.notes ? say("note", "Your note", `<p style="margin:18px 0 0;">${String(inv.notes).replace(/\n/g, "<br/>")}</p>`) : null,
+      full ? null : say("close", "Closing", '<p style="margin:18px 0 0;">Once the transfer is done, reply with the reference and we\'ll mark it received.</p>'),
     ]
   );
 }
@@ -189,6 +303,7 @@ export async function sendDocMail(kind, doc, { to, cc, subject, body, attachment
     name: SENDER[kind] || "Viralon",
     subject: subject || d.subject,
     html: body || d.body,
+    hero: d.hero,
     attachments: [...(await docAttachment(kind, doc, d.fileName)), ...(attachments || [])],
   });
 }

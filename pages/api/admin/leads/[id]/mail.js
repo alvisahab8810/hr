@@ -7,7 +7,7 @@ import dbConnect from "@/utils/dbConnect";
 import Query from "@/models/Query";
 import { adminGuard } from "@/utils/admin/adminAuthGuard";
 import { ownsLead } from "@/utils/leadScope";
-import { buildLeadMail, sendLeadMail } from "@/utils/leadMail";
+import { buildLeadMail, sendLeadMail, shell } from "@/utils/leadMail";
 import mailFiles from "@/utils/mailFiles";
 // Attachments ride along in the body as base64, so the default 1 MB is too tight.
 export const config = { api: { bodyParser: { sizeLimit: "16mb" } } };
@@ -68,10 +68,11 @@ export default async function handler(req, res) {
     if (subject && body) {
       mail = {
         subject,
-        html: body
+        // Same branded card as the automatic mails.
+        html: shell(body
           .split(/\n{2,}/)
           .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
-          .join(""),
+          .join("")),
       };
     } else if (template === "custom") {
       return res.status(400).json({ success: false, message: "Subject and message are both needed" });

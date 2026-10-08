@@ -9,7 +9,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://viralon.in"
 
 // Brand colours from the website (public/assets/css/style.css) — these mails go
 // to leads, so they read as viralon.in, not as the payroll dashboard.
-const BRAND = "#5138ee";
+const BRAND = "#0088FF";
 const INK = "#04000b";
 const BRAND2 = "#7C5CFF";
 
@@ -31,27 +31,96 @@ export const prettyDate = (d) => {
 export const MAIL_LOGO =
   process.env.MAIL_LOGO || "https://viralon.in/assets/images/brand-logo.png";
 
-function shell(bodyHtml, cta) {
+// The pictures have to come from a public https URL -- a mail client cannot
+// read a local file, and these assets live with the website, not with payroll.
+const MAIL_ASSETS = process.env.MAIL_ASSETS || "https://viralon.in";
+const BANNER = `${MAIL_ASSETS}/assets/others/mail-banner.webp`;
+const ORANGE = "#FF4D00";
+
+// facebook / instagram / youtube / linkedin, drawn to PNG because icon fonts
+// do not render in mail.
+const SOCIAL = [
+  ["facebook", "https://www.facebook.com/people/Viralon-Digital-Services/61551774960535/"],
+  ["instagram", "https://www.instagram.com/viralon_digital_services/"],
+  ["youtube", "https://www.youtube.com/@ViralonDigtialServices"],
+  ["linkedin", "https://www.linkedin.com/company/viralon-digital-services/"],
+]
+  .map(
+    ([name, href]) =>
+      `<a href="${href}" style="text-decoration:none;display:inline-block;margin:0 7px;"><img src="${MAIL_ASSETS}/assets/others/icons/mail/${name}.png" width="20" height="20" alt="${name}" style="display:block;border:0;outline:none;width:20px;height:20px;" /></a>`
+  )
+  .join("");
+
+// The white card's rounded top edge is part of the banner image, so the
+// overlap survives clients that strip CSS backgrounds, media queries and
+// negative margins -- which is all three of the things Gmail's phone app
+// strips. Image and card are percentages of the same wrapper, so they stay
+// aligned at any width.
+export function shell(bodyHtml, cta) {
+  // Every template opens with "Hi <name>," — it reads as the card's heading
+  // rather than as another line of copy.
+  const body = String(bodyHtml).replace(
+    /^(\s*)<p>(Hi [^<]*)<\/p>/,
+    '$1<p style="margin:0 0 14px;color:#14121F;font-size:22px;line-height:30px;font-weight:700;">$2</p>'
+  );
+
   return `
-  <div style="margin:0;padding:28px 12px;background:#F4F4F9;font-family:Arial,Helvetica,sans-serif;">
-    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #ECECF5;box-shadow:0 6px 24px rgba(81,56,238,.07);">
-      <div style="height:5px;background:linear-gradient(90deg,${BRAND},${BRAND2});font-size:0;line-height:0;">&nbsp;</div>
-      <div style="padding:22px 26px 6px;">
-        <img src="${MAIL_LOGO}" alt="Viralon" width="70" style="display:block;border:0;outline:none;height:auto;max-width:70px;" />
-      </div>
-      <div style="padding:14px 26px 26px;color:${INK};font-size:15px;line-height:1.65;">
-        ${bodyHtml}
-        ${cta ? `<div style="margin:26px 0 6px;">
-          <a href="${cta.href}" style="display:inline-block;background:linear-gradient(90deg,${BRAND},${BRAND2});color:#fff;text-decoration:none;
-             padding:13px 28px;border-radius:9px;font-weight:700;font-size:15px;">${cta.label}</a>
+<div style="margin:0;padding:26px 12px 30px;background:#F2F2F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" width="580" style="width:100%;max-width:580px;margin:0 auto;border-collapse:collapse;">
+    <tr>
+      <td align="center" style="padding:0;font-size:0;line-height:0;">
+        <img src="${BANNER}" width="580" alt="" style="display:block;width:100%;max-width:580px;height:auto;border-radius:16px 16px 0 0;border:0;outline:none;" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding:0;text-align:center;">
+
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" width="93%" style="width:93.1%;max-width:540px;background:#ffffff;border-radius:0 0 16px 16px;text-align:left;">
+    <tr>
+      <td align="center" style="padding:16px 28px 2px;text-align:center;">
+        <img src="${MAIL_LOGO}" width="70" alt="Viralon" style="display:block;margin:0 auto;border:0;outline:none;width:70px;max-width:70px;height:auto;" />
+        <div style="margin:8px 0 0;color:#14121F;font-size:11px;line-height:15px;letter-spacing:.3px;font-weight:600;">Nothing works alone</div>
+      </td>
+    </tr>
+
+    <tr>
+      <td align="center" style="padding:22px 30px 26px;text-align:center;color:#3F3D4A;font-size:15px;line-height:24px;">
+        ${body}
+        ${cta ? `<div style="margin:26px 0 4px;">
+          <a href="${cta.href}" style="display:inline-block;background:${ORANGE};color:#ffffff;text-decoration:none;padding:13px 28px;border-radius:9px;font-weight:700;font-size:15px;">${cta.label}</a>
         </div>` : ""}
-      </div>
-      <div style="padding:16px 26px;background:#FAFAFD;border-top:1px solid #F1F1F8;color:#8A8AA3;font-size:12px;line-height:1.6;">
-        Team Viralon · <a href="${SITE_URL}" style="color:${BRAND};text-decoration:none;font-weight:700;">viralon.in</a><br/>
-        Sent because you asked us to get in touch. Reply to this mail to reach us directly.
-      </div>
-    </div>
-  </div>`;
+      </td>
+    </tr>
+
+    <tr>
+      <td align="center" style="padding:0 30px 20px;text-align:center;border-top:1px solid #EDEDF1;">
+        <p style="margin:18px 0 4px;color:#8A8A94;font-size:12px;line-height:18px;">
+          If you have any questions, please email us at
+          <a href="mailto:info@viralon.in" style="color:#14121F;text-decoration:none;font-weight:600;">info@viralon.in</a>
+        </p>
+        <p style="margin:0 0 14px;color:#8A8A94;font-size:12px;line-height:18px;">
+          Our team can answer anything about this enquiry, or talk you through what we would do next.
+        </p>
+        <div style="margin:0 0 4px;">${SOCIAL}</div>
+      </td>
+    </tr>
+
+    <tr>
+      <td align="center" style="padding:14px 24px 16px;background:#E8F4FF;border-radius:0 0 16px 16px;text-align:center;">
+        <p style="margin:0 0 3px;font-size:12px;line-height:17px;">
+          <a href="${SITE_URL}" style="color:#0088FF;text-decoration:none;font-weight:600;">Team Viralon &middot; viralon.in</a>
+        </p>
+        <p style="margin:0;color:#7C879B;font-size:11px;line-height:16px;">
+          Sent because you asked us to get in touch. Reply to this mail to reach us directly.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+      </td>
+    </tr>
+  </table>
+</div>`;
 }
 
 // "Google Meet on Thursday, 4 September 2026 at 4:30 PM IST", ready to drop

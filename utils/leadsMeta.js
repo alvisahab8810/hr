@@ -272,21 +272,16 @@ export const BASE_COLS = [
   { k: "owner",    n: "Assign to",   on: true,  w: 145 },
   { k: "connects", n: "Connects",    on: true,  w: 95 },
   { k: "status",   n: "Status",      on: true,  w: 150 },
-  // Where the CRM put it, beside where the salesperson put it.
-  { k: "stage",    n: "Stage",       on: true,  w: 150 },
   { k: "meeting",  n: "Meeting",     on: true,  w: 175 },
   { k: "mode",     n: "How",         on: true,  w: 125 },
   { k: "ladder",   n: "Reminders",   on: true,  w: 120 },
   { k: "prep",     n: "Prep",        on: true,  w: 110 },
-  { k: "score",    n: "Score",       on: true,  w: 90 },
   // What came of the meeting, each with its own column and its own button.
   // The Meeting status cell opens the panel that sets all three.
   { k: "held",     n: "Meeting status", on: true, w: 130 },
+  { k: "score",    n: "Score",       on: true,  w: 90 },
   { k: "matSent",  n: "Material",    on: true,  w: 140 },
   { k: "prop",     n: "Proposal",    on: true,  w: 140 },
-  // The hand-over: a won lead becomes a client, and Operations hangs its
-  // brands off that client.
-  { k: "client",   n: "Client",      on: true,  w: 150 },
   { k: "created",  n: "Created",     on: false, w: 120 },
   { k: "act",      n: "Actions",     on: true,  lock: true, w: 130 },
 ];
