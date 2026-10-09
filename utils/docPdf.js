@@ -426,7 +426,7 @@ export function docPdf(kind, doc) {
 // below it is kept as the fallback: headless Chrome is the one part of this
 // that can fail on a box, and a mail that goes out with a plainer invoice is
 // far better than one that does not go out at all.
-async function invoiceAttachment(doc, filename) {
+async function invoiceAttachment(doc, filename, kind = "invoice") {
   try {
     const [{ invoiceHtmlPdf }, { getSettings }] = await Promise.all([
       import("@/utils/invoicePdfHtml"),
@@ -434,7 +434,7 @@ async function invoiceAttachment(doc, filename) {
     ]);
     const st = await getSettings();
     const terms = st?.docs?.invTerms?.length ? st.docs.invTerms : st?.docs?.terms || [];
-    const content = await invoiceHtmlPdf(doc, { company: st?.company || COMPANY, terms });
+    const content = await invoiceHtmlPdf(doc, { company: st?.company || COMPANY, terms, kind });
     return [{ filename, content, contentType: "application/pdf" }];
   } catch (e) {
     console.error("invoice html pdf:", e?.message);
@@ -444,8 +444,9 @@ async function invoiceAttachment(doc, filename) {
 
 // A failed render must never stop the mail going out.
 export async function docAttachment(kind, doc, filename) {
-  if (kind === "invoice") {
-    const made = await invoiceAttachment(doc, filename);
+  // The proposal is rendered off the same HTML sheet as the invoice now.
+  if (kind === "invoice" || kind === "proposal") {
+    const made = await invoiceAttachment(doc, filename, kind);
     if (made) return made;
   }
   try {

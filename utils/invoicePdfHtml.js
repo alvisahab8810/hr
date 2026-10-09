@@ -12,7 +12,7 @@
 // the mail up.
 import fs from "fs";
 import path from "path";
-import { invoiceHtml, INVOICE_CSS, INVOICE_FONTS } from "@/components/invoiceSheet";
+import { invoiceHtml, proposalHtml, PROPOSAL_NOTES, INVOICE_CSS, INVOICE_FONTS } from "@/components/invoiceSheet";
 
 const ART = path.join(process.cwd(), "public", "assets", "images");
 const FONTS = path.join(process.cwd(), "public", "assets", "fonts");
@@ -45,12 +45,11 @@ const dataUri = (file) => {
   }
 };
 
-export function invoiceSheetDocument(inv, { company, terms } = {}) {
-  const body = invoiceHtml(inv, {
-    company,
-    terms,
-    assets: { mark: dataUri("viralon-mark.svg"), sign: dataUri("signature.svg"), qr: dataUri("qr.svg") },
-  });
+export function invoiceSheetDocument(inv, { company, terms, kind } = {}) {
+  const assets = { mark: dataUri("viralon-mark.svg"), sign: dataUri("signature.svg"), qr: dataUri("qr.svg") };
+  const body = kind === "proposal"
+    ? proposalHtml(inv, { company, notes: PROPOSAL_NOTES, assets })
+    : invoiceHtml(inv, { company, terms, assets });
   return `<!doctype html><html><head><meta charset="utf-8"/>` +
     `<style>html,body{margin:0;padding:0;background:#fff}${cssWithFont()}</style>` +
     `</head><body>${body}</body></html>`;

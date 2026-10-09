@@ -238,6 +238,110 @@ export function invoiceHtml(d, { company = {}, terms = [], assets = SHEET_ASSETS
 </div>`;
 }
 
+// What the proposal band says when the proposal carries no notes of its own.
+export const PROPOSAL_NOTES = ["All figures are exclusive of applicable taxes. Reply to this mail to accept."];
+
+// The proposal on the same sheet: our head, the two boxes, the lines and the
+// money, with the notes in the tinted band. It asks for nothing a tax invoice
+// needs (SAC, GST, bank), so none of it is printed.
+export function proposalHtml(d, { company = {}, notes = [], assets = SHEET_ASSETS } = {}) {
+  const co = { ...COMPANY_FALLBACK };
+  for (const [k, v] of Object.entries(company || {})) if (v) co[k] = v;
+  const b = d.billTo || {};
+
+  const code = `VP-${String(d._id || "").slice(-4).toUpperCase()}`;
+  const amount = Math.round(Number(d.amount || 0));
+  const advPct = Number(d.advPct || 0);
+  const adv = Math.round((amount * advPct) / 100);
+  const term = `${d.term || "Retainer"}${d.term === "Retainer" && d.months ? ` - ${d.months} Months` : ""}`;
+
+  const usAddr = co.address || co.place || "";
+  const partyUs = [
+    co.email ? row("Email", esc(co.email)) : "",
+    co.phone ? row("Contact", esc(co.phone)) : "",
+    co.site ? row("Website", esc(co.site)) : "",
+  ].filter(Boolean).join("");
+
+  const themAddr = [b.address, [b.city, b.pincode].filter(Boolean).join("-")].filter(Boolean).join(", ");
+  const partyThem = [
+    d.em ? row("Email", esc(d.em)) : "",
+    d.ph ? row("Contact", esc(d.ph)) : "",
+  ].filter(Boolean).join("");
+
+  const lines = docItems(d).map((it) => ({ svc: it.svc || "Service", note: it.note || "", amount: Math.round(Number(it.amount || 0)) }));
+
+  const sums = [
+    ["Payment Term", esc(term)],
+    ...(advPct ? [[`Advance (${advPct}%)`, esc(rupee(adv))], ["Balance, as invoiced", esc(rupee(amount - adv))]] : []),
+    ...(d.owner ? [["Your point of contact", esc(d.owner)]] : []),
+  ];
+
+  const list = String(d.notes || "").split(/\n+/).map((s) => s.trim()).filter(Boolean);
+  const band = list.length ? list : notes;
+
+  return `
+<div class="vi-sheet">
+  <div class="vi-head">
+    ${assets.mark ? `<img class="vi-mark" src="${assets.mark}" alt=""/>` : ""}
+    <div class="vi-titlewrap">
+      <div class="vi-titleblock">
+        <div class="vi-title">Proposal</div>
+        <div class="vi-titlerule"></div>
+        <div class="vi-meta vi-metaleft">
+          <div class="vi-mrow"><span>Proposal No.</span><b>${esc(code)}</b></div>
+          <div class="vi-mrow"><span>Date</span><b>${esc(fmtD(d.createdAt))}</b></div>
+          ${d.validTill ? `<div class="vi-mrow"><span>Valid Till</span><b>${esc(fmtD(d.validTill))}</b></div>` : ""}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vi-parties">
+    <div class="vi-party">
+      <div class="vi-pname">${esc(co.legalName || co.name || "")}</div>
+      ${usAddr ? `<div class="vi-paddr">${esc(usAddr)}</div>` : ""}
+      ${partyUs}
+    </div>
+    <div class="vi-party">
+      <div class="vi-plabel">Prepared For</div>
+      <div class="vi-pname">${esc(d.co || d.contact || "—")}</div>
+      ${themAddr ? `<div class="vi-paddr">${esc(themAddr)}</div>` : ""}
+      ${partyThem}
+    </div>
+  </div>
+
+  <table class="vi-items">
+    <thead><tr><th>Description</th><th class="vi-cnum">Value</th></tr></thead>
+    <tbody>
+      ${lines.map((l) => `
+      <tr>
+        <td>
+          <div class="vi-isvc">${esc(l.svc)}</div>
+          ${l.note ? `<div class="vi-inote">${esc(l.note)}</div>` : ""}
+        </td>
+        <td class="vi-cnum vi-hard">${esc(rupee(l.amount))}</td>
+      </tr>`).join("")}
+    </tbody>
+  </table>
+
+  <div class="vi-sumwrap">
+    <div class="vi-sum vi-sumbox">
+      ${sums.map(([k, v]) => `<div class="vi-sumrow"><span>${esc(k)}</span><span>${v}</span></div>`).join("")}
+      <div class="vi-rule"></div>
+      <div class="vi-sumrow vi-grand"><span>Grand Total</span><span>${esc(rupee(amount))}</span></div>
+    </div>
+  </div>
+
+  <div class="vi-spacer"></div>
+
+  ${band.length ? `
+  <div class="vi-band">
+    <div class="vi-bandlabel">Notes</div>
+    <ol class="vi-bandlist">${band.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+  </div>` : ""}
+</div>`;
+}
+
 // One stylesheet for all three render paths. Inter is named first and the
 // system stack carries it where Inter is not installed -- nothing here fetches
 // a webfont, because the mail render happens with no network and a request
@@ -272,16 +376,18 @@ export const INVOICE_CSS = `
 .vi-titlewrap { text-align:right; }
 .vi-title { color:#FE4601; font-size:26.4px; font-weight:900; letter-spacing:-.01em; line-height:32px; }
 .vi-titleblock { display:inline-block; min-width:158px; text-align:left; }
-.vi-titlerule { background:#FE4601; height:2px; margin:8px 0 10px; width:100%; }
+.vi-titlerule { background:linear-gradient(to right, #FE4601 0 74%, #FFA482 74% 100%); height:3px; margin:8px 0 10px; width:100%; }
 .vi-meta { }
 .vi-mrow { display:flex; font-size:9.5px; gap:10px; justify-content:space-between; padding:1.5px 0; }
-.vi-mrow span { color:#6B7280; }
+.vi-mrow span { color:#374151; }
+.vi-metaleft .vi-mrow { justify-content:flex-start; }
+.vi-metaleft .vi-mrow span { flex:0 0 72px; }
 .vi-mrow b { color:#1A1A1A; font-weight:700; }
 
 .vi-row { display:flex; font-size:10px; gap:4px; line-height:1.9; }
-.vi-k { color:#6B7280; flex:0 0 104px; }
-.vi-c { color:#6B7280; }
-.vi-v { color:#000000; flex:1; }
+.vi-k { color:#374151; flex:0 0 104px; }
+.vi-c { color:#374151; }
+.vi-v { color:#000000; flex:1; font-weight:700; }
 
 .vi-parties { display:flex; gap:16px; margin-top:28px; }
 .vi-party { background:#F9F9F9; border:1px solid #DFDFDF; border-radius:10px; flex:1 1 0;
@@ -299,24 +405,25 @@ export const INVOICE_CSS = `
 .vi-items td { border-bottom:1px solid #E7E7E7; padding:13px 14px; vertical-align:top; }
 .vi-items .vi-csac { width:104px; }
 .vi-items th.vi-cnum, .vi-items td.vi-cnum { text-align:right; width:118px; }
-.vi-items td.vi-csac, .vi-items td.vi-soft { color:#6B7280; }
+.vi-items td.vi-csac, .vi-items td.vi-soft { color:#374151; }
 .vi-items td.vi-hard { color:#1A1A1A; font-weight:700; }
 .vi-isvc { font-size:12px; font-weight:700; }
-.vi-iqty { color:#6B7280; font-weight:600; }
-.vi-inote { color:#6B7280; font-size:10px; margin-top:3px; }
+.vi-iqty { color:#374151; font-weight:600; }
+.vi-inote { color:#374151; font-size:10px; margin-top:3px; }
 
 .vi-sumwrap { display:flex; justify-content:flex-end; margin-top:18px; }
 .vi-sum { width:300px; }
 .vi-sumrow { display:flex; font-size:11px; justify-content:space-between; padding:6px 0; }
-.vi-sumrow span:first-child { color:#6B7280; }
+.vi-sumrow span:first-child { color:#374151; }
 .vi-sumrow span:last-child { font-weight:700; }
+.vi-sumbox { background:#F9F9F9; border:1px solid #DFDFDF; border-radius:10px; padding:10px 18px; width:340px; }
 .vi-rule { background:#E7E7E7; height:1px; margin:8px 0; }
 .vi-grand { font-size:14px; font-weight:800; }
 .vi-grand span:first-child { color:#1A1A1A; font-weight:800; }
 .vi-grand span:last-child { font-weight:800; }
 .vi-due span { color:#FE4601; }
 
-.vi-notes { color:#6B7280; font-size:10px; line-height:1.6; margin-top:22px; white-space:pre-wrap; }
+.vi-notes { color:#374151; font-size:10px; line-height:1.6; margin-top:22px; white-space:pre-wrap; }
 
 .vi-signwrap { flex:0 0 auto; text-align:center; width:168px; }
 .vi-sign { display:block; height:61px; margin:0 auto; width:140px; }
@@ -349,7 +456,7 @@ export const INVOICE_CSS = `
 .vi-bandlabel { color:#FE4601; font-size:9.5px; font-weight:800; letter-spacing:.04em;
   margin-bottom:6px; }
 .vi-bandlist { color:#1A1A1A; font-size:9.5px; line-height:1.8; margin:0; padding-left:14px; }
-.vi-bandfoot { color:#6B7280; font-size:9px; margin-top:12px; }
+.vi-bandfoot { color:#374151; font-size:9px; margin-top:12px; }
 
 @media print {
   @page { size:A4; margin:0; }

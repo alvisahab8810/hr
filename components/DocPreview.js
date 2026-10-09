@@ -6,7 +6,7 @@
 // and the browser's own Save-as-PDF does the rest.
 import { inr, fmtD, sacFor } from "@/utils/leadsMeta";
 import { docItems } from "@/utils/proposalItems";
-import { invoiceHtml, INVOICE_CSS, COMPANY_FALLBACK } from "@/components/invoiceSheet";
+import { invoiceHtml, proposalHtml, PROPOSAL_NOTES, INVOICE_CSS, COMPANY_FALLBACK } from "@/components/invoiceSheet";
 
 // Mutable on purpose: Settings pushes the saved branding in through
 // applyDocBranding before anything is printed.
@@ -170,6 +170,8 @@ export function docHtml(kind, d) {
   // The invoice has its own sheet, measured off the design. The proposal is
   // left on the generic layout below, which is all it ever needed.
   if (kind === "invoice") return invoiceHtml(d, { company: COMPANY, terms: INV_TERMS.length ? INV_TERMS : TERMS });
+  // The proposal now prints on the invoice's sheet too.
+  if (kind === "proposal") return proposalHtml(d, { company: COMPANY, notes: PROPOSAL_NOTES });
   const isInv = kind === "invoice";
   const code = isInv
     ? `INV-${String(d._id || "").slice(-4).toUpperCase()}`
@@ -275,7 +277,7 @@ export function docHtml(kind, d) {
 </div>`;
 }
 
-const sheetCss = (kind) => (kind === "invoice" ? INVOICE_CSS : CSS);
+const sheetCss = (kind) => (kind === "invoice" || kind === "proposal" ? INVOICE_CSS : CSS);
 
 const CSS = `
 .vp-sheet { background:#fff; color:#0F172A; font-family: -apple-system,Segoe UI,Roboto,sans-serif; padding:34px 38px; }
